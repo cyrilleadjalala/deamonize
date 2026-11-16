@@ -1,0 +1,199 @@
+// @ts-check
+/**
+ * Thin client of the Studio API, with two data sources:
+ * - live: fetch `/api/*` of the Studio server (the token travels in the cookie set by the first visit);
+ * - static: the demo build, with no server. The data is read from `./data/*.json` (relative URLs only, so it works
+ *   under a sub-path such as /repo/) and the playground is simulated in the browser by `sim/static-session.js`.
+ * The static mode is chosen by `<meta name="daemonize-mode" content="static">` or `window.DAEMONIZE_STATIC`.
+ * Nothing is stored in JS, and no token or cookie is used in static mode.
+ */
+import { StaticPlayground } from './sim/static-session.js';
+
+/** @returns {boolean} */
+function detectStatic() {
+  if (/** @type {any} */ (globalThis).DAEMONIZE_STATIC === true) return true;
+  return globalThis.document?.querySelector('meta[name="daemonize-mode"]')?.getAttribute('content') === 'static';
+}
+
+export const isStatic = detectStatic();
+
+/** Static file of each GET endpoint. */
+const STATIC_FILES = {
+  '/api/overview': 'data/overview.json',
+  '/api/workflows': 'data/workflows.json',
+  '/api/graph': 'data/graph.json',
+  '/api/schemas': 'data/schemas.json',
+  '/api/pbt': 'data/pbt.json',
+};
+
+/** @type {Promise<StaticPlayground> | undefined} */
+let staticPlayground;
+function playgroundSim() {
+  staticPlayground ??= fetchStatic('data/playground-tools.json').then((tools) => new StaticPlayground({ tools }));
+  return staticPlayground;
+}
+
+/** @param {string} file relative to the page */
+async function fetchStatic(file) {
+  let res;
+  try {
+    res = await fetch(file, { headers: { accept: 'application/json' }, cache: 'no-cache' });
+  } catch {
+    throw new ApiError('Cannot load the demo data.', 0);
+  }
+  if (!res.ok) throw new ApiError(`The demo data ${file} could not be loaded (${res.status}).`, res.status);
+  try {
+    return await res.json();
+  } catch {
+    throw new ApiError(`The demo data ${file} is not valid.`, 500);
+  }
+}
+
+/** @param {string} path @param {'GET' | 'POST'} method */
+async function requestStatic(path, method) {
+  if (method === 'POST') throw new ApiError('This is a static demo: there is no server to run tests.', 405);
+  if (path === '/api/playground') return (await playgroundSim()).status();
+  if (path === '/api/playground/history') return (await playgroundSim()).history();
+  const file = /** @type {Record<string, string>} */ (STATIC_FILES)[path];
+  if (file === undefined) throw new ApiError('not found', 404);
+  return fetchStatic(file);
+}
+
+/** @param {string} path @param {any} payload @param {AbortSignal} [signal] */
+async function postStatic(path, payload, signal) {
+  const sim = await playgroundSim();
+  if (path === '/api/playground/call') return sim.call(payload, signal);
+  if (path === '/api/playground/restart') return sim.restart(payload);
+  if (path === '/api/playground/stop') return sim.stop();
+  return { status: 404, body: { error: 'not found' } };
+}
+
+export class ApiError extends Error {
+  /** @param {string} message @param {number} status */
+  constructor(message, status) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+/**
+ * @param {string} path
+ * @param {'GET' | 'POST'} [method]
+ */
+async function request(path, method = 'GET') {
+  if (isStatic) return requestStatic(path, method);
+  /** @type {Record<string, string>} */
+  const headers = { accept: 'application/json' };
+  // The server wants a marker header on POST (CSRF); the browser adds the Origin itself
+  if (method === 'POST') headers['x-studio-request'] = '1';
+  let res;
+  try {
+    res = await fetch(path, { method, headers, credentials: 'same-origin', cache: 'no-store' });
+  } catch {
+    throw new ApiError('Cannot reach the Studio server. Is it still running?', 0);
+  }
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Not JSON
+  }
+  if (!res.ok) {
+    const message = body && typeof body.error === 'string' ? body.error : `The server answered ${res.status}`;
+    throw new ApiError(res.status === 401 ? 'Not authorized. Open the address printed by `daemonize studio` (it carries the token).' : message, res.status);
+  }
+  return body;
+}
+
+/**
+ * A POST with a JSON body. Unlike `request`, an answer of the server is returned whatever its status (the playground
+ * explains a refusal, a missing confirmation, a busy server), and only a network problem or a 401 throws.
+ * @param {string} path
+ * @param {unknown} payload
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<{ status: number, body: any }>}
+ */
+async function postJson(path, payload, signal) {
+  if (isStatic) return postStatic(path, payload, signal);
+  let res;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json', 'x-studio-request': '1' },
+      body: JSON.stringify(payload ?? {}),
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    throw new ApiError('Cannot reach the Studio server. Is it still running?', 0);
+  }
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Not JSON
+  }
+  if (res.status === 401) throw new ApiError('Not authorized. Open the address printed by `daemonize studio` (it carries the token).', 401);
+  return { status: res.status, body };
+}
+
+/** @type {Map<string, Promise<any>>} */
+const cache = new Map();
+
+/** GET with a per-page cache: views share one request. */
+export function get(path) {
+  let entry = cache.get(path);
+  if (entry === undefined) {
+    entry = request(path).catch((err) => {
+      cache.delete(path);
+      throw err;
+    });
+    cache.set(path, entry);
+  }
+  return entry;
+}
+
+export function invalidate(path) {
+  cache.delete(path);
+}
+
+export const api = {
+  /** @returns {Promise<any>} */
+  overview: () => get('/api/overview'),
+  workflows: () => get('/api/workflows'),
+  graph: () => get('/api/graph'),
+  schemas: () => get('/api/schemas'),
+  pbt: () => get('/api/pbt'),
+  /** The playground is optional: resolves null when the server does not have it. */
+  playground: async () => {
+    try {
+      return await get('/api/playground');
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 404 || err.status === 405)) return null;
+      throw err;
+    }
+  },
+  /** Status and tools of the playground, never cached: the server may have started or stopped since. */
+  playgroundFresh: async () => {
+    invalidate('/api/playground');
+    return api.playground();
+  },
+  /** A call of a tool: `{ status, body }`, the body being a result summary or `{ error, message }`. */
+  playgroundCall: (payload, signal) => postJson('/api/playground/call', payload, signal),
+  playgroundRestart: (payload) => postJson('/api/playground/restart', payload),
+  playgroundStop: () => postJson('/api/playground/stop', {}),
+  /** `{ history, serverStarted, mode }`: the last calls of this session, secrets already shown as ***. */
+  playgroundHistory: async () => {
+    const res = await request('/api/playground/history');
+    return { ...res, history: Array.isArray(res?.history) ? res.history : [] };
+  },
+  /** Runs the generated property tests; the answer is the new PBT view. */
+  async runPbt() {
+    const view = await request('/api/pbt/run', 'POST');
+    cache.set('/api/pbt', Promise.resolve(view));
+    return view;
+  },
+};

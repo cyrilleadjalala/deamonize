@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://daemonize.dev/schemas/state-graph/v1",
+  "type": "object",
+  "required": ["version", "createdAt", "updatedAt", "screens", "transitions"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "const": "1" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "screens": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/Screen" }
+    },
+    "transitions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Transition" }
+    }
+  },
+  "$defs": {
+    "ScreenId": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "Screen": {
+      "type": "object",
+      "required": ["id", "type", "normalizedHash", "snapshot", "firstSeenAt"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/ScreenId" },
+        "type": { "type": "string", "enum": ["dom", "terminal"] },
+        "normalizedHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "snapshot": { "type": "string" },
+        "label": { "type": "string" },
+        "firstSeenAt": { "type": "string", "format": "date-time" },
+        "observationCount": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "Transition": {
+      "type": "object",
+      "required": ["id", "sourceScreenId", "destinationScreenId", "actionType", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "sourceScreenId": { "$ref": "#/$defs/ScreenId" },
+        "destinationScreenId": { "$ref": "#/$defs/ScreenId" },
+        "actionType": {
+          "type": "string",
+          "enum": ["click", "keypress", "form_submit", "type", "select"]
+        },
+        "label": { "type": "string" },
+        "selector": { "type": "string" },
+        "inputSchema": { "type": "object" },
+        "outputSchema": { "type": "object" },
+        "observedPayloads": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    }
+  }
+}

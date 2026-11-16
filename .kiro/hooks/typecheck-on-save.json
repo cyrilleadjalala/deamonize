@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Type-check on save",
+      "description": "Run the TypeScript compiler without emitting whenever a source file is saved.",
+      "trigger": "PostFileSave",
+      "matcher": "^(src|tests)/.*\\.ts$",
+      "action": { "type": "command", "command": "npx tsc --noEmit" },
+      "timeout": 120
+    }
+  ]
+}

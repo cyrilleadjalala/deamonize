@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Keep the spec in sync with the data model",
+      "description": "Types and the Kiro Power generator are described in design.md and requirements.md. Ask the agent to check them after a change.",
+      "trigger": "PostFileSave",
+      "matcher": "^src/(types\\.ts|compiler/kiro-power-generator\\.ts|compiler/compiler\\.ts)$",
+      "action": {
+        "type": "agent",
+        "prompt": "A file that defines the data model or the generated Kiro Power output was just saved. Compare it with .kiro/specs/daemonize/design.md (Workflow Set, Compiler and Kiro Power Output sections) and requirements.md (Requirement 8). If they now disagree, list the differences and propose the exact edits to the spec. Do not change the code to match an outdated spec without asking."
+      }
+    }
+  ]
+}

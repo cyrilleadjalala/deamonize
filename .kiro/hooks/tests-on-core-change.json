@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run fast tests when a core module changes",
+      "description": "The state, schema, validator, compiler and pbt modules carry the correctness properties. Run the unit and property suites after each change.",
+      "trigger": "PostFileSave",
+      "matcher": "^src/(state|schema|validator|compiler|pbt|workflow)/.*\\.ts$",
+      "action": { "type": "command", "command": "npx vitest run tests/unit tests/property" },
+      "timeout": 300
+    }
+  ]
+}

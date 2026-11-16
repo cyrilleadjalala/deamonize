@@ -128,6 +128,8 @@ describe('CLI: record → compile → merge', () => {
     expect((await readdir(out)).filter((name) => name !== '.dockerignore').sort()).toEqual([
       'docker-replay.js',
       'docker-replay.ts',
+      'extract.js',
+      'extract.ts',
       'POWER.md',
       'mcp-server.js',
       'mcp-server.ts',
@@ -147,6 +149,8 @@ describe('CLI: record → compile → merge', () => {
       'settle.ts',
       'step-plan.js',
       'step-plan.ts',
+      'totp.js',
+      'totp.ts',
       'skills',
       'tests',
       'vitest.config.ts',

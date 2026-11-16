@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { describeTool } from './tool-description.js';
+import { describeTool, secretEnvNames } from './tool-description.js';
 import type { WorkflowSet } from '../types.js';
 
 export interface KiroPlugin {
@@ -48,7 +48,8 @@ export class KiroPowerGenerator {
    * @param toolNames - Map from workflowId to snake_case tool name
    * @param outputDir - Directory where mcp-server.js is written
    */
-  generate(set: WorkflowSet, toolNames: Map<string, string>, outputDir: string): KiroPower {
+  generate(set: WorkflowSet, toolNames: Map<string, string>, outputDir: string, options: { http?: 'off' | 'auto' } = {}): KiroPower {
+    const http = set.targetType === 'web' && options.http === 'auto';
     const targetName = set.targetName || 'Generated Application';
     const name = toKebabCase(set.targetName);
     const description = `Generated MCP server for ${targetName} by Daemonize`;
@@ -78,6 +79,10 @@ export class KiroPowerGenerator {
       keywords,
     };
 
+    // Names only: Kiro substitutes ${VAR} from its own environment, so no value is ever written to a file
+    const secretVariables = [...new Set(set.workflows.flatMap(secretEnvNames))].sort();
+    const env: Record<string, string> = Object.fromEntries(secretVariables.map((v) => [v, '${' + v + '}']));
+
     const mcp: KiroMcp = {
       $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',
       mcpServers: {
@@ -85,7 +90,7 @@ export class KiroPowerGenerator {
           type: 'stdio',
           command: 'node',
           args: [resolve(outputDir, 'mcp-server.js')],
-          env: {},
+          env,
         },
       },
     };
@@ -105,7 +110,7 @@ export class KiroPowerGenerator {
       return [
         `### \`${toolName}\``,
         '',
-        describeTool(workflow),
+        describeTool(workflow, { http }),
         '',
         ...(fields.length > 0 ? ['Inputs:', '', ...fields] : ['Inputs: none.']),
         '',
@@ -127,6 +132,28 @@ export class KiroPowerGenerator {
       '## Tools',
       '',
       ...toolSections,
+      ...(secretVariables.length > 0
+        ? [
+          '## Secrets',
+          '',
+          'These environment variables must be set for the server (the `env` entry of `mcp.json` reads them from the environment Kiro runs in). Only their names are written here, never their values:',
+          '',
+          ...secretVariables.map((v) => `- \`${v}\``),
+          '',
+          'A variable that is not set makes the call fail with `missing_secret` naming it, before any step runs. A variable used for a one-time code holds the base32 TOTP seed; the current code is computed at each call.',
+          '',
+        ]
+        : []),
+      ...(http
+        ? [
+          '## HTTP replay',
+          '',
+          'This server was compiled with `--http`. A tool whose steps all have a recorded HTTP request runs over HTTP without a browser (tens of milliseconds); the description of each tool says which steps run over HTTP. The result lists the level each step used in `levels` (`http` or `accessibility`) and sets `levelFallback: true` when a read step\'s request failed and the step was repeated in the browser. A write or delete step whose request fails is not repeated: the call returns `error: "http_failed"` with `drifted: true`.',
+          '',
+          'Authentication comes from the saved login (`DAEMONIZE_STORAGE_STATE`, a Playwright storage state file), or from `DAEMONIZE_COOKIE_HEADER` (a Cookie header value, set in the environment, never in a file), plus the `DAEMONIZE_SECRET_<NAME>` variables listed above for header tokens.',
+          '',
+        ]
+        : []),
       '## Drift',
       '',
       'A result with `drifted: true` means the final screen differs from the one recorded (only the recorded zone is compared when the workflow has one), so the application probably changed. Double-check the result before relying on it. `driftChecked: false` means no final screen was recorded: `drifted` is then always `false` and says nothing.',

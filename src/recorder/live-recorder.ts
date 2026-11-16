@@ -1,8 +1,10 @@
 import type { Frame, Page } from 'playwright';
 import { CAPTURE_SCRIPT } from './capture-script.js';
-import { buildSelectors, type ElementInfo } from './selector-builder.js';
+import { buildSelectors, buildZoneSelector, type ElementInfo } from './selector-builder.js';
 import type { WorkflowRecorder } from './workflow-recorder.js';
-import type { Anchor, RowBinding, StepActionType, StepRisk, WorkflowVariable } from '../types.js';
+import { NetworkCapture } from './network-capture.js';
+import { buildHttpRecipe } from './http-correlate.js';
+import type { Anchor, ExtractorKind, ResultZone, RowBinding, StepActionType, StepRisk, WorkflowVariable } from '../types.js';
 
 /** The part of Playwright's binding source the recorder uses. */
 interface BindingSource {
@@ -28,6 +30,23 @@ export interface CapturedEvent {
 export interface HandleContext {
   pageIndex?: number;           // 0 for the first page, then popups in opening order
   frame?: number[];             // frame path resolved by the recorder
+  actionId?: number;            // network capture: id given when the event reached the recorder
+}
+
+export interface LiveRecorderOptions {
+  /** Observe fetch/XHR requests to record Level 1 recipes (default false). */
+  captureNetwork?: boolean;
+}
+
+/** Which replay level can be used for a step, and why not Level 1 when it cannot. */
+export interface NetworkStepReport {
+  step: number;
+  label?: string;
+  level: 'http' | 'accessibility';
+  /** The request of the recipe, `METHOD url`, when level is http. */
+  request?: string;
+  /** Why the step has no Level 1 recipe. */
+  reason?: string;
 }
 
 /** Request sent by the "Make variable" box shown in the page. */
@@ -38,6 +57,16 @@ export interface MarkVariableRequest {
 }
 
 export type MarkVariableResult = { ok: true } | { ok: false; error: string };
+
+/** Request sent by the "Mark result" action shown in the page: the element the user clicked and the kind suggested for it. */
+export interface MarkResultRequest {
+  info: ElementInfo;
+  kind: string;
+}
+
+export type MarkResultResult = { ok: true; selector: string; kind: ExtractorKind } | { ok: false; error: string };
+
+const WEB_KINDS: readonly string[] = ['text', 'table', 'list', 'fields', 'json', 'attribute'];
 
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DELETE_NAME = /delete|remove|supprimer|drop|destroy|purge/i;
@@ -83,12 +112,86 @@ export class LiveRecorder {
   private readonly unannounced = new Set<number>();
   private readonly switchSteps = new Map<number, number>();
   private queue: Promise<unknown> = Promise.resolve();
+  private zone: ResultZone | undefined;
+  private readonly network: NetworkCapture | undefined;
+  private readonly stepActions = new Map<number, number>();
 
   constructor(
     private readonly page: Page,
     private readonly recorder: WorkflowRecorder,
+    options: LiveRecorderOptions = {},
   ) {
     this.pages = [page];
+    this.network = options.captureNetwork === true ? new NetworkCapture(page.context()) : undefined;
+  }
+
+  /**
+   * Correlate the requests observed after each action with the Variables marked meanwhile, and attach the
+   * Level 1 recipes to the steps. Call it once, after the Variables are marked and before `finish`.
+   * Returns, per step, the level that can be used and why a step is not Level 1.
+   */
+  async finalizeNetwork(): Promise<NetworkStepReport[]> {
+    if (this.network === undefined) return [];
+    const byAction = await this.network.requestsByAction();
+    this.network.stop();
+
+    const values = [...this.recorder.variableValues()].map(([name, value]) => ({ name, value }));
+    const reports: NetworkStepReport[] = [];
+    // Variables typed since the last action that made a request: the next request has to carry them
+    const pending: string[] = [];
+
+    this.recorder.stepsSoFar().forEach((step, index) => {
+      if (step.actionType === 'switch_page' || step.actionType === 'hover' || step.actionType === 'scrollIntoView') return;
+      const base = step.label === undefined ? { step: index } : { step: index, label: step.label };
+      if (step.variable !== undefined) pending.push(step.variable);
+
+      const actionId = this.stepActions.get(index);
+      const requests = actionId === undefined ? [] : byAction.get(actionId) ?? [];
+      if (requests.length === 0) {
+        const input = step.actionType === 'type' || step.actionType === 'select';
+        reports.push({
+          ...base,
+          level: 'accessibility',
+          reason: input
+            ? 'input only: the value is sent by a later step'
+            : 'no fetch/XHR request followed this action (page navigation, server-rendered form, or a change made in the page only)',
+        });
+        return;
+      }
+
+      const used = [...new Set([...pending, ...(step.rowBinding?.variable === undefined ? [] : [step.rowBinding.variable])])];
+      pending.length = 0;
+
+      const attempts = requests.map((request) => ({ request, ...buildHttpRecipe(values, request) }));
+      const rank = (a: (typeof attempts)[number]): number => a.bound.length;
+      const qualifying = attempts
+        .filter((a) => a.recipe !== undefined && used.every((name) => a.bound.includes(name)))
+        .reduce<(typeof attempts)[number] | undefined>((best, a) => (best === undefined || rank(a) >= rank(best) ? a : best), undefined);
+
+      const risk = requests.map((r) => riskOfMethod(r.method)).reduce(maxRisk, 'read' as StepRisk);
+      this.recorder.setHttp(index, qualifying?.recipe, risk);
+
+      if (qualifying?.recipe !== undefined) {
+        reports.push({ ...base, level: 'http', request: `${qualifying.recipe.method} ${qualifying.recipe.url}` });
+        return;
+      }
+      const closest = attempts.reduce((best, a) => (rank(a) > rank(best) ? a : best));
+      const missing = used.filter((name) => !closest.bound.includes(name));
+      reports.push({
+        ...base,
+        level: 'accessibility',
+        reason:
+          closest.recipe === undefined
+            ? `${closest.request.method} ${pathOf(closest.request.url)}: ${closest.reason ?? 'not usable'}`
+            : `${closest.request.method} ${pathOf(closest.request.url)} does not carry the variable(s) ${missing.map((m) => `"${m}"`).join(', ')}`,
+      });
+    });
+    return reports;
+  }
+
+  /** The Result_Zone the user marked in the page, if any (the last mark wins). */
+  get resultZone(): ResultZone | undefined {
+    return this.zone === undefined ? undefined : structuredClone(this.zone);
   }
 
   /** Number of steps recorded so far. */
@@ -113,6 +216,7 @@ export class LiveRecorder {
 
     await this.page.evaluate(CAPTURE_SCRIPT);
     await this.injectInFrames(this.page);
+    this.network?.start();
     this.attached = true;
   }
 
@@ -149,6 +253,9 @@ export class LiveRecorder {
     await page.exposeBinding('__daemonizeMarkVariable', (_source, request: MarkVariableRequest) =>
       this.handleMarkVariable(request)
     );
+    await page.exposeBinding('__daemonizeMarkResult', (_source, request: MarkResultRequest) =>
+      this.handleMarkResult(request)
+    );
     await page.addInitScript(CAPTURE_SCRIPT);
   }
 
@@ -160,8 +267,10 @@ export class LiveRecorder {
 
   /** Events are handled one at a time, in the order the page sent them. */
   private enqueue(source: BindingSource, event: CapturedEvent, pageIndex: number): Promise<number | null> {
+    // The action starts now, when the page reports it, not when the queue reaches it
+    const actionId = this.network?.beginAction();
     const run = async (): Promise<number | null> => {
-      const ctx: HandleContext = { pageIndex };
+      const ctx: HandleContext = { pageIndex, actionId };
       if (event.frameComplete === false && source.frame.parentFrame() !== null) {
         ctx.frame = await frameChain(source.frame).catch(() => undefined);
       }
@@ -196,8 +305,11 @@ export class LiveRecorder {
       rowBinding: event.rowBinding,
       risk: classifyRisk(event),
       secretRef,
+      // A one-time-code field holds a TOTP seed at replay time: the current code is typed
+      totp: secretRef === 'OTP' ? true : undefined,
     });
     this.steps += 1;
+    if (ctx.actionId !== undefined) this.stepActions.set(index, ctx.actionId);
     if (event.rowBinding !== undefined) {
       this.bindRowToKnownVariable(index, event.rowTexts ?? []);
     }
@@ -257,6 +369,20 @@ export class LiveRecorder {
     }
   }
 
+  /** Handle the element the user marked as the result in the page; never throws. */
+  handleMarkResult(request: MarkResultRequest): MarkResultResult {
+    const selector = buildZoneSelector(request.info);
+    if (selector === undefined) {
+      return { ok: false, error: 'No stable selector for this element' };
+    }
+    if (!WEB_KINDS.includes(request.kind)) {
+      return { ok: false, error: `Unknown kind "${request.kind}"` };
+    }
+    const kind = request.kind as ExtractorKind;
+    this.zone = { selector, extractor: { kind } as NonNullable<ResultZone['extractor']> };
+    return { ok: true, selector, kind };
+  }
+
   /** Handle a variable named by the user in the page; never throws. */
   handleMarkVariable(request: MarkVariableRequest): MarkVariableResult {
     if (!VARIABLE_NAME.test(request.name)) {
@@ -284,6 +410,27 @@ export class LiveRecorder {
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
+  }
+}
+
+/** GET and HEAD read, DELETE deletes, the other methods write. */
+function riskOfMethod(method: string): StepRisk {
+  const upper = method.toUpperCase();
+  if (upper === 'GET' || upper === 'HEAD') return 'read';
+  return upper === 'DELETE' ? 'delete' : 'write';
+}
+
+const RISK_ORDER: StepRisk[] = ['read', 'write', 'delete'];
+
+function maxRisk(a: StepRisk, b: StepRisk): StepRisk {
+  return RISK_ORDER.indexOf(b) > RISK_ORDER.indexOf(a) ? b : a;
+}
+
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
   }
 }
 

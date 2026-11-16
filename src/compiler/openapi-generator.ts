@@ -41,7 +41,7 @@ export class OpenApiGenerator {
           responses: {
             '200': {
               description:
-                'Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false.',
+                'Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: "result_zone_not_found"` (the steps already ran).',
               content: {
                 'application/json': {
                   schema: workflow.outputSchema ?? { type: 'object' },

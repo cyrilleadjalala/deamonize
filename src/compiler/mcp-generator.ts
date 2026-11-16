@@ -1,11 +1,24 @@
 import { KEY_SEQUENCES } from '../sandbox/keys.js';
 import { describeTool } from './tool-description.js';
 import { propertyToZodSource } from './zod-translator.js';
-import type { Workflow, WorkflowSet } from '../types.js';
+import { pickResultZone } from '../replay/runtime/extract.js';
+import type { ResultZone, Workflow, WorkflowSet } from '../types.js';
 
 // The sandbox image of a web target starts from the Playwright image of this exact version,
 // whose browsers match the playwright package installed on top of it.
 export const PLAYWRIGHT_VERSION = '1.65.1';
+
+/** `--http`: off (default) replays through the page only; auto executes the recorded HTTP request of every step that has one. */
+export type HttpMode = 'off' | 'auto';
+
+export interface GenerateOptions {
+  http?: HttpMode;
+}
+
+/** Level 1 only exists for web targets. */
+export function httpEnabled(set: WorkflowSet, options: GenerateOptions): boolean {
+  return set.targetType === 'web' && options.http === 'auto';
+}
 
 /**
  * Standalone runtime embedded in every generated server. Each call starts from
@@ -30,6 +43,8 @@ const REPLAY_COMMON = [
   `  risk?: "read" | "write" | "delete";`,
   `  secretRef?: string;`,
   `  totp?: boolean;`,
+  `  // Level 1 (web, compiled with --http): see http-replay.ts`,
+  `  http?: any;`,
   `};`,
   ``,
   `// Where a replay starts when it runs in a sandbox that cannot reach the recorded one.`,
@@ -41,7 +56,8 @@ const REPLAY_COMMON = [
   `// What the call is compared with to tell whether the application still looks as recorded.`,
   `// finalZone limits the comparison: a CSS selector (web) or a rectangle of the screen (terminal).`,
   `export type Zone = { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } };`,
-  `export type Final = { finalScreenId?: string; finalZone?: Zone };`,
+  `export type ResultZone = Zone & { extractor?: ExtractorLike };`,
+  `export type Final = { finalScreenId?: string; finalZone?: Zone; resultZone?: ResultZone };`,
   ``,
   `const MAX_TEXT_LENGTH = 20000;`,
   ``,
@@ -88,10 +104,61 @@ const VALIDATION_RUNTIME = [
 // Web targets: a fresh Playwright browser context per call; returns the page title and visible text.
 // Strict level 2 (see step-plan.ts and web-steps.ts): accessible role and name in the recorded context, frame and page,
 // the row bound to a Variable, then the recorded selectors. A step that no locator can perform stops the replay.
-const WEB_RUNTIME = [
+const WEB_SHARED = [
+  `// Where the saved login is: DAEMONIZE_STORAGE_STATE (in a container, the read-only mount), else the recorded one, relative to this folder.`,
+  `function resolveStorageState(): string | undefined {`,
+  `  if (process.env.DAEMONIZE_STORAGE_STATE) return resolvePath(process.env.DAEMONIZE_STORAGE_STATE);`,
+  `  if (STORAGE_STATE) return resolvePath(dirname(fileURLToPath(import.meta.url)), STORAGE_STATE);`,
+  `  return undefined;`,
+  `}`,
+  ``,
   `// Timeout of a step (its action and the wait on its effect): the step's own, DAEMONIZE_STEP_TIMEOUT_MS, 8 s.`,
   `const STEP_TIMEOUT_MS = resolveStepTimeoutMs({ env: process.env.DAEMONIZE_STEP_TIMEOUT_MS });`,
   ``,
+  `// The result of a call that ends on a page: its title, visible text (or the data of the Result_Zone) and the drift check.`,
+  `async function finishWeb(webRun: WebRun, page: Page, final: Final, startedAt: number, deadline: number, extra: Record<string, unknown> = {}) {`,
+  `  // The steps may have moved to another page (a pop-up)`,
+  `  const last = webRun.pages[webRun.current];`,
+  `  const finalPage = last !== undefined && !last.isClosed() ? last : page;`,
+  `  // A Result_Zone limits the result to one element and extracts its structured data; without one, the whole visible text`,
+  `  let text: string;`,
+  `  let data: unknown;`,
+  `  if (final.resultZone === undefined) {`,
+  `    text = await finalPage.evaluate(() => document.body.innerText);`,
+  `  } else {`,
+  `    // The steps already ran: a zone that cannot be read is reported as such, strictly`,
+  `    const read = await extractWebZone(finalPage, final.resultZone, boundStepTimeoutMs(STEP_TIMEOUT_MS, deadline - Date.now()));`,
+  `    if (!read.ok) return zoneFailureResult(read, Date.now() - startedAt);`,
+  `    text = read.text;`,
+  `    data = redactDeep(typeof read.data === "string" ? boundText(read.data) : read.data, (value) => redactSecrets(value, webRun.secrets));`,
+  `  }`,
+  `  // The same screen as at recording time: the whole page, or only the zone when there is one`,
+  `  let hash: string | undefined;`,
+  `  if (final.finalScreenId !== undefined) {`,
+  `    const zone = final.finalZone?.selector;`,
+  `    // A zone that matches nothing leaves hash undefined, which counts as drift`,
+  `    const raw = zone === undefined`,
+  `      ? await finalPage.content()`,
+  `      : (await finalPage.locator(zone).count()) === 0`,
+  `        ? undefined`,
+  `        : await finalPage.locator(zone).first().evaluate((el: Element) => el.outerHTML, { timeout: STEP_TIMEOUT_MS }).catch(() => undefined);`,
+  `    hash = raw === undefined ? undefined : screenId("dom", raw);`,
+  `  }`,
+  `  return {`,
+  `    success: true,`,
+  `    screenType: "dom",`,
+  `    title: redactSecrets(await finalPage.title(), webRun.secrets),`,
+  `    text: redactSecrets(boundText(text, MAX_TEXT_LENGTH), webRun.secrets),`,
+  `    ...(final.resultZone === undefined ? {} : { data }),`,
+  `    ...driftFields(hash, final),`,
+  `    ...extra,`,
+  `    elapsedMs: Date.now() - startedAt`,
+  `  };`,
+  `}`,
+];
+
+// Web targets, without --http: Level 2 only.
+const WEB_RUNTIME = [
   `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}) {`,
   `  const startedAt = Date.now();`,
   `  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });`,
@@ -101,6 +168,11 @@ const WEB_RUNTIME = [
   `  if (missing.length > 0) {`,
   `    return { success: false, error: "missing_secret", failure: { missingSecret: missing[0], missing }, elapsedMs: Date.now() - startedAt };`,
   `  }`,
+  `  // The saved login is referenced by path and read by the browser into memory only; its content is never logged`,
+  `  const storagePath = resolveStorageState();`,
+  `  if (storagePath !== undefined && !existsSync(storagePath)) {`,
+  `    return { success: false, error: "storage_state_missing", failure: { path: storagePath }, elapsedMs: Date.now() - startedAt };`,
+  `  }`,
   `  const browser = await chromium.launch({`,
   `    headless: true,`,
   `    executablePath: process.env.DAEMONIZE_CHROMIUM_PATH || undefined,`,
@@ -109,9 +181,11 @@ const WEB_RUNTIME = [
   `  });`,
   `  let timer: NodeJS.Timeout | undefined;`,
   `  try {`,
-  `    const context = await browser.newContext(STORAGE_STATE ? { storageState: STORAGE_STATE } : {});`,
+  `    const context = await browser.newContext(storagePath !== undefined ? { storageState: storagePath } : {});`,
   `    const page = await context.newPage();`,
   `    const webRun = createWebRun(context, page);`,
+  `    // Passwords and TOTP seeds are removed from everything this call reports, whichever step fails`,
+  `    webRun.secrets.push(...secretValues(steps, process.env));`,
   `    const run = async () => {`,
   `      await page.goto(overrides.url ?? START_URL, { timeout: TIMEOUT_MS });`,
   `      await waitForEffect(page as unknown as SettlePage, { timeoutMs: boundStepTimeoutMs(STEP_TIMEOUT_MS, deadline - Date.now()) });`,
@@ -136,30 +210,7 @@ const WEB_RUNTIME = [
   `        // In a container the host keeps the picture: it travels in the result and the host saves it`,
   `        return shot.data === undefined ? failed : { ...failed, failure: { ...failed.failure, screenshotData: shot.data } };`,
   `      }`,
-  `      // The steps may have moved to another page (a pop-up)`,
-  `      const last = webRun.pages[webRun.current];`,
-  `      const finalPage = last !== undefined && !last.isClosed() ? last : page;`,
-  `      const text = await finalPage.evaluate(() => document.body.innerText);`,
-  `      // The same screen as at recording time: the whole page, or only the zone when there is one`,
-  `      let hash: string | undefined;`,
-  `      if (final.finalScreenId !== undefined) {`,
-  `        const zone = final.finalZone?.selector;`,
-  `        // A zone that matches nothing leaves hash undefined, which counts as drift`,
-  `        const raw = zone === undefined`,
-  `          ? await finalPage.content()`,
-  `          : (await finalPage.locator(zone).count()) === 0`,
-  `            ? undefined`,
-  `            : await finalPage.locator(zone).first().evaluate((el: Element) => el.outerHTML, { timeout: STEP_TIMEOUT_MS }).catch(() => undefined);`,
-  `        hash = raw === undefined ? undefined : screenId("dom", raw);`,
-  `      }`,
-  `      return {`,
-  `        success: true,`,
-  `        screenType: "dom",`,
-  `        title: await finalPage.title(),`,
-  `        text: text.slice(0, MAX_TEXT_LENGTH),`,
-  `        ...driftFields(hash, final),`,
-  `        elapsedMs: Date.now() - startedAt`,
-  `      };`,
+  `      return await finishWeb(webRun, page, final, startedAt, deadline);`,
   `    };`,
   `    const timeout = new Promise<never>((_, reject) => {`,
   `      timer = setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS);`,
@@ -170,6 +221,142 @@ const WEB_RUNTIME = [
   `  } finally {`,
   `    clearTimeout(timer);`,
   `    await browser.close().catch(() => {});`,
+  `  }`,
+  `}`,
+];
+
+// With --http (Level 1): a recipe is executed directly (http-replay.ts); a workflow whose steps all have one runs
+// without a browser. The browser starts on the first step that needs it (a step without recipe, or the Level 2
+// fallback of a read step), at which point the field-filling steps skipped so far are replayed on the page.
+// A write or delete step whose request failed is never repeated on another level.
+const WEB_RUNTIME_HTTP = [
+  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}) {`,
+  `  const startedAt = Date.now();`,
+  `  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });`,
+  `  const deadline = startedAt + TIMEOUT_MS;`,
+  `  // A secret that is not set fails the call before any step runs; only the name of its variable is reported`,
+  `  const missing = [...new Set([...missingSecrets(steps, process.env), ...missingHttpSecrets(steps, process.env)])];`,
+  `  if (missing.length > 0) {`,
+  `    return { success: false, error: "missing_secret", failure: { missingSecret: missing[0], missing }, elapsedMs: Date.now() - startedAt };`,
+  `  }`,
+  `  // The saved login is referenced by path and read into memory only; its content is never logged`,
+  `  const storagePath = resolveStorageState();`,
+  `  if (storagePath !== undefined && !existsSync(storagePath)) {`,
+  `    return { success: false, error: "storage_state_missing", failure: { path: storagePath }, elapsedMs: Date.now() - startedAt };`,
+  `  }`,
+  `  const plan = planSteps(steps);`,
+  `  const variables = withRecordedDefaults(steps, args);`,
+  `  // The level each step ran at; a field-filling step that only fed a request counts as http`,
+  `  const levels: string[] = plan.map((mode) => (mode === "ui" ? "accessibility" : "http"));`,
+  `  const secrets: string[] = [...secretValues(steps, process.env), ...httpSecretValues(steps, process.env)];`,
+  `  let levelFallback = false;`,
+  `  let session: { browser: Browser; context: BrowserContext; page: Page; webRun: WebRun } | undefined;`,
+  `  let timer: NodeJS.Timeout | undefined;`,
+  ``,
+  `  // The browser starts when a step first needs it, on the application as the requests left it`,
+  `  const openBrowser = async () => {`,
+  `    if (session !== undefined) return session;`,
+  `    const browser = await chromium.launch({`,
+  `      headless: true,`,
+  `      executablePath: process.env.DAEMONIZE_CHROMIUM_PATH || undefined,`,
+  `      args: process.env.DAEMONIZE_IN_CONTAINER ? ["--no-sandbox"] : []`,
+  `    });`,
+  `    try {`,
+  `      const context = await browser.newContext(storagePath !== undefined ? { storageState: storagePath } : {});`,
+  `      const page = await context.newPage();`,
+  `      const webRun = createWebRun(context, page);`,
+  `      webRun.secrets.push(...secrets);`,
+  `      await page.goto(overrides.url ?? START_URL, { timeout: Math.max(1, deadline - Date.now()) });`,
+  `      await waitForEffect(page as unknown as SettlePage, { timeoutMs: boundStepTimeoutMs(STEP_TIMEOUT_MS, deadline - Date.now()) });`,
+  `      session = { browser, context, page, webRun };`,
+  `      return session;`,
+  `    } catch (err) {`,
+  `      await browser.close().catch(() => {});`,
+  `      throw err;`,
+  `    }`,
+  `  };`,
+  ``,
+  `  try {`,
+  `    const run = async () => {`,
+  `      let lastHttp: { data: unknown; drifted: boolean; driftChecked: boolean } | undefined;`,
+  `      // Field-filling steps skipped because a later request carries their value`,
+  `      const deferred: number[] = [];`,
+  `      const stepTimeout = (step: Step) => boundStepTimeoutMs(resolveStepTimeoutMs({ step: step.timeoutMs, env: process.env.DAEMONIZE_STEP_TIMEOUT_MS }), deadline - Date.now());`,
+  `      // Level 2 for one step; a failure stops the call, as in strict mode`,
+  `      const ui = async (index: number): Promise<Record<string, unknown> | undefined> => {`,
+  `        const open = await openBrowser();`,
+  `        try {`,
+  `          await executeWebStep(open.webRun, steps[index], variables, { timeoutMs: stepTimeout(steps[index]) });`,
+  `          return undefined;`,
+  `        } catch (err) {`,
+  `          const shot = await captureFailure(open.webRun, index);`,
+  `          const failure = describeFailure({`,
+  `            stepIndex: index,`,
+  `            step: steps[index],`,
+  `            tried: err instanceof StepExecutionError ? err.tried : [],`,
+  `            reason: err instanceof StepExecutionError ? err.reason : (err as Error)?.message ?? String(err),`,
+  `            screenshot: shot.screenshot,`,
+  `            thumbnail: shot.thumbnail,`,
+  `            secrets: open.webRun.secrets`,
+  `          });`,
+  `          const failed = { ...failureResult(failure, Date.now() - startedAt), levels, ...(levelFallback ? { levelFallback: true } : {}) };`,
+  `          return shot.data === undefined ? failed : { ...failed, failure: { ...failed.failure, screenshotData: shot.data } };`,
+  `        }`,
+  `      };`,
+  ``,
+  `      for (let index = 0; index < steps.length; index++) {`,
+  `        const step = steps[index];`,
+  `        if (plan[index] === "prep") {`,
+  `          deferred.push(index);`,
+  `          continue;`,
+  `        }`,
+  `        if (plan[index] === "http") {`,
+  `          const recipe = { ...step.http, url: rebaseOrigin(step.http.url, START_URL, overrides.url) };`,
+  `          // With a browser open, its current cookies are the login; else the saved login file`,
+  `          const state = session !== undefined ? await session.context.storageState() : storagePath;`,
+  `          const outcome = await runHttpStep(recipe, variables, process.env, { timeoutMs: stepTimeout(step), storageState: state });`,
+  `          secrets.push(...outcome.secrets.filter((s) => !secrets.includes(s)));`,
+  `          if (session !== undefined) session.webRun.secrets.push(...outcome.secrets.filter((s) => !session!.webRun.secrets.includes(s)));`,
+  `          if (outcome.ok) {`,
+  `            lastHttp = outcome;`,
+  `            continue;`,
+  `          }`,
+  `          // A write or delete request may have reached the server: another level could do the action twice`,
+  `          if ((step.risk ?? "read") !== "read") {`,
+  `            return httpFailureResult({ stepIndex: index, step, outcome, levels: levels.map((l, i) => (i > index ? "not_run" : l)), elapsedMs: Date.now() - startedAt });`,
+  `          }`,
+  `          // A read step is repeated on the page, strictly`,
+  `          levelFallback = true;`,
+  `          levels[index] = "accessibility";`,
+  `          lastHttp = undefined;`,
+  `        }`,
+  `        for (const earlier of deferred.splice(0)) {`,
+  `          levels[earlier] = "accessibility";`,
+  `          const failed = await ui(earlier);`,
+  `          if (failed !== undefined) return failed;`,
+  `        }`,
+  `        const failed = await ui(index);`,
+  `        if (failed !== undefined) return failed;`,
+  `        lastHttp = undefined;`,
+  `      }`,
+  ``,
+  `      // The call ends on an HTTP step: the response is the result`,
+  `      if (lastHttp !== undefined) {`,
+  `        return buildHttpResult({ ...lastHttp, resultZone: final.resultZone, levels, levelFallback, secrets, elapsedMs: Date.now() - startedAt });`,
+  `      }`,
+  `      const open = await openBrowser();`,
+  `      return await finishWeb(open.webRun, open.page, final, startedAt, deadline, { levels, ...(levelFallback ? { levelFallback: true } : {}) });`,
+  `    };`,
+  `    const timeout = new Promise<never>((_, reject) => {`,
+  `      timer = setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS);`,
+  `    });`,
+  `    return await Promise.race([run(), timeout]);`,
+  `  } catch (err) {`,
+  `    return { success: false, error: scrub((err as Error).message, secrets), elapsedMs: Date.now() - startedAt };`,
+  `  } finally {`,
+  `    clearTimeout(timer);`,
+  `    const open = session;`,
+  `    if (open !== undefined) await open.browser.close().catch(() => {});`,
   `  }`,
   `}`,
 ];
@@ -263,6 +450,15 @@ const TERMINAL_RUNTIME = [
   `        await settle();`,
   `      }`,
   `      const finalText = screenText();`,
+  `      // A Result_Zone limits the result to a crop of the screen and extracts its structured data`,
+  `      let text = finalText;`,
+  `      let data: unknown;`,
+  `      if (final.resultZone !== undefined) {`,
+  `        const read = extractTerminalZone(finalText, final.resultZone);`,
+  `        if (!read.ok) return zoneFailureResult(read, Date.now() - startedAt);`,
+  `        text = read.text;`,
+  `        data = typeof read.data === "string" ? boundText(read.data, MAX_TEXT_LENGTH) : read.data;`,
+  `      }`,
   `      let hash: string | undefined;`,
   `      if (final.finalScreenId !== undefined) {`,
   `        const rect = final.finalZone?.rect;`,
@@ -271,7 +467,8 @@ const TERMINAL_RUNTIME = [
   `      return {`,
   `        success: true,`,
   `        screenType: "terminal",`,
-  `        text: finalText.slice(0, MAX_TEXT_LENGTH),`,
+  `        text: boundText(text, MAX_TEXT_LENGTH),`,
+  `        ...(final.resultZone === undefined ? {} : { data }),`,
   `        ...driftFields(hash, final),`,
   `        elapsedMs: Date.now() - startedAt`,
   `      };`,
@@ -351,6 +548,40 @@ const DOCKER_RUNTIME = [
   `  return result;`,
   `}`,
   ``,
+  `// Where the container sees the saved login`,
+  `const STORAGE_STATE_IN_CONTAINER = "/run/daemonize/storage-state.json";`,
+  ``,
+  `// The saved login on the host: DAEMONIZE_STORAGE_STATE, else the one recorded (relative to this folder). Web targets only.`,
+  `function resolveHostStorageState(): string | undefined {`,
+  `  if (!WEB_TARGET) return undefined;`,
+  `  if (process.env.DAEMONIZE_STORAGE_STATE) return resolve(process.env.DAEMONIZE_STORAGE_STATE);`,
+  `  if (STORAGE_STATE_RECORDED) return resolve(dirname(fileURLToPath(import.meta.url)), STORAGE_STATE_RECORDED);`,
+  `  return undefined;`,
+  `}`,
+  ``,
+  `// The arguments of docker run. Secrets are named without a value (docker reads them from this process's environment),`,
+  `// so no secret appears on a command line; the saved login is a read-only bind mount, never part of the image.`,
+  `export function buildDockerArgs(options: { name: string; timeoutEnv: string[]; steps: Step[]; storagePath?: string }): string[] {`,
+  `  const secretEnv = [...new Set([`,
+  `    ...options.steps.filter((s) => s.secretRef !== undefined).map((s) => secretEnvName(s.secretRef as string)),`,
+  `    ...HTTP_SECRET_VARIABLES(options.steps),`,
+  `  ])].flatMap((variable) => ["-e", variable]);`,
+  `  return [`,
+  `    "run", "--rm", "-i", "--name", options.name,`,
+  `    // Never download an image implicitly: it must have been built on purpose`,
+  `    "--pull", "never",`,
+  `    "--network", NETWORK,`,
+  `    "--memory", MEMORY_MB + "m", "--cpus", String(CPUS),`,
+  `    "--pids-limit", "256", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",`,
+  `    ...EXTRA_FLAGS,`,
+  `    ...options.timeoutEnv,`,
+  `    ...secretEnv,`,
+  `    ...(options.storagePath === undefined ? [] : ["-v", options.storagePath + ":" + STORAGE_STATE_IN_CONTAINER + ":ro", "-e", "DAEMONIZE_STORAGE_STATE=" + STORAGE_STATE_IN_CONTAINER]),`,
+  `    ...MOUNTS.flatMap((mount) => ["-v", mount]),`,
+  `    IMAGE`,
+  `  ];`,
+  `}`,
+  ``,
   `export async function replayInDocker(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}) {`,
   `  const startedAt = Date.now();`,
   `  // Resolved here, so the container applies the same value; the step timeout travels as an environment variable`,
@@ -360,30 +591,24 @@ const DOCKER_RUNTIME = [
   `  const fail = (error: string) => ({ success: false, error, elapsedMs: Date.now() - startedAt });`,
   ``,
   `  // A secret that is not set fails the call before the container starts; the container receives the values from this environment, never on the command line`,
-  `  const missing = missingSecrets(steps, process.env);`,
+  `  const missing = [...new Set([...missingSecrets(steps, process.env), ...HTTP_MISSING_SECRETS(steps)])];`,
   `  if (missing.length > 0) {`,
   `    return { success: false, error: "missing_secret", failure: { missingSecret: missing[0], missing }, elapsedMs: Date.now() - startedAt };`,
   `  }`,
-  `  const secretEnv = [...new Set(steps.filter((s) => s.secretRef !== undefined).map((s) => secretEnvName(s.secretRef as string)))].flatMap((variable) => ["-e", variable]);`,
   ``,
   `  if (HOST_COMMAND && !COMMAND && HOST_COMMAND.some((part) => /^[A-Za-z]:[\\\\/]/.test(part))) {`,
   `    return fail("sandbox: the program was recorded with a path of the host; set DAEMONIZE_SANDBOX_COMMAND to its command line inside the container");`,
   `  }`,
   ``,
+  `  // The saved login stays on the host: the container gets that one file, read-only, by absolute path.`,
+  `  // Its path is not a secret; its content is never read or logged here.`,
+  `  const storagePath = resolveHostStorageState();`,
+  `  if (storagePath !== undefined && !(existsSync(storagePath) && statSync(storagePath).isFile())) {`,
+  `    return { success: false, error: "storage_state_missing", failure: { path: storagePath }, elapsedMs: Date.now() - startedAt };`,
+  `  }`,
+  ``,
   `  const name = "daemonize-" + Math.random().toString(36).slice(2, 10);`,
-  `  const dockerArgs = [`,
-  `    "run", "--rm", "-i", "--name", name,`,
-  `    // Never download an image implicitly: it must have been built on purpose`,
-  `    "--pull", "never",`,
-  `    "--network", NETWORK,`,
-  `    "--memory", MEMORY_MB + "m", "--cpus", String(CPUS),`,
-  `    "--pids-limit", "256", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",`,
-  `    ...EXTRA_FLAGS,`,
-  `    ...timeoutEnv,`,
-  `    ...secretEnv,`,
-  `    ...MOUNTS.flatMap((mount) => ["-v", mount]),`,
-  `    IMAGE`,
-  `  ];`,
+  `  const dockerArgs = buildDockerArgs({ name, timeoutEnv, steps, storagePath });`,
   ``,
   `  return new Promise<Record<string, unknown>>((resolve) => {`,
   `    const child = spawn(DOCKER, dockerArgs, { stdio: ["pipe", "pipe", "pipe"] });`,
@@ -452,12 +677,13 @@ export class McpGenerator {
    */
   generate(
     set: WorkflowSet,
-    toolNames: Map<string, string>
+    toolNames: Map<string, string>,
+    options: GenerateOptions = {}
   ): string {
     this.assertTarget(set);
 
     const toolBlocks = set.workflows
-      .map((w) => this.generateToolBlock(set, w, toolNames))
+      .map((w) => this.generateToolBlock(set, w, toolNames, httpEnabled(set, options)))
       .join('\n\n');
 
     const lines: string[] = [
@@ -494,23 +720,32 @@ export class McpGenerator {
    * context, or a freshly started program. It runs on the host when imported by
    * the server and inside a container when started with `--container`.
    */
-  generateReplay(set: WorkflowSet): string {
+  generateReplay(set: WorkflowSet, options: GenerateOptions = {}): string {
     this.assertTarget(set);
+    const http = httpEnabled(set, options);
 
     const lines: string[] = [
       ...(set.targetType === 'web'
         ? [
-          `import { chromium } from "playwright";`,
+          `import { chromium, type Browser, type BrowserContext, type Page } from "playwright";`,
+          `import { existsSync } from "node:fs";`,
+          `import { dirname, resolve as resolvePath } from "node:path";`,
+          `import { fileURLToPath } from "node:url";`,
           `import { screenId } from "./screen-hash.js";`,
           `import { waitForEffect, resolveTimeoutMs, resolveStepTimeoutMs, boundStepTimeoutMs, type SettlePage } from "./settle.js";`,
-          `import { createWebRun, executeWebStep, captureFailure } from "./web-steps.js";`,
-          `import { missingSecrets, runStepsStrict, describeFailure, failureResult } from "./step-plan.js";`,
+          `import { createWebRun, executeWebStep, captureFailure, extractWebZone, type WebRun } from "./web-steps.js";`,
+          `import { boundText, redactDeep, zoneFailureResult, type ExtractorLike } from "./extract.js";`,
+          `import { missingSecrets, secretValues, redactSecrets, runStepsStrict, describeFailure, failureResult, StepExecutionError } from "./step-plan.js";`,
+          ...(http
+            ? [`import { planSteps, runHttpStep, withRecordedDefaults, rebaseOrigin, missingHttpSecrets, httpSecretValues, buildHttpResult, httpFailureResult, scrub } from "./http-replay.js";`]
+            : []),
         ]
         : [
           `import pty from "node-pty";`,
           `import xtermHeadless from "@xterm/headless";`,
           `import { screenId, cropTerminal } from "./screen-hash.js";`,
           `import { resolveTimeoutMs } from "./settle.js";`,
+          `import { boundText, extractTerminalZone, zoneFailureResult, type ExtractorLike } from "./extract.js";`,
         ]),
       ``,
       ...(set.targetType === 'web'
@@ -524,7 +759,7 @@ export class McpGenerator {
         ]),
       ``,
       ...REPLAY_COMMON,
-      ...(set.targetType === 'web' ? WEB_RUNTIME : TERMINAL_RUNTIME),
+      ...(set.targetType === 'web' ? [...WEB_SHARED, ...(http ? WEB_RUNTIME_HTTP : WEB_RUNTIME)] : TERMINAL_RUNTIME),
       ...CONTAINER_ENTRY,
     ];
     return lines.join('\n') + '\n';
@@ -537,20 +772,35 @@ export class McpGenerator {
    *
    * @param imageTag - default tag of the sandbox image built by `daemonize sandbox build`
    */
-  generateDockerReplay(set: WorkflowSet, imageTag: string): string {
+  generateDockerReplay(set: WorkflowSet, imageTag: string, options: GenerateOptions = {}): string {
     this.assertTarget(set);
+    const http = httpEnabled(set, options);
 
     const terminal = set.targetType === 'tui';
     const lines: string[] = [
       `import { spawn } from "node:child_process";`,
-      `import { mkdirSync, writeFileSync } from "node:fs";`,
+      `import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";`,
       `import { tmpdir } from "node:os";`,
-      `import { join } from "node:path";`,
+      `import { dirname, join, resolve } from "node:path";`,
+      `import { fileURLToPath } from "node:url";`,
       `import type { Step, Final, Limits } from "./replay.js";`,
       `import { resolveTimeoutMs } from "./settle.js";`,
       `import { missingSecrets, secretEnvName } from "./step-plan.js";`,
+      ...(http ? [`import { httpSecretNames, missingHttpSecrets, secretVariable, COOKIE_HEADER_VARIABLE } from "./http-replay.js";`] : []),
+      ``,
+      http
+        ? `// Level 1: the secrets of the recipes and the cookie header are forwarded by name, like the typed secrets.`
+        : `// Level 1 (--http) is not compiled in.`,
+      http
+        ? `const HTTP_SECRET_VARIABLES = (steps: Step[]): string[] => [...steps.flatMap((s) => httpSecretNames(s.http).map(secretVariable)), ...(process.env[COOKIE_HEADER_VARIABLE] ? [COOKIE_HEADER_VARIABLE] : [])];`
+        : `const HTTP_SECRET_VARIABLES = (_steps: Step[]): string[] => [];`,
+      http
+        ? `const HTTP_MISSING_SECRETS = (steps: Step[]): string[] => missingHttpSecrets(steps, process.env);`
+        : `const HTTP_MISSING_SECRETS = (_steps: Step[]): string[] => [];`,
       ``,
       `const DEFAULT_IMAGE = ${JSON.stringify(imageTag)};`,
+      `const WEB_TARGET = ${JSON.stringify(!terminal)};`,
+      `const STORAGE_STATE_RECORDED: string | undefined = ${JSON.stringify(terminal ? undefined : set.storageState)};`,
       terminal
         ? `// A terminal program needs nothing from the network.`
         : `// A browser must reach the application; the container still has no access to the host network stack.`,
@@ -571,8 +821,9 @@ export class McpGenerator {
    * the Dockerfile (to build with the output directory as context) and the
    * minimal package.json of what runs inside the container.
    */
-  generateSandboxFiles(set: WorkflowSet): { dockerfile: string; packageJson: string; dockerignore: string } {
+  generateSandboxFiles(set: WorkflowSet, options: GenerateOptions = {}): { dockerfile: string; packageJson: string; dockerignore: string } {
     this.assertTarget(set);
+    const http = httpEnabled(set, options);
 
     const terminal = set.targetType === 'tui';
     const dependencies = terminal
@@ -591,7 +842,8 @@ export class McpGenerator {
       'COPY replay.js ./replay.js',
       'COPY screen-hash.js ./screen-hash.js',
       'COPY settle.js ./settle.js',
-      ...(terminal ? [] : ['COPY row-resolver.js ./row-resolver.js', 'COPY step-plan.js ./step-plan.js', 'COPY web-steps.js ./web-steps.js']),
+      'COPY extract.js ./extract.js',
+      ...(terminal ? [] : ['COPY row-resolver.js ./row-resolver.js', 'COPY step-plan.js ./step-plan.js', 'COPY totp.js ./totp.js', 'COPY web-steps.js ./web-steps.js', ...(http ? ['COPY http-replay.js ./http-replay.js'] : [])]),
       terminal ? 'USER node' : 'USER pwuser',
       'ENTRYPOINT ["node", "replay.js", "--container"]',
       '',
@@ -600,7 +852,24 @@ export class McpGenerator {
     return {
       dockerfile,
       packageJson: JSON.stringify({ name: 'sandbox', private: true, type: 'module', dependencies }, null, 2),
-      dockerignore: ['node_modules', 'tests', '*.md', ''].join('\n'),
+      dockerignore: [
+        '# Nothing that holds a login or a secret may reach the build context, so no image layer can contain it.',
+        '# The saved login is mounted read-only when a call runs, never copied. The Dockerfile copies named files only.',
+        'node_modules',
+        'tests',
+        '*.md',
+        '# Workflow sets, state files, manifests (the image builds from sandbox/package.json)',
+        '*.json',
+        '!sandbox/package.json',
+        '**/*.workflow*',
+        '**/*storage*',
+        '**/*state*',
+        '**/.env*',
+        '**/auth*',
+        '**/.daemonize',
+        '**/*.assets',
+        '',
+      ].join('\n'),
     };
   }
 
@@ -620,10 +889,11 @@ export class McpGenerator {
   private generateToolBlock(
     set: WorkflowSet,
     workflow: Workflow,
-    toolNames: Map<string, string>
+    toolNames: Map<string, string>,
+    http: boolean
   ): string {
     const toolName = toolNames.get(workflow.id) ?? workflow.id;
-    const description = `${describeTool(workflow)}\n\nOptional reserved argument _timeoutMs (integer, 1 to 600000): timeout in milliseconds of the whole call; it is not part of the payload.`;
+    const description = `${describeTool(workflow, { http })}\n\nOptional reserved argument _timeoutMs (integer, 1 to 600000): timeout in milliseconds of the whole call; it is not part of the payload.`;
     const zodSchema = this.buildZodSchema(workflow);
 
     const lines: string[] = [
@@ -664,10 +934,24 @@ export class McpGenerator {
   }
 
   /** The recorded final screen of a workflow (and its zone), embedded for the drift check. */
-  private finalOf(workflow: Workflow): { finalScreenId?: string; finalZone?: Workflow['finalZone'] } {
-    const final: { finalScreenId?: string; finalZone?: Workflow['finalZone'] } = {};
+  private finalOf(workflow: Workflow): {
+    finalScreenId?: string;
+    finalZone?: Workflow['finalZone'];
+    resultZone?: Omit<ResultZone, 'schema'>;
+  } {
+    const final: {
+      finalScreenId?: string;
+      finalZone?: Workflow['finalZone'];
+      resultZone?: Omit<ResultZone, 'schema'>;
+    } = {};
     if (workflow.finalScreenId !== undefined) final.finalScreenId = workflow.finalScreenId;
     if (workflow.finalZone !== undefined) final.finalZone = workflow.finalZone;
+    // The schema of `data` is documentation (OpenAPI), not needed to extract
+    const resultZone = pickResultZone(workflow);
+    if (resultZone !== undefined) {
+      const { schema: _schema, ...extraction } = resultZone;
+      final.resultZone = extraction;
+    }
     return final;
   }
 

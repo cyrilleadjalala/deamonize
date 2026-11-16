@@ -13,10 +13,10 @@ function makeDriver(
   execute: (action: RecordedAction) => Promise<ScreenContent>,
 ): SandboxDriver & { stop: ReturnType<typeof vi.fn> } {
   return {
-    start: vi.fn(async () => {}),
+    start: vi.fn(async () => { }),
     captureScreen: vi.fn(async () => screen('<html><body>start</body></html>')),
     execute: vi.fn(execute),
-    stop: vi.fn(async () => {}),
+    stop: vi.fn(async () => { }),
     onUnexpectedExit: new EventEmitter(),
   };
 }
@@ -66,8 +66,8 @@ describe('Replayer', () => {
   });
 
   it('returns a timeout error and still stops the sandbox', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const driver = makeDriver(() => new Promise<ScreenContent>(() => {}));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => { });
+    const driver = makeDriver(() => new Promise<ScreenContent>(() => { }));
 
     const result = await new Replayer(() => driver).replay(workflow, { name: 'Ada' }, 50);
 
@@ -110,5 +110,57 @@ describe('extractResult', () => {
   it('returns the terminal buffer as text', () => {
     const result = extractResult({ type: 'terminal', raw: 'done  \n', normalized: 'done', capturedAt: 0 });
     expect(result).toEqual({ screenType: 'terminal', text: 'done' });
+  });
+});
+
+describe('Replayer with a Result_Zone', () => {
+  const zoned = (resultZone: Workflow['resultZone']): Workflow => ({ ...workflow, resultZone });
+  const noisy = screen('<html><head><title>Done</title></head><body><nav>Menu</nav><p>Saved Ada</p></body></html>');
+
+  it('returns the data and the text of the zone read by the driver, not the whole page', async () => {
+    const driver = makeDriver(async () => noisy);
+    driver.extractZone = vi.fn(async () => ({ ok: true as const, text: 'ID\n1', data: [{ ID: '1' }] }));
+    const zone = { selector: '#t', extractor: { kind: 'table' as const } };
+
+    const result = await new Replayer(() => driver).replay(zoned(zone), { name: 'Ada' });
+
+    expect(driver.extractZone).toHaveBeenCalledWith(zone);
+    expect(result.result).toEqual({ screenType: 'dom', title: 'Done', text: 'ID\n1', data: [{ ID: '1' }] });
+  });
+
+  it('reads a terminal zone from the screen text', async () => {
+    const driver = makeDriver(async () => ({ type: 'terminal', raw: 'Title\nStatus: OK (2)\n', normalized: '', capturedAt: 0 }));
+
+    const result = await new Replayer(() => driver).replay(
+      zoned({ rect: { row: 1, col: 0, rows: 1, cols: 30 }, extractor: { kind: 'regex', pattern: 'Status: (?<state>\\w+)' } }),
+      { name: 'Ada' }
+    );
+
+    expect(result.result).toEqual({ screenType: 'terminal', text: 'Status: OK (2)', data: { state: 'OK' } });
+  });
+
+  it('fails strictly, and says the action already ran, when the zone matches nothing', async () => {
+    const driver = makeDriver(async () => noisy);
+    driver.extractZone = vi.fn(async () => ({
+      ok: false as const,
+      error: 'result_zone_not_found' as const,
+      message: 'The steps of the workflow already ran',
+      zone: { selector: '#nope' },
+    }));
+
+    const result = await new Replayer(() => driver).replay(zoned({ selector: '#nope' }), { name: 'Ada' });
+
+    expect(result).toMatchObject({ success: false, error: 'result_zone_not_found', drifted: true, failure: { zone: { selector: '#nope' } } });
+    expect(result.message).toMatch(/already ran/);
+    expect(driver.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the whole-page result when the workflow has no zone', async () => {
+    const driver = makeDriver(async () => noisy);
+
+    const result = await new Replayer(() => driver).replay(workflow, { name: 'Ada' });
+
+    expect(result.result).toEqual({ screenType: 'dom', title: 'Done', text: 'Menu Saved Ada' });
+    expect(result.result).not.toHaveProperty('data');
   });
 });

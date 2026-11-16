@@ -4,7 +4,9 @@ import { TerminalScreen } from '../../sandbox/terminal-screen.js';
 import { cropTerminal } from '../../replay/runtime/screen-hash.js';
 import { saveWorkflow } from './save-workflow.js';
 import type { RecordSummary } from './record.js';
-import type { ScreenContent } from '../../types.js';
+import { extractTerminalZone } from '../../replay/runtime/extract.js';
+import { dataSchemaFor } from '../../schema/data-schema.js';
+import type { ResultZone, ScreenContent } from '../../types.js';
 
 /** The part of a terminal input the recorder needs; process.stdin satisfies it. */
 export interface TerminalInput {
@@ -26,6 +28,9 @@ export interface RecordTuiOptions {
   rows?: number;                // default: the height of the output terminal, or 24
   stabilizeMs?: number;         // silence that counts as "the screen is stable", default 150
   finalRect?: { row: number; col: number; rows: number; cols: number }; // drift is judged on this part of the final screen only
+  resultRect?: { row: number; col: number; rows: number; cols: number }; // the tool returns this part of the final screen, not all of it
+  resultRegex?: string;         // applied to the result zone: the named capture groups become `data` (add flags with resultRegexFlags)
+  resultRegexFlags?: string;    // e.g. "gm": every match, as an array of objects
   input?: TerminalInput;        // default: process.stdin
   output?: { write(data: string): unknown; columns?: number; rows?: number }; // default: process.stdout
 }
@@ -107,7 +112,8 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
     const text = options.finalRect ? cropTerminal(fullText, options.finalRect) : fullText;
     const finalScreen: ScreenContent = { type: 'terminal', raw: text, normalized: text, capturedAt: Date.now() };
 
-    const workflow = recorder.finish(finalScreen, options.finalRect ? { rect: options.finalRect } : undefined);
+    const resultZone = readResultZone(fullText, options);
+    const workflow = recorder.finish(finalScreen, options.finalRect ? { rect: options.finalRect } : undefined, resultZone);
     const totalWorkflows = await saveWorkflow(
       options.out,
       { targetType: 'tui', name: options.name, startCommand: options.command },
@@ -120,8 +126,12 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
       steps: workflow.steps.length,
       variables: workflow.variables.map((v) => v.name),
       totalWorkflows,
+      secrets: [],
       constantTypedValues: recorder.constantTypedValues,
     };
+    if (resultZone !== undefined) {
+      summary.resultZone = { rect: resultZone.rect, kind: resultZone.extractor?.kind ?? 'text' };
+    }
     if (exitCode !== undefined) {
       summary.programExitCode = exitCode;
     }
@@ -139,6 +149,23 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
     }
     screen.dispose();
   }
+}
+
+/** The Result_Zone asked for on the command line, checked against the final screen; undefined when none was asked for. */
+function readResultZone(screenText: string, options: RecordTuiOptions): ResultZone | undefined {
+  if (options.resultRect === undefined && options.resultRegex === undefined) return undefined;
+  const zone: ResultZone = {
+    ...(options.resultRect === undefined ? {} : { rect: options.resultRect }),
+    extractor: options.resultRegex === undefined
+      ? { kind: 'text' }
+      : { kind: 'regex', pattern: options.resultRegex, ...(options.resultRegexFlags === undefined ? {} : { flags: options.resultRegexFlags }) },
+  };
+  const read = extractTerminalZone(screenText, zone);
+  if (!read.ok) {
+    throw new Error(`The result zone cannot be read on the final screen: ${read.message}`);
+  }
+  zone.schema = dataSchemaFor(zone.extractor);
+  return zone;
 }
 
 /** The last non-empty line of the screen: where the program is waiting for input. */

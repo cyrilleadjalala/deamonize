@@ -394,55 +394,55 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
     - A failing step returns `{ success: false, drifted: true, failure: { step, tried, screenshot } }` and no later step runs
     - _Requirements: 12.3, 12.5, 12.6, 12.10_
 
-  - [-]* 17.7 Write property test for strict failure — Property 14
+  - [x]* 17.7 Write property test for strict failure — Property 14
     - **Property 14: A strict failure never executes later steps**
     - For any workflow and any failing step index, a fake driver records no action after the failing step and the result has `success: false` and `drifted: true`
     - File: `tests/property/strict-replay.property.test.ts`
     - **Validates: Requirements 12.5, 12.6**
     - _Tag comment: `// Feature: daemonize, Property 14: strict failure stops replay`_
 
-  - [ ] 17.8 TOTP, secret resolution and redaction
+  - [x] 17.8 TOTP, secret resolution and redaction
     - Create `src/replay/runtime/totp.ts` (RFC 6238, no dependencies) and secret resolution of `DAEMONIZE_SECRET_<NAME>` in the runtime (`src/compiler/mcp-generator.ts`); a missing secret returns an error naming it before any step runs
     - Create `src/recorder/redactor.ts` for password fields, Authorization, Cookie, Set-Cookie and token-like values; the CLI warns when a typed value is not a Variable or Secret_Reference (`src/cli/commands/record.ts`)
     - Unit test of TOTP against the RFC 6238 vectors (`tests/unit/totp.test.ts`)
     - _Requirements: 13.5, 13.6, 16.1, 16.2, 16.3, 16.4, 16.5_
 
-  - [ ]* 17.9 Write property test for redaction — Property 11
+  - [x]* 17.9 Write property test for redaction — Property 11
     - **Property 11: Redaction removes the redacted values**
     - For any recorded request or step containing secret-like values, the serialized output contains none of the values it was redacted from
     - File: `tests/property/redactor.property.test.ts`
     - **Validates: Requirements 13.7, 16.1**
     - _Tag comment: `// Feature: daemonize, Property 11: redaction`_
 
-  - [ ]* 17.10 Write property test for the no-leak guarantee — Property 12
+  - [x]* 17.10 Write property test for the no-leak guarantee — Property 12
     - **Property 12: No env secret value appears in any compiled artifact**
     - For any workflow and any random `DAEMONIZE_SECRET_*` values, compile and search every output file (workflow, OpenAPI, Kiro Power files, generated server, generated tests) for those values
     - File: `tests/property/no-leak.property.test.ts`
     - **Validates: Requirements 16.1, 16.9**
     - _Tag comment: `// Feature: daemonize, Property 12: no secret leak`_
 
-  - [ ] 17.11 Docker authentication handling
+  - [x] 17.11 Docker authentication handling
     - In `generateSandboxFiles` (`src/cli/commands/sandbox.ts`) and the docker replay, mount storageState read-only by path, never copy it into image layers (write `.dockerignore`), pass secrets as `-e NAME` without values
     - Integration test with real Docker, skipped with a message when Docker is unavailable (`tests/integration/docker-sandbox.test.ts`)
     - _Requirements: 16.6, 16.7_
 
-  - [ ] 17.12 Result_Zone and JSON extractor
+  - [x] 17.12 Result_Zone and JSON extractor
     - Record or mark the zone (CLI option in `src/cli/commands/record.ts`), add `data` to the output schema (`src/compiler/openapi-generator.ts`, `src/compiler/mcp-generator.ts`), extract structured data at run time instead of `document.body.innerText`
     - Tests in `tests/unit/replayer.test.ts` and `tests/integration/workflow-e2e.test.ts`
     - _Requirements: 16.8_
 
-  - [ ] 17.13 Network capture and recipes (level 1)
+  - [x] 17.13 Network capture and recipes (level 1)
     - Record fetch/XHR after each action, correlate Variables with query, body and path parameters, produce `http` recipes with redaction, classify risk (GET read; POST, PUT, PATCH write; DELETE delete)
     - Files: `src/recorder/network-capture.ts`, `src/recorder/live-recorder.ts`, `src/recorder/workflow-recorder.ts`
     - _Requirements: 13.1, 13.2, 13.5, 12.4_
 
-  - [ ] 17.14 Direct HTTP replay and `--http` compile option
+  - [x] 17.14 Direct HTTP replay and `--http` compile option
     - Add `--http` to `src/cli/commands/compile.ts`; the runtime (`src/replay/runtime/http-replay.ts`, copied by the compiler) executes the recipe with storageState cookies and headers or environment secrets
     - Fall back to level 2 only for `read` steps, and for SSR forms, opaque Server Actions or pure DOM state
     - Integration test against a local JSON API plus SPA (`tests/integration/http-replay.test.ts`)
     - _Requirements: 12.1, 13.3, 13.4, 13.6_
 
-  - [ ] 17.15 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+  - [-] 17.15 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 18. Lot 2b: Visual anchors and Heal mode

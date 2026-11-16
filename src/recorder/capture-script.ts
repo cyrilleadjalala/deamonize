@@ -564,11 +564,119 @@ export const CAPTURE_SCRIPT = `
     button.addEventListener('click', () => askName(box, stepIndex, suggestion, rowText));
     box.appendChild(button);
 
+    // The same box offers to mark the element that holds the result of the workflow
+    const mark = document.createElement('button');
+    mark.type = 'button';
+    mark.textContent = 'Mark result';
+    mark.setAttribute('data-daemonize-action', 'mark-result');
+    mark.addEventListener('click', () => startMarkResult());
+    box.appendChild(mark);
+
     document.documentElement.appendChild(box);
     setTimeout(() => {
-      if (chip === box && !box.contains(document.activeElement)) removeChip();
+      if (chip === box && !box.contains(document.activeElement) && !markingResult) removeChip();
     }, CHIP_LIFETIME_MS);
   }
+
+  // ---------------------------------------------------------------- result zone
+
+  const RESULT_KINDS = ['text', 'table', 'list', 'fields', 'json', 'attribute'];
+  const RESULT_CONTAINERS = 'table, [role=table], [role=grid], ul, ol, [role=list], dl, pre, code, input, select, textarea';
+  let markingResult = false;
+
+  // The element holding a result: the table, list, definition list, pre or field around the click
+  function resultZoneElement(target) {
+    if (!(target instanceof Element)) return document.body;
+    return target.closest(RESULT_CONTAINERS) || target;
+  }
+
+  // What the element looks like: table => table, ul/ol => list, dl => fields, pre/code with JSON => json
+  function suggestResultKind(el) {
+    if (el.matches('table, [role=table], [role=grid]')) return 'table';
+    if (el.matches('ul, ol, [role=list]')) return 'list';
+    if (el.matches('dl')) return 'fields';
+    if (el.matches('input, select, textarea')) return 'attribute';
+    if (el.matches('pre, code')) {
+      try {
+        JSON.parse((el.textContent || '').trim());
+        return 'json';
+      } catch (e) {
+        return 'text';
+      }
+    }
+    return 'text';
+  }
+
+  // The name of a content role (a status, a row) changes with the content: the zone is found by role alone then
+  function resultInfoOf(el) {
+    const info = infoOf(el, null);
+    const content = collapse(el.textContent);
+    if (info.name && (CONTENT_ROLES.has(info.role) || content === info.name || content.startsWith(info.name))) {
+      info.name = undefined;
+    }
+    info.text = undefined;
+    return info;
+  }
+
+  function showNotice(text, keep) {
+    removeChip();
+    const box = document.createElement('div');
+    box.setAttribute(UI_ATTR, '');
+    box.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:2147483647;background:#1f2937;color:#fff;font:13px system-ui,sans-serif;padding:8px 10px;border-radius:8px;display:flex;gap:8px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    box.appendChild(document.createTextNode(text));
+    chip = box;
+    document.documentElement.appendChild(box);
+    if (!keep) setTimeout(() => { if (chip === box) removeChip(); }, CHIP_LIFETIME_MS);
+    return box;
+  }
+
+  function startMarkResult() {
+    markingResult = true;
+    showNotice('Click the element that holds the result (Esc to cancel)', true);
+  }
+
+  function cancelMarkResult() {
+    markingResult = false;
+    removeChip();
+  }
+
+  async function finishMarkResult(target) {
+    markingResult = false;
+    const el = resultZoneElement(target);
+    const info = resultInfoOf(el);
+    let kind = suggestResultKind(el);
+    const send = async () => window.__daemonizeMarkResult({ info, kind });
+    const result = await send();
+    if (!result || !result.ok) {
+      showNotice((result && result.error) || 'Could not set the result zone', false);
+      return;
+    }
+    const box = showNotice('Result zone set as', true);
+    const select = document.createElement('select');
+    select.setAttribute('data-daemonize-action', 'result-kind');
+    RESULT_KINDS.forEach((k) => {
+      const option = document.createElement('option');
+      option.value = k;
+      option.textContent = k;
+      select.appendChild(option);
+    });
+    select.value = kind;
+    select.addEventListener('change', async () => {
+      kind = select.value;
+      await send();
+    });
+    box.appendChild(select);
+    setTimeout(() => { if (chip === box && !box.contains(document.activeElement)) removeChip(); }, CHIP_LIFETIME_MS);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (!e.isTrusted) return;
+    if (markingResult && e.key === 'Escape') {
+      cancelMarkResult();
+    } else if (e.altKey && e.shiftKey && e.code === 'KeyR') {
+      startMarkResult();
+    }
+  }, true);
 
   function askName(box, stepIndex, suggestion, rowText) {
     box.textContent = '';
@@ -773,6 +881,13 @@ export const CAPTURE_SCRIPT = `
 
   document.addEventListener('click', (e) => {
     if (!e.isTrusted || inUi(e.target)) return;
+    if (markingResult) {
+      // The click chooses the result zone; the page must not act on it and no step is recorded
+      e.preventDefault();
+      e.stopPropagation();
+      finishMarkResult(e.target);
+      return;
+    }
     if (e.detail === 0 && performance.now() - enterPressedAt < 100) return;
     const target = clickTarget(e.target);
     if (!target) return;
@@ -847,6 +962,8 @@ export const CAPTURE_SCRIPT = `
     framePath,
     secretKind,
     infoOf,
+    startMarkResult,
+    suggestResultKind,
     anchorOf: (el) => {
       const context = parentContext(el);
       return anchorOf(el, infoOf(el, context), context).anchor;

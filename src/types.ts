@@ -114,12 +114,24 @@ export interface SecretValueRef {
 export interface HttpRecipe {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   url: string;
-  query: Record<string, string>;
+  query: Record<string, string | SecretValueRef>;
+  /** JSON (or form fields); a leaf bound to a Variable is `{"$var":"name"}` (`as`: the leaf was a number or a boolean). */
   body?: unknown;
+  bodyFormat?: 'json' | 'form' | 'text';
   // Sensitive headers may only be Secret_Reference objects, never literals
   headers?: Record<string, string | SecretValueRef>;
-  bindings: Array<{ variable: string; in: 'query' | 'body' | 'path'; name: string }>;
+  /**
+   * Where a Variable value was found. `name`: the query key or header name; the JSON pointer of the leaf
+   * (`/customer/emails/0`) for a body; the index of the segment in `pathname.split('/')` for a path.
+   * Bound path segments and query values appear as `{{variable}}` in `url` and `query`.
+   */
+  bindings: Array<{ variable: string; in: 'query' | 'body' | 'path' | 'header'; name: string }>;
   redacted: Array<{ in: 'header' | 'query' | 'body'; name: string; secret: string }>;
+  /** Where the authentication comes from at replay time; never a value. */
+  auth?: 'storageState' | 'none' | `env:${string}`;
+  expectStatus?: number;
+  /** Shape (names and types, never values) of the JSON response, for the output schema. */
+  responseShape?: Record<string, unknown>;
 }
 
 export interface VisualAnchor {
@@ -134,19 +146,24 @@ export interface ScreenWait {
   when?: 'before' | 'after';
 }
 
-export type Extractor =
-  | { kind: 'text' }
-  | { kind: 'fields'; fields: Array<{ name: string; selector: string; attr?: string }> }
-  | {
-    kind: 'table';
-    rowSelector: string;
-    columns: Array<{ name: string; selector: string; attr?: string }>;
-  };
+/**
+ * How the content of a Result_Zone becomes JSON. Web: text, table (array of objects keyed by header),
+ * list (array of strings), fields (label/value object), json (the zone text parsed), attribute (the value
+ * of an input, or the named attribute). Terminal: text, regex (named capture groups; `g` in flags gives every match).
+ */
+export type ExtractorKind = 'text' | 'table' | 'list' | 'fields' | 'json' | 'attribute' | 'regex';
 
+export type Extractor =
+  | { kind: 'text' | 'table' | 'list' | 'fields' | 'json' }
+  | { kind: 'attribute'; name?: string }
+  | { kind: 'regex'; pattern: string; flags?: string };
+
+/** The part of the final screen a call returns, and how it is turned into `data`. */
 export interface ResultZone {
-  selector?: string;
-  rect?: { row: number; col: number; rows: number; cols: number };
-  extractor?: Extractor;
+  selector?: string;                                   // web: element holding the result
+  rect?: { row: number; col: number; rows: number; cols: number }; // terminal: crop of the rendered screen
+  extractor?: Extractor;                               // default: text
+  schema?: Record<string, unknown>;                    // JSON Schema of `data`, inferred when recording
 }
 
 export interface SecretReference {
@@ -184,6 +201,8 @@ export interface Workflow {
   // Restricts the drift hash to a part of the final screen (web: CSS selector;
   // terminal: rectangle, 0-based). finalScreenId is then the hash of that zone.
   finalZone?: FinalZone;
+  // What the call returns instead of the whole screen: the structured data of this zone
+  resultZone?: ResultZone;
   observedPayloads: Record<string, unknown>[];
   inputSchema?: Record<string, unknown>;   // JSON Schema object
   outputSchema?: Record<string, unknown>;  // JSON Schema object
@@ -212,6 +231,7 @@ export interface WorkflowResult {
   screenType: 'dom' | 'terminal';
   title?: string;
   text: string;
+  data?: unknown;                    // structured content of the Result_Zone, when the workflow has one
 }
 
 // Daemonize runtime configuration
@@ -251,7 +271,9 @@ export interface ReplayResult {
   drifted?: boolean;                 // final screen differs from the recorded one
   error?: 'timeout' | 'sandbox_unavailable' | 'step_failed' | string;
   /** Strict failure (error 'step_failed'): the step that no locator could perform; no later step ran. */
-  failure?: StepFailure;
+  failure?: StepFailure | { zone: { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } } };
+  /** Set with error 'result_zone_not_found' / 'result_extraction_failed': says the action itself already ran. */
+  message?: string;
   elapsedMs: number;
 }
 

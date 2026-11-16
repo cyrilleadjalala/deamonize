@@ -1,9 +1,11 @@
 import { createInterface } from 'node:readline/promises';
 import { chromium, type Page } from 'playwright';
-import { LiveRecorder } from '../../recorder/live-recorder.js';
+import { LiveRecorder, type NetworkStepReport } from '../../recorder/live-recorder.js';
 import { WorkflowRecorder } from '../../recorder/workflow-recorder.js';
 import { saveWorkflow } from './save-workflow.js';
-import type { ScreenContent } from '../../types.js';
+import { extractWebZone } from '../../replay/runtime/web-steps.js';
+import { dataSchemaFor } from '../../schema/data-schema.js';
+import type { ExtractorKind, ResultZone, ScreenContent, Workflow } from '../../types.js';
 
 export interface RecordOptions {
   url: string;
@@ -13,6 +15,9 @@ export interface RecordOptions {
   storageState?: string;        // Playwright storage state: start the recording already logged in
   headless?: boolean;           // default false: the user needs to see the browser
   finalZone?: string;           // CSS selector: drift is judged on this part of the final page only
+  resultZone?: string;          // selector of the element whose content the tool returns (instead of the whole page)
+  resultKind?: ExtractorKind;   // how to read it: text, table, list, fields, json, attribute (default: suggested from the element)
+  captureNetwork?: boolean;     // observe fetch/XHR to record Level 1 recipes (default true)
   /**
    * Replaces the wait for the user (Enter key or closing the window).
    * The session ends when it resolves; used to drive the page from tests.
@@ -26,6 +31,14 @@ export interface RecordSummary {
   steps: number;
   variables: string[];
   totalWorkflows: number;
+  /** Secrets the replay will need: the environment variable to set for each (names only). */
+  secrets: Array<{ name: string; envVariable: string; totp: boolean }>;
+  /** Typed values that are neither a Variable nor a Secret_Reference: stored as typed. */
+  constantTypedValues: number;
+  /** Per step, the replay level that can be used (empty when the network capture is off). */
+  network?: NetworkStepReport[];
+  /** The Result_Zone stored with the workflow, when there is one. */
+  resultZone?: { selector?: string; rect?: { row: number; col: number; rows: number; cols: number }; kind: string };
 }
 
 /**
@@ -64,7 +77,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     await page.goto(options.url);
 
     recorder = new WorkflowRecorder(options.label);
-    live = new LiveRecorder(page, recorder);
+    live = new LiveRecorder(page, recorder, { captureNetwork: options.captureNetwork ?? true });
     await live.attach();
 
     // Popups and new tabs get the same capture; each opening is recorded as a switch_page step
@@ -80,9 +93,16 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
 
     // The final screen is only available while the window is still open
     const finalScreen = page.isClosed() ? undefined : await captureFinalScreen(page, options.finalZone);
+    // The zone given on the command line, else the one marked in the page
+    const marked: ResultZone | undefined = options.resultZone !== undefined
+      ? { selector: options.resultZone, ...(options.resultKind === undefined ? {} : { extractor: { kind: options.resultKind } as ResultZone['extractor'] }) }
+      : live.resultZone;
+    const resultZone = marked === undefined ? undefined : await readResultZone(page, marked);
+    const network = await live.finalizeNetwork();
     const workflow = recorder.finish(
       finalScreen,
-      options.finalZone !== undefined ? { selector: options.finalZone } : undefined
+      options.finalZone !== undefined ? { selector: options.finalZone } : undefined,
+      resultZone
     );
 
     const totalWorkflows = await saveWorkflow(options.out, target, workflow);
@@ -93,6 +113,11 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
       steps: workflow.steps.length,
       variables: workflow.variables.map((v) => v.name),
       totalWorkflows,
+      network,
+      ...secretSummary(workflow),
+      ...(workflow.resultZone === undefined
+        ? {}
+        : { resultZone: { selector: workflow.resultZone.selector, kind: workflow.resultZone.extractor?.kind ?? 'text' } }),
     };
   } catch (err) {
     if (closing || !(err instanceof BrowserStoppedError)) {
@@ -103,6 +128,24 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     closing = true;
     await browser.close().catch(() => { });
   }
+}
+
+/** What the replay needs in its environment, and the typed values that are stored as typed. */
+function secretSummary(workflow: Workflow): Pick<RecordSummary, 'secrets' | 'constantTypedValues'> {
+  const secrets = new Map<string, { name: string; envVariable: string; totp: boolean }>();
+  for (const step of workflow.steps) {
+    if (step.secretRef === undefined) continue;
+    const known = secrets.get(step.secretRef);
+    secrets.set(step.secretRef, {
+      name: step.secretRef,
+      envVariable: `DAEMONIZE_SECRET_${step.secretRef}`,
+      totp: step.totp === true || known?.totp === true,
+    });
+  }
+  const constantTypedValues = workflow.steps.filter(
+    (s) => s.actionType === 'type' && s.value !== undefined && s.variable === undefined && s.secretRef === undefined
+  ).length;
+  return { secrets: [...secrets.values()], constantTypedValues };
 }
 
 /** The browser went away on its own while the user was recording. */
@@ -143,6 +186,34 @@ async function waitForUser(page: Page): Promise<void> {
   } finally {
     rl.close();
   }
+}
+
+/**
+ * Check a zone against the final page and complete it: the kind suggested from the element when none
+ * was given, and the JSON Schema of `data` from what the zone returns now (names and types, never values).
+ */
+async function readResultZone(page: Page, zone: ResultZone): Promise<ResultZone> {
+  if (page.isClosed()) {
+    throw new Error('The result zone needs the browser window to be open when the recording ends, to check it');
+  }
+  let extractor = zone.extractor;
+  if (extractor === undefined) {
+    const kind = await page
+      .locator(zone.selector as string)
+      .first()
+      .evaluate((el: Element) => (window as unknown as { __daemonizeHelpers: { suggestResultKind(el: Element): string } }).__daemonizeHelpers.suggestResultKind(el), undefined, { timeout: 5000 })
+      .catch(() => {
+        throw new Error(`The result zone "${zone.selector}" matches nothing on the final page`);
+      });
+    extractor = { kind } as ResultZone['extractor'];
+  }
+  const checked: ResultZone = { selector: zone.selector, extractor };
+  const read = await extractWebZone(page, checked, 5000);
+  if (!read.ok) {
+    throw new Error(`The result zone "${zone.selector}" cannot be read on the final page: ${read.message}`);
+  }
+  checked.schema = dataSchemaFor(extractor, read.data);
+  return checked;
 }
 
 async function captureFinalScreen(page: Page, zone?: string): Promise<ScreenContent> {

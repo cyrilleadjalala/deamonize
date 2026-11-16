@@ -1,5 +1,6 @@
 import type { ScreenContent, RecordedAction } from '../types.js';
 import { EventEmitter } from 'node:events';
+import type { ZoneLike, ZoneOutcome } from '../replay/runtime/extract.js';
 
 export interface SandboxDriver {
   /** Start the sandbox. Resolves when ready to accept interactions. */
@@ -13,6 +14,9 @@ export interface SandboxDriver {
 
   /** PNG of what the sandbox shows, for the diagnostic of a failed step (drivers with a display only). */
   screenshot?(): Promise<Buffer>;
+
+  /** Read a Result_Zone of the current page (drivers with a live DOM only; a terminal zone is read from the screen text). */
+  extractZone?(zone: ZoneLike): Promise<ZoneOutcome>;
 
   /** Stop the sandbox cleanly. */
   stop(): Promise<void>;

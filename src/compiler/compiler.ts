@@ -1,12 +1,13 @@
 import type { WorkflowSet, CompileResult } from '../types.js';
 import { ToolNameDeriver } from './tool-name-deriver.js';
 import { OpenApiGenerator } from './openapi-generator.js';
-import { McpGenerator } from './mcp-generator.js';
+import { McpGenerator, httpEnabled, type GenerateOptions } from './mcp-generator.js';
 import { KiroPowerGenerator } from './kiro-power-generator.js';
 import { writeFile, mkdir, access, readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { findPlainSecrets } from '../workflow/workflow-set.js';
 
 // What the generated server needs at run time (it has no Daemonize dependency).
 const SERVER_DEPENDENCIES = {
@@ -51,6 +52,16 @@ const RUNTIME_SETTLE = join(
   'settle.ts'
 );
 
+const RUNTIME_EXTRACT = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'replay',
+  'runtime',
+  'extract.ts'
+);
+
 const RUNTIME_ROW_RESOLVER = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -71,6 +82,16 @@ const RUNTIME_STEP_PLAN = join(
   'step-plan.ts'
 );
 
+const RUNTIME_TOTP = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'replay',
+  'runtime',
+  'totp.ts'
+);
+
 const RUNTIME_WEB_STEPS = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -79,6 +100,16 @@ const RUNTIME_WEB_STEPS = join(
   'replay',
   'runtime',
   'web-steps.ts'
+);
+
+const RUNTIME_HTTP_REPLAY = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'replay',
+  'runtime',
+  'http-replay.ts'
 );
 
 export class Compiler {
@@ -92,7 +123,16 @@ export class Compiler {
    * Writes files to outputDir.
    * Returns the CompileResult with all generated artifacts.
    */
-  async compile(set: WorkflowSet, outputDir: string): Promise<CompileResult> {
+  async compile(set: WorkflowSet, outputDir: string, options: GenerateOptions = {}): Promise<CompileResult> {
+    const http = httpEnabled(set, options);
+    // A literal secret (typed value, credential header or cookie) would be copied into every artifact:
+    // refuse before writing anything. Only the JSON paths are reported, never the values.
+    const plain = findPlainSecrets(set);
+    if (plain.length > 0) {
+      throw new Error(
+        `Workflow set contains plain-text secrets at ${plain.join(', ')}; use a secretRef or a {"$secret":"NAME"} reference instead`
+      );
+    }
     // 1. Reset deriver and derive a tool name for every workflow.
     this.toolNameDeriver.reset();
     const toolNames = new Map<string, string>();
@@ -102,18 +142,22 @@ export class Compiler {
 
     // 2. Generate all artifacts.
     const openApiSpec = await this.openApiGenerator.generate(set, toolNames);
-    const mcpServerSource = this.mcpGenerator.generate(set, toolNames);
-    const replaySource = this.mcpGenerator.generateReplay(set);
+    const mcpServerSource = this.mcpGenerator.generate(set, toolNames, options);
+    const replaySource = this.mcpGenerator.generateReplay(set, options);
     const imageTag = `${slugOf(set.targetName)}-sandbox`;
-    const dockerReplaySource = this.mcpGenerator.generateDockerReplay(set, imageTag);
-    const sandbox = this.mcpGenerator.generateSandboxFiles(set);
+    const dockerReplaySource = this.mcpGenerator.generateDockerReplay(set, imageTag, options);
+    const sandbox = this.mcpGenerator.generateSandboxFiles(set, options);
     const screenHashSource = await readFile(RUNTIME_SCREEN_HASH, 'utf-8');
     const settleSource = await readFile(RUNTIME_SETTLE, 'utf-8');
+    const extractSource = await readFile(RUNTIME_EXTRACT, 'utf-8');
     const rowResolverSource = await readFile(RUNTIME_ROW_RESOLVER, 'utf-8');
     const stepPlanSource = await readFile(RUNTIME_STEP_PLAN, 'utf-8');
+    const totpSource = await readFile(RUNTIME_TOTP, 'utf-8');
     // Strict Level 2 execution with Playwright: only a web target replays a browser
     const webStepsSource = set.targetType === 'web' ? await readFile(RUNTIME_WEB_STEPS, 'utf-8') : undefined;
-    const kiroPower = this.kiroPowerGenerator.generate(set, toolNames, outputDir);
+    // Level 1 (--http): the runtime that executes recorded requests, copied verbatim like the other run-time modules
+    const httpReplaySource = http ? await readFile(RUNTIME_HTTP_REPLAY, 'utf-8') : undefined;
+    const kiroPower = this.kiroPowerGenerator.generate(set, toolNames, outputDir, options);
     const powerName = kiroPower.plugin.name;
 
     // 3. Build the name-map (plain object for JSON serialisation).
@@ -138,11 +182,16 @@ export class Compiler {
       screenHash: join(outputDir, 'screen-hash.js'),
       settleSource: join(outputDir, 'settle.ts'),
       settle: join(outputDir, 'settle.js'),
+      extractSource: join(outputDir, 'extract.ts'),
+      extract: join(outputDir, 'extract.js'),
       rowResolverSource: join(outputDir, 'row-resolver.ts'),
       rowResolver: join(outputDir, 'row-resolver.js'),
       stepPlanSource: join(outputDir, 'step-plan.ts'),
       stepPlan: join(outputDir, 'step-plan.js'),
+      totpSource: join(outputDir, 'totp.ts'),
+      totp: join(outputDir, 'totp.js'),
       ...(webStepsSource === undefined ? {} : { webStepsSource: join(outputDir, 'web-steps.ts'), webSteps: join(outputDir, 'web-steps.js') }),
+      ...(httpReplaySource === undefined ? {} : { httpReplaySource: join(outputDir, 'http-replay.ts'), httpReplay: join(outputDir, 'http-replay.js') }),
       plugin: join(outputDir, 'plugin.json'),
       mcp: join(outputDir, 'mcp.json'),
       skill: join(outputDir, 'skills', powerName, 'SKILL.md'),
@@ -161,13 +210,21 @@ export class Compiler {
       writeFile(files.screenHash, this.toJavaScript(screenHashSource)),
       writeFile(files.settleSource, settleSource),
       writeFile(files.settle, this.toJavaScript(settleSource)),
+      writeFile(files.extractSource, extractSource),
+      writeFile(files.extract, this.toJavaScript(extractSource)),
       writeFile(files.rowResolverSource, rowResolverSource),
       writeFile(files.rowResolver, this.toJavaScript(rowResolverSource)),
       writeFile(files.stepPlanSource, stepPlanSource),
       writeFile(files.stepPlan, this.toJavaScript(stepPlanSource)),
+      writeFile(files.totpSource, totpSource),
+      writeFile(files.totp, this.toJavaScript(totpSource)),
       ...(webStepsSource === undefined ? [] : [
         writeFile(join(outputDir, 'web-steps.ts'), webStepsSource),
         writeFile(join(outputDir, 'web-steps.js'), this.toJavaScript(webStepsSource)),
+      ]),
+      ...(httpReplaySource === undefined ? [] : [
+        writeFile(join(outputDir, 'http-replay.ts'), httpReplaySource),
+        writeFile(join(outputDir, 'http-replay.js'), this.toJavaScript(httpReplaySource)),
       ]),
       writeFile(files.plugin, JSON.stringify(kiroPower.plugin, null, 2)),
       writeFile(files.mcp, JSON.stringify(kiroPower.mcp, null, 2)),

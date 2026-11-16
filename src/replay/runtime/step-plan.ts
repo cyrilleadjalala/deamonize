@@ -13,6 +13,7 @@
  */
 
 import { buildRowLocator, RowResolutionError, type RowBindingLike } from './row-resolver.js';
+import { totp } from './totp.js';
 
 export type StepRiskLike = 'read' | 'write' | 'delete';
 
@@ -229,6 +230,17 @@ export function secretEnvName(name: string): string {
   return `DAEMONIZE_SECRET_${name}`;
 }
 
+/** The raw values (passwords, TOTP seeds) of the secrets the steps use, to be removed from every diagnostic. */
+export function secretValues(steps: StepLike[], env: Record<string, string | undefined>): string[] {
+  const values: string[] = [];
+  for (const step of steps) {
+    if (step.secretRef === undefined) continue;
+    const value = env[secretEnvName(step.secretRef)];
+    if (value !== undefined && value !== '' && !values.includes(value)) values.push(value);
+  }
+  return values;
+}
+
 /** Names of the environment variables of the secrets the steps need and the environment lacks (never their values). */
 export function missingSecrets(steps: StepLike[], env: Record<string, string | undefined>): string[] {
   const missing: string[] = [];
@@ -248,12 +260,24 @@ export function missingSecrets(steps: StepLike[], env: Record<string, string | u
 export function resolveStepValue(
   step: StepLike,
   variables: Record<string, unknown>,
-  env: Record<string, string | undefined>
+  env: Record<string, string | undefined>,
+  nowMs?: number
 ): string | undefined {
+  if (step.totp === true && step.secretRef === undefined) {
+    throw new Error('a one-time-code step needs a secretRef naming the variable that holds the base32 seed');
+  }
   if (step.secretRef !== undefined) {
     const variable = secretEnvName(step.secretRef);
     const value = env[variable];
     if (value === undefined || value === '') throw new MissingSecretError(variable);
+    if (step.totp === true) {
+      try {
+        return totp(value, { timeMs: nowMs });
+      } catch (err) {
+        // The message of totp() never contains the seed
+        throw new Error(`the secret of ${variable} is not a valid base32 TOTP seed (${(err as Error).message})`);
+      }
+    }
     return value;
   }
   if (step.variable !== undefined) {

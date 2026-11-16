@@ -1,7 +1,7 @@
 import { keyToSequence } from '../sandbox/keys.js';
 import { tokenizeInput, type InputToken } from './key-tokenizer.js';
 import { WorkflowRecorder } from './workflow-recorder.js';
-import type { FinalZone, ScreenContent, Workflow } from '../types.js';
+import type { FinalZone, ResultZone, ScreenContent, Workflow } from '../types.js';
 
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -76,9 +76,9 @@ export class TerminalRecorder {
   }
 
   /** Finish the recording with the screen the user ended on. */
-  finish(finalScreen?: ScreenContent, finalZone?: FinalZone): Workflow {
+  finish(finalScreen?: ScreenContent, finalZone?: FinalZone, resultZone?: ResultZone): Workflow {
     this.flushText();
-    return this.recorder.finish(finalScreen, finalZone);
+    return this.recorder.finish(finalScreen, finalZone, resultZone);
   }
 
   // -------------------------------------------------------------------------

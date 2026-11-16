@@ -4,7 +4,10 @@ import type {
   Anchor,
   RowBinding,
   ScreenContent,
+  SecretReference,
   FinalZone,
+  HttpRecipe,
+  ResultZone,
   StepActionType,
   StepRisk,
   Workflow,
@@ -21,6 +24,7 @@ export interface RecordedStep {
   rowBinding?: RowBinding;
   risk?: StepRisk;
   secretRef?: string;   // the value is a secret: only its name is recorded
+  totp?: boolean;       // with secretRef: the secret is a base32 TOTP seed and the replay types the current code
 }
 
 /**
@@ -59,6 +63,7 @@ export class WorkflowRecorder {
     if (step.secretRef !== undefined) {
       // A secret step never carries a value
       recorded.secretRef = step.secretRef;
+      if (step.totp === true) recorded.totp = true;
       delete recorded.value;
     }
     this.steps.push(recorded);
@@ -72,6 +77,25 @@ export class WorkflowRecorder {
       throw new Error(`No step at index ${stepIndex}`);
     }
     step.anchor = structuredClone(anchor);
+  }
+
+  /** A copy of the steps recorded so far. */
+  stepsSoFar(): WorkflowStep[] {
+    return this.steps.map((s) => structuredClone(s));
+  }
+
+  /**
+   * Attach the Level 1 recipe observed for a step and raise its risk to that of the request
+   * (GET read, POST/PUT/PATCH write, DELETE delete); the risk never goes down.
+   */
+  setHttp(stepIndex: number, recipe: HttpRecipe | undefined, requestRisk: StepRisk): void {
+    const step = this.steps[stepIndex];
+    if (step === undefined) {
+      throw new Error(`No step at index ${stepIndex}`);
+    }
+    if (recipe !== undefined) step.http = structuredClone(recipe);
+    const order: StepRisk[] = ['read', 'write', 'delete'];
+    if (order.indexOf(requestRisk) > order.indexOf(step.risk ?? 'read')) step.risk = requestRisk;
   }
 
   /** Values of the variables defined so far, as strings (to recognise them in a row). */
@@ -140,7 +164,7 @@ export class WorkflowRecorder {
   }
 
   /** Finish the recording with the screen the user ended on. */
-  finish(finalScreen?: ScreenContent, finalZone?: FinalZone): Workflow {
+  finish(finalScreen?: ScreenContent, finalZone?: FinalZone, resultZone?: ResultZone): Workflow {
     if (this.steps.length === 0) {
       throw new Error('Cannot finish a workflow without steps');
     }
@@ -152,6 +176,17 @@ export class WorkflowRecorder {
       variables: [...this.variables.values()],
       observedPayloads: Object.keys(this.payload).length > 0 ? [{ ...this.payload }] : [],
     };
+    // The names of the secrets the steps need (never values), so compile can list the variables to set
+    const secrets = new Map<string, SecretReference>();
+    for (const step of workflow.steps) {
+      if (step.secretRef === undefined || secrets.has(step.secretRef)) continue;
+      secrets.set(step.secretRef, {
+        name: step.secretRef,
+        kind: step.totp === true ? 'totp' : /PASS/.test(step.secretRef) ? 'password' : 'token',
+      });
+    }
+    if (secrets.size > 0) workflow.secrets = [...secrets.values()];
+    if (resultZone !== undefined) workflow.resultZone = structuredClone(resultZone);
     if (finalScreen !== undefined) {
       // With a zone, the caller passes the zone's content (web: outerHTML of the element;
       // terminal: the cropped text), hashed here exactly like at run time.

@@ -169,6 +169,6 @@ describe('step-plan.ts as a generated file', () => {
   it('imports no src/ module, only its sibling runtime module', () => {
     const source = readFileSync(new URL('../../src/replay/runtime/step-plan.ts', import.meta.url), 'utf-8');
     const specifiers = [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
-    expect(specifiers).toEqual(['./row-resolver.js']);
+    expect(specifiers).toEqual(['./row-resolver.js', './totp.js']);
   });
 });

@@ -3,6 +3,8 @@ import { chromium, type Browser, type Page, type BrowserContext } from 'playwrig
 import type { SandboxDriver } from './driver.js';
 import type { ScreenContent, RecordedAction } from '../types.js';
 import { waitForEffect, resolveStepTimeoutMs, type SettlePage } from '../replay/runtime/settle.js';
+import { extractWebZone } from '../replay/runtime/web-steps.js';
+import type { ZoneLike, ZoneOutcome } from '../replay/runtime/extract.js';
 
 export class PlaywrightDriver implements SandboxDriver {
   readonly onUnexpectedExit = new EventEmitter();
@@ -97,6 +99,13 @@ export class PlaywrightDriver implements SandboxDriver {
       throw new Error('PlaywrightDriver is not started. Call start() first.');
     }
     return this.page.screenshot({ timeout: 3000 });
+  }
+
+  async extractZone(zone: ZoneLike): Promise<ZoneOutcome> {
+    if (!this.page) {
+      throw new Error('PlaywrightDriver is not started. Call start() first.');
+    }
+    return extractWebZone(this.page, zone, this.stepTimeout());
   }
 
   async stop(): Promise<void> {

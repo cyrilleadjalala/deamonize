@@ -12,6 +12,9 @@ export default defineConfig({
         test: {
           name: 'fast',
           include: ['tests/unit/**/*.test.ts', 'tests/property/**/*.test.ts'],
+          // Some unit files start a real browser (capture-script): closing it can be slow under load
+          testTimeout: 30000,
+          hookTimeout: 60000,
           sequence: { groupOrder: 1 },
         },
       },

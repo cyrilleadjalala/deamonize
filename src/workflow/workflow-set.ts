@@ -1,5 +1,6 @@
 import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js';
 import _addFormats from 'ajv-formats';
+import { findLiteralSecrets } from '../recorder/redactor.js';
 import { DescriptiveParseError } from '../state/state-machine-builder.js';
 import type { Workflow, WorkflowSet } from '../types.js';
 
@@ -106,6 +107,7 @@ export const WorkflowSetSchema: Record<string, unknown> = {
             },
           },
         },
+        resultZone: { $ref: '#/$defs/ResultZone' },
         observedPayloads: { type: 'array', items: { type: 'object' } },
         inputSchema: { type: 'object' },
         outputSchema: { type: 'object' },
@@ -209,14 +211,21 @@ export const WorkflowSetSchema: Record<string, unknown> = {
       properties: {
         method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] },
         url: { type: 'string', minLength: 1 },
-        query: { type: 'object', additionalProperties: { type: 'string' } },
+        query: {
+          type: 'object',
+          additionalProperties: { oneOf: [{ type: 'string' }, { $ref: '#/$defs/SecretValueRef' }] },
+        },
         body: {},
+        bodyFormat: { type: 'string', enum: ['json', 'form', 'text'] },
         headers: {
           type: 'object',
           additionalProperties: {
             oneOf: [{ type: 'string' }, { $ref: '#/$defs/SecretValueRef' }],
           },
         },
+        auth: { type: 'string', pattern: '^(storageState|none|env:[A-Z][A-Z0-9_]*)$' },
+        expectStatus: { type: 'integer', minimum: 100, maximum: 599 },
+        responseShape: { type: 'object' },
         bindings: {
           type: 'array',
           items: {
@@ -225,7 +234,7 @@ export const WorkflowSetSchema: Record<string, unknown> = {
             additionalProperties: false,
             properties: {
               variable: { type: 'string', minLength: 1 },
-              in: { type: 'string', enum: ['query', 'body', 'path'] },
+              in: { type: 'string', enum: ['query', 'body', 'path', 'header'] },
               name: { type: 'string' },
             },
           },
@@ -275,16 +284,6 @@ export const WorkflowSetSchema: Record<string, unknown> = {
         when: { type: 'string', enum: ['before', 'after'] },
       },
     },
-    FieldSpec: {
-      type: 'object',
-      required: ['name', 'selector'],
-      additionalProperties: false,
-      properties: {
-        name: { type: 'string', minLength: 1 },
-        selector: { type: 'string' },
-        attr: { type: 'string' },
-      },
-    },
     ResultZone: {
       type: 'object',
       additionalProperties: false,
@@ -297,29 +296,27 @@ export const WorkflowSetSchema: Record<string, unknown> = {
               type: 'object',
               required: ['kind'],
               additionalProperties: false,
-              properties: { kind: { const: 'text' } },
+              properties: { kind: { enum: ['text', 'table', 'list', 'fields', 'json'] } },
             },
             {
               type: 'object',
-              required: ['kind', 'fields'],
+              required: ['kind'],
               additionalProperties: false,
-              properties: {
-                kind: { const: 'fields' },
-                fields: { type: 'array', items: { $ref: '#/$defs/FieldSpec' } },
-              },
+              properties: { kind: { const: 'attribute' }, name: { type: 'string', minLength: 1 } },
             },
             {
               type: 'object',
-              required: ['kind', 'rowSelector', 'columns'],
+              required: ['kind', 'pattern'],
               additionalProperties: false,
               properties: {
-                kind: { const: 'table' },
-                rowSelector: { type: 'string' },
-                columns: { type: 'array', items: { $ref: '#/$defs/FieldSpec' } },
+                kind: { const: 'regex' },
+                pattern: { type: 'string', minLength: 1 },
+                flags: { type: 'string', pattern: '^[gimsu]*$' },
               },
             },
           ],
         },
+        schema: { type: 'object' },
       },
     },
     SecretReference: {
@@ -355,33 +352,8 @@ function createValidator(): ValidateFunction {
   return compiled;
 }
 
-const SENSITIVE_KEY = /^(authorization|cookie|set-cookie|token)$/i;
 const PASSWORD_SELECTOR = /type\s*=\s*["']?password/i;
 const PASSWORD_LABEL = /pass(word|wd)|mot de passe/i;
-
-function isSecretReference(value: unknown): boolean {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    typeof (value as Record<string, unknown>)['$secret'] === 'string'
-  );
-}
-
-function walkSensitiveKeys(value: unknown, path: string, out: string[]): void {
-  if (Array.isArray(value)) {
-    value.forEach((item, i) => walkSensitiveKeys(item, `${path}[${i}]`, out));
-  } else if (typeof value === 'object' && value !== null) {
-    for (const [key, child] of Object.entries(value)) {
-      const childPath = `${path}.${key}`;
-      if (SENSITIVE_KEY.test(key) && !isSecretReference(child)) {
-        out.push(childPath);
-      } else if (!isSecretReference(child)) {
-        walkSensitiveKeys(child, childPath, out);
-      }
-    }
-  }
-}
 
 /**
  * Find literals that must be Secret_References: a `value` on a step typing a
@@ -401,8 +373,7 @@ export function findPlainSecrets(set: WorkflowSet): string[] {
             (step.label !== undefined && PASSWORD_LABEL.test(step.label))));
       if (typesSecret && step.value !== undefined) found.push(`${base}.value`);
       if (step.http !== undefined) {
-        const { redacted: _redacted, bindings: _bindings, ...rest } = step.http;
-        walkSensitiveKeys(rest, `${base}.http`, found);
+        for (const path of findLiteralSecrets(step.http)) found.push(`${base}.http${path}`);
       }
     });
   });

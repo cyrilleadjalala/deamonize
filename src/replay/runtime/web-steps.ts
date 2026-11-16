@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BrowserContext, Frame, Locator, Page } from 'playwright';
+import { WEB_ZONE_FUNCTION, finishWebZone, notFoundMessage, zoneFailure, type RawWebZone, type ZoneLike, type ZoneOutcome } from './extract.js';
 import { resolveRowStep } from './row-resolver.js';
 import { waitForEffect, type SettlePage } from './settle.js';
 import {
@@ -26,6 +27,7 @@ import {
   explainState,
   frameHintSelector,
   planLocators,
+  redactSecrets,
   resolveStepValue,
   type CandidateState,
   type LocatorCandidate,
@@ -55,6 +57,8 @@ export interface StepOptions {
   /** Time the step has to find its element and act on it. */
   timeoutMs: number;
   env?: Record<string, string | undefined>;
+  /** The clock used for one-time codes (default: now). */
+  nowMs?: number;
 }
 
 const POLL_MS = 50;
@@ -88,16 +92,14 @@ export async function executeWebStep(
     return;
   }
 
-  if (step.totp === true) {
-    throw new StepExecutionError([], 'a one-time-code step cannot be replayed by this runtime');
-  }
   let value: string | undefined;
   try {
-    value = resolveStepValue(step, variables, options.env ?? process.env);
+    // For a one-time-code step this is the current code, computed now so it cannot expire while earlier steps ran
+    value = resolveStepValue(step, variables, options.env ?? process.env, options.nowMs);
   } catch (err) {
-    throw new StepExecutionError([], (err as Error).message);
+    throw new StepExecutionError([], redactSecrets((err as Error).message, run.secrets));
   }
-  if (step.secretRef !== undefined && value !== undefined) run.secrets.push(value);
+  if (step.secretRef !== undefined && value !== undefined && !run.secrets.includes(value)) run.secrets.push(value);
 
   const plan = planLocators(step, variables);
   if (plan.length === 0) {
@@ -422,6 +424,37 @@ async function typeInto(page: Page, locator: Locator, text: string, timeout: num
     await page.keyboard.press('Delete');
   } else {
     await page.keyboard.insertText(text);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Result zone
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the Result_Zone of a page. The element is waited for up to `timeoutMs` (the page may still be
+ * rendering); a zone that never appears is `result_zone_not_found`. The in-page reader is installed
+ * as an expression (Playwright does not call a function given as a string) and called with explicit arguments.
+ */
+export async function extractWebZone(page: Page, zone: ZoneLike, timeoutMs: number): Promise<ZoneOutcome> {
+  const locator = page.locator(zone.selector ?? 'body').first();
+  try {
+    await locator.waitFor({ state: 'attached', timeout: Math.max(1, timeoutMs) });
+  } catch {
+    return zoneFailure('result_zone_not_found', notFoundMessage(zone), zone);
+  }
+  try {
+    await page.evaluate(`window.__daemonizeZone = ${WEB_ZONE_FUNCTION}`);
+    const raw = (await locator.evaluate(
+      (el: Element, extractor: unknown) => (window as unknown as { __daemonizeZone(el: Element, ex: unknown): unknown }).__daemonizeZone(el, extractor),
+      zone.extractor ?? { kind: 'text' },
+      { timeout: Math.max(1, timeoutMs) }
+    )) as RawWebZone;
+    return finishWebZone(raw, zone);
+  } catch (err) {
+    return zoneFailure('result_extraction_failed', `The result zone could not be read: ${firstLine(err)}`, zone);
+  } finally {
+    await page.evaluate('delete window.__daemonizeZone').catch(() => { });
   }
 }
 

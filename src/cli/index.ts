@@ -4,7 +4,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { record, type RecordSummary } from './commands/record.js';
 import { recordTui } from './commands/record-tui.js';
-import { compile } from './commands/compile.js';
+import { compile, parseHttpMode } from './commands/compile.js';
 import { merge } from './commands/merge.js';
 import { serve } from './commands/serve.js';
 import { buildSandboxImage } from './commands/sandbox.js';
@@ -31,10 +31,23 @@ export function buildProgram(): Command {
     .option('--headless', 'web only: run the browser without a window')
     .option('--final-zone <selector>', 'web only: CSS selector; drift is judged on this part of the final page only')
     .option('--final-rect <row,col,rows,cols>', 'tui only: rectangle of the final screen (0-based); drift is judged on it only')
+    .option('--result-zone <selector>', 'web only: element whose content the tool returns as `data` instead of the whole page')
+    .option('--result-kind <kind>', 'web only: how to read the result zone: text, table, list, fields, json or attribute (default: suggested from the element)')
+    .option('--capture-network', 'web only: observe fetch/XHR requests and record Level 1 HTTP recipes (default)')
+    .option('--no-capture-network', 'web only: do not observe network requests; every step stays Level 2')
+    .option('--result-rect <row,col,rows,cols>', 'tui only: part of the final screen (0-based) the tool returns as `text` and `data`')
+    .option('--result-regex <regex>', 'tui only: regular expression applied to the result zone; its named groups become `data`')
+    .option('--result-regex-flags <flags>', 'tui only: flags of --result-regex (default m; add g for every match as an array)')
     .action(async (target: string[], options) => {
       if (options.type === 'tui') {
         if (options.finalZone !== undefined) {
           throw new Error('--final-zone is for web recordings; use --final-rect with --type tui');
+        }
+        if (options.captureNetwork !== undefined) {
+          throw new Error('--capture-network and --no-capture-network are for web recordings');
+        }
+        if (options.resultZone !== undefined || options.resultKind !== undefined) {
+          throw new Error('--result-zone and --result-kind are for web recordings; use --result-rect and --result-regex with --type tui');
         }
         console.log(
           chalk.cyan(
@@ -46,7 +59,10 @@ export function buildProgram(): Command {
           label: options.label,
           name: options.name ?? target[0],
           out: options.out,
-          finalRect: options.finalRect === undefined ? undefined : parseRect(options.finalRect),
+          finalRect: options.finalRect === undefined ? undefined : parseRect(options.finalRect, '--final-rect'),
+          resultRect: options.resultRect === undefined ? undefined : parseRect(options.resultRect, '--result-rect'),
+          resultRegex: options.resultRegex,
+          resultRegexFlags: options.resultRegexFlags,
         });
         console.log(`\r\n${chalk.green(describeSummary(summary))}`);
         if (summary.programExitCode !== undefined) {
@@ -64,6 +80,15 @@ export function buildProgram(): Command {
 
       if (options.finalRect !== undefined) {
         throw new Error('--final-rect is for terminal recordings (--type tui); use --final-zone for a web page');
+      }
+      if (options.resultRect !== undefined || options.resultRegex !== undefined || options.resultRegexFlags !== undefined) {
+        throw new Error('--result-rect and --result-regex are for terminal recordings (--type tui); use --result-zone and --result-kind for a web page');
+      }
+      if (options.resultKind !== undefined && !WEB_RESULT_KINDS.includes(options.resultKind)) {
+        throw new Error(`Unknown --result-kind "${options.resultKind}": use ${WEB_RESULT_KINDS.join(', ')}`);
+      }
+      if (options.resultKind !== undefined && options.resultZone === undefined) {
+        throw new Error('--result-kind needs --result-zone');
       }
       if (options.type !== 'web') {
         throw new Error(`Unknown type "${options.type}": use web or tui`);
@@ -85,8 +110,35 @@ export function buildProgram(): Command {
         storageState: options.storageState,
         headless: options.headless,
         finalZone: options.finalZone,
+        resultZone: options.resultZone,
+        resultKind: options.resultKind,
+        captureNetwork: options.captureNetwork ?? true,
       });
       console.log(chalk.green(describeSummary(summary)));
+      for (const step of summary.network ?? []) {
+        const name = step.label === undefined ? '' : ` "${step.label}"`;
+        console.log(
+          step.level === 'http'
+            ? chalk.cyan(`  step ${step.step}${name}: http (${step.request}), accessibility as fallback`)
+            : chalk.gray(`  step ${step.step}${name}: accessibility (${step.reason})`)
+        );
+      }
+      for (const secret of summary.secrets) {
+        console.log(
+          chalk.yellow(
+            secret.totp
+              ? `Replay needs ${secret.envVariable} (the base32 TOTP seed; the current code is typed at each call).`
+              : `Replay needs ${secret.envVariable} (the value typed here was not stored).`
+          )
+        );
+      }
+      if (summary.constantTypedValues > 0) {
+        console.log(
+          chalk.yellow(
+            `${summary.constantTypedValues} typed value(s) were not marked as variables and are stored as they are in ${summary.out}. Check that none is a secret.`
+          )
+        );
+      }
     });
 
   program
@@ -94,8 +146,12 @@ export function buildProgram(): Command {
     .description('Generate the OpenAPI spec, MCP server and Kiro Power from a workflow file')
     .option('-o, --out <dir>', 'output directory', DEFAULT_OUTPUT_DIR)
     .option('--install', 'run "npm install" in the output directory afterwards')
+    .option(
+      '--http [mode]',
+      'web only: execute the recorded HTTP request of each step that has one (auto, the default when the flag is given) instead of driving the page; off disables it'
+    )
     .action(async (file: string | undefined, options) => {
-      await compile(file ?? DEFAULT_WORKFLOWS_FILE, options.out, { install: options.install });
+      await compile(file ?? DEFAULT_WORKFLOWS_FILE, options.out, { install: options.install, http: parseHttpMode(options.http) });
     });
 
   program
@@ -151,11 +207,13 @@ export function buildProgram(): Command {
   return program;
 }
 
-function parseRect(text: string): { row: number; col: number; rows: number; cols: number } {
+const WEB_RESULT_KINDS = ['text', 'table', 'list', 'fields', 'json', 'attribute'];
+
+function parseRect(text: string, option: string): { row: number; col: number; rows: number; cols: number } {
   const parts = text.split(',').map((part) => Number(part.trim()));
   const [row, col, rows, cols] = parts;
   if (parts.length !== 4 || !parts.every(Number.isInteger) || row < 0 || col < 0 || rows < 1 || cols < 1) {
-    throw new Error(`Invalid --final-rect "${text}": expected row,col,rows,cols (0-based, size at least 1)`);
+    throw new Error(`Invalid ${option} "${text}": expected row,col,rows,cols (0-based, size at least 1)`);
   }
   return { row, col, rows, cols };
 }

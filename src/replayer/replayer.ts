@@ -2,6 +2,14 @@ import type { SandboxDriver } from '../sandbox/driver.js';
 import { ScreenHasher } from '../state/screen-hasher.js';
 import { cropTerminal } from '../replay/runtime/screen-hash.js';
 import { extractResult } from './result-extractor.js';
+import {
+  boundText,
+  extractTerminalZone,
+  pickResultZone,
+  zoneFailure,
+  zoneFailureResult,
+  type ZoneOutcome,
+} from '../replay/runtime/extract.js';
 import { resolveTimeoutMs } from '../replay/runtime/settle.js';
 import {
   StepExecutionError,
@@ -17,6 +25,7 @@ import type {
   RecordedAction,
   ScreenContent,
   ReplayResult,
+  ResultZone,
 } from '../types.js';
 
 
@@ -88,10 +97,25 @@ export class Replayer {
         return { success: false, error: 'timeout', elapsedMs: elapsed() };
       }
 
+      const whole = extractResult(outcome.screen);
+      const zone = pickResultZone(workflow);
+      let content = whole;
+      if (zone !== undefined) {
+        // The structured data of the zone replaces the whole screen; a zone that cannot be read is a strict failure
+        const read = await this.readZone(driver, outcome.screen, zone);
+        if (!read.ok) {
+          return { ...zoneFailureResult(read, elapsed()) };
+        }
+        content = {
+          ...whole,
+          text: boundText(read.text),
+          data: typeof read.data === 'string' ? boundText(read.data) : read.data,
+        };
+      }
       const result: ReplayResult = {
         success: true,
         screen: outcome.screen,
-        result: extractResult(outcome.screen),
+        result: content,
         elapsedMs: elapsed(),
       };
       if (workflow.finalScreenId !== undefined) {
@@ -125,6 +149,14 @@ export class Replayer {
       screen = await this.runStep(driver, step, payload);
     });
     return outcome.ok ? { screen } : { failed: outcome };
+  }
+
+  private async readZone(driver: SandboxDriver, screen: ScreenContent, zone: ResultZone): Promise<ZoneOutcome> {
+    if (screen.type === 'terminal') return extractTerminalZone(screen.raw, zone);
+    if (driver.extractZone === undefined) {
+      return zoneFailure('result_extraction_failed', 'This driver cannot read a result zone of a web page', zone);
+    }
+    return driver.extractZone(zone);
   }
 
   /** The picture of the sandbox at the time of a failure, when the driver can take one. */

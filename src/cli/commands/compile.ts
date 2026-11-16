@@ -12,6 +12,18 @@ export interface CompileOptions {
   install?: boolean;
   /** How to install; replaced in tests. */
   installer?: (dir: string) => Promise<void>;
+  /**
+   * Level 1: `auto` executes the recorded HTTP request of every step that has one, without a browser when
+   * all steps do; `off` (default) replays through the page only.
+   */
+  http?: 'off' | 'auto';
+}
+
+/** The value of `--http`: the bare flag means auto. */
+export function parseHttpMode(value: string | boolean | undefined): 'off' | 'auto' {
+  if (value === undefined || value === false || value === 'off') return 'off';
+  if (value === true || value === 'auto') return 'auto';
+  throw new Error(`Unknown --http mode "${String(value)}": use auto or off`);
 }
 
 /**
@@ -26,7 +38,10 @@ export async function compile(
 ): Promise<CompileResult> {
   const set = deserializeWorkflowSet(await readFile(file, 'utf-8'));
   const annotated = new SchemaInferencer().inferWorkflows(set);
-  const result = await new Compiler().compile(annotated, outDir);
+  if (options.http === 'auto' && set.targetType !== 'web') {
+    console.warn('--http only applies to web targets: ignored for a terminal program.');
+  }
+  const result = await new Compiler().compile(annotated, outDir, { http: options.http ?? 'off' });
 
   const tests = await new PbtGenerator().generate(annotated, result.toolNames, outDir);
   console.log(`Generated ${tests.files.length} test file(s) in ${join(outDir, 'tests')}`);

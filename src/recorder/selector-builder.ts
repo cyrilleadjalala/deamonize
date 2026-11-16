@@ -47,6 +47,15 @@ export function buildSelectors(element: ElementInfo): string[] {
   return [...new Set(selectors)];
 }
 
+/**
+ * The selector of a Result_Zone: the same order as a step (role and name, test id, id, name, CSS path)
+ * but never a text selector, which would bind the zone to the text recorded in it. The first one wins.
+ */
+export function buildZoneSelector(element: ElementInfo): string | undefined {
+  const own = buildSelectors({ ...element, text: undefined, parentSelector: undefined });
+  return own[0];
+}
+
 function escapeQuotes(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }

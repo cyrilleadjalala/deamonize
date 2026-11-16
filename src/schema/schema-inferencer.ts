@@ -9,6 +9,8 @@ import type { StateGraph, AnnotatedStateGraph, ScreenContent, WorkflowSet } from
 import { SchemaAccumulator } from './schema-accumulator.js';
 import { FormatAnnotator } from './format-annotator.js';
 import { LabelExtractor } from './label-extractor.js';
+import { zoneDataSchema } from './data-schema.js';
+import { pickResultZone } from '../replay/runtime/extract.js';
 
 export class SchemaInferencer {
   private formatAnnotator = new FormatAnnotator();
@@ -143,12 +145,19 @@ export class SchemaInferencer {
         required: [...required],
       };
 
+      const zone = pickResultZone(workflow);
       workflow.outputSchema = {
         type: 'object',
         properties: {
           screenType: { type: 'string', enum: ['dom', 'terminal'] },
           title: { type: 'string', description: 'Page title (web only)' },
-          text: { type: 'string', description: 'Visible text of the resulting screen' },
+          text: {
+            type: 'string',
+            description: zone === undefined
+              ? 'Visible text of the resulting screen'
+              : 'Text of the result zone only (at most 20000 characters)',
+          },
+          ...(zone === undefined ? {} : { data: zoneDataSchema(zone) }),
           drifted: {
             type: 'boolean',
             description: 'True when the resulting screen differs from the recorded one',

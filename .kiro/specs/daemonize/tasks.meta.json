@@ -1,0 +1,579 @@
+{
+  "pbtResults": {
+    "2.3 Write property test for `ScreenHasher` — Property 2: Screen ID Determinism": {
+      "status": "passed",
+      "lastRunTimestamp": 1794752872965
+    },
+    "2.5 Write property test for `StateMachineBuilder` — Property 1: State_Graph Serialization Round-Trip": {
+      "status": "passed",
+      "lastRunTimestamp": 1794753352962
+    }
+  },
+  "executionHistory": {
+    "1.1 Create project scaffold and `src/types.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751449493
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751457351
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794752247053
+      }
+    ],
+    "2.1 Define and publish the State_Graph JSON Schema": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751451341
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794752250755
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794752819853
+      }
+    ],
+    "2.2 Implement `ScreenHasher` in `src/state/screen-hasher.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452106
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794752253900
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794752822736
+      }
+    ],
+    "2.3 Write property test for `ScreenHasher` — Property 2: Screen ID Determinism": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452196
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794752826353
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753258704
+      }
+    ],
+    "2.4 Implement `StateMachineBuilder` in `src/state/state-machine-builder.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452254
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794752829197
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753261943
+      }
+    ],
+    "2.5 Write property test for `StateMachineBuilder` — Property 1: State_Graph Serialization Round-Trip": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452304
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753265445
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753868663
+      }
+    ],
+    "2.6 Write property tests for `StateMachineBuilder.merge` — Properties 5 and 6": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452358
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753268220
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753871954
+      }
+    ],
+    "2.7 Write Vitest unit tests for `ScreenHasher` and `StateMachineBuilder`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452407
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753271222
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753875219
+      }
+    ],
+    "3. Checkpoint — Ensure all tests pass": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452449
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753882992
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794754038949
+      }
+    ],
+    "4.1 Implement `SandboxManager` base and `SandboxDriver` interface in `src/sandbox/`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452494
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753274513
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753878636
+      }
+    ],
+    "4.2 Implement `PlaywrightDriver` in `src/sandbox/playwright-driver.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452561
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794754959969
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794755780290
+      }
+    ],
+    "4.3 Implement `PtyDriver` in `src/sandbox/pty-driver.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452609
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794754963632
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794755783351
+      }
+    ],
+    "5.1 Implement `SchemaAccumulator` and schema widening in `src/schema/schema-accumulator.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452655
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794754968142
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794755786642
+      }
+    ],
+    "5.2 Implement format annotation pass in `src/schema/format-annotator.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452697
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794755790326
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756217149
+      }
+    ],
+    "5.3 Implement `LabelExtractor` in `src/schema/label-extractor.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452755
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794755793614
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756220239
+      }
+    ],
+    "5.4 Implement `SchemaInferencer` in `src/schema/schema-inferencer.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452825
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756223794
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756389258
+      }
+    ],
+    "6.1 Implement tool name derivation in `src/compiler/tool-name-deriver.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452865
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756227021
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756392505
+      }
+    ],
+    "6.2 Implement OpenAPI 3.1 document generation in `src/compiler/openapi-generator.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452909
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756396181
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756878153
+      }
+    ],
+    "6.3 Implement MCP server source generation in `src/compiler/mcp-generator.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452948
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756399242
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756881886
+      }
+    ],
+    "6.4 Implement `kiro-power.json` manifest generation in `src/compiler/kiro-power-generator.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751452991
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756402642
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756886226
+      }
+    ],
+    "6.5 Implement `Compiler` orchestrator in `src/compiler/compiler.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453038
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756896314
+      }
+    ],
+    "7. Checkpoint — Ensure all tests pass": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453079
+      }
+    ],
+    "8.1 Implement `Validator` in `src/validator/validator.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453145
+      },
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756901484
+      }
+    ],
+    "8.2 Write property test for `Validator` — Property 3: Payload Validation Idempotence (valid)": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453214
+      }
+    ],
+    "8.3 Write property test for `Validator` — Property 4: Payload Validation Idempotence (invalid)": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453255
+      }
+    ],
+    "9.1 Implement `Replayer` in `src/replayer/replayer.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453296
+      }
+    ],
+    "10.1 Implement `PbtGenerator` in `src/pbt/pbt-generator.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453332
+      }
+    ],
+    "10.2 Write property tests for PBT Generator — Properties 7 and 8": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453374
+      }
+    ],
+    "11.1 Implement `record` command in `src/cli/commands/record.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453413
+      }
+    ],
+    "11.2 Implement `merge` command in `src/cli/commands/merge.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453493
+      }
+    ],
+    "11.3 Implement `compile` command in `src/cli/commands/compile.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453537
+      }
+    ],
+    "11.4 Implement `serve` command in `src/cli/commands/serve.ts`": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453592
+      }
+    ],
+    "11.5 Implement `src/cli/index.ts` entry point": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453632
+      }
+    ],
+    "12. Checkpoint — Ensure all tests pass": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453678
+      }
+    ],
+    "13.1 Write integration test: web recording round-trip": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453722
+      }
+    ],
+    "14. Final checkpoint — Ensure all tests pass": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794751453778
+      }
+    ],
+    "1. Scaffold project structure and core type definitions": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794752247150
+      }
+    ],
+    "2. Implement State_Graph JSON Schema and StateMachineBuilder": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794753875443
+      }
+    ],
+    "4. Implement SandboxManager and drivers": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794755783421
+      }
+    ],
+    "5. Implement SchemaInferencer": [
+      {
+        "executionId": "8f5f3951-e1b6-4911-8f0f-f29650ef662b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794756389325
+      }
+    ],
+    "15.1 Rewrite `src/compiler/kiro-power-generator.ts` to emit the Kiro Power files": [
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794809827284
+      },
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794809831825
+      },
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794810010572
+      }
+    ],
+    "15.2 Update tests for the Kiro Power output": [
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794809827437
+      },
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794810015325
+      },
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794810101078
+      }
+    ],
+    "15.3 Integration test: start the server from `mcp.json`": [
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794809827542
+      },
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794810016071
+      },
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794810101875
+      }
+    ],
+    "15.4 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass": [
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794809827678
+      },
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794810105889
+      },
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794810231220
+      }
+    ],
+    "15. Emit a real Kiro Power": [
+      {
+        "executionId": "8648d2b6-f494-46fe-8ab7-d315c3284d36",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794810231411
+      }
+    ]
+  }
+}

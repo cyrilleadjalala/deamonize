@@ -16,7 +16,8 @@ inclusion: always
 
 - `npx tsc --noEmit` type-check, `npm run build` build.
 - `npx vitest run` all tests. Docker tests are skipped unless `DAEMONIZE_DOCKER_TESTS=1`.
-- `node dist/cli/index.js <record|compile|merge|serve|sandbox>`.
+- `node dist/cli/index.js <record|compile|merge|serve|studio|sandbox build>`.
+- `npm run check:secrets` scans for credential shapes; `npm run studio:build` writes the static Studio demo to `dist-demo/`.
 
 ## Constraints
 

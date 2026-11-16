@@ -210,6 +210,9 @@ Target_Application state.
    the same Payload (idempotence property).
 5. FOR ALL invalid Payloads, applying THE Validator SHALL return a fail result when re-applied to
    the same Payload (idempotence property).
+6. WHERE a Variable declares `enum`, `pattern` or `maxLength`, THE generated MCP_Server SHALL
+   validate the Payload value against these constraints before any replay starts, and SHALL
+   return `error: "validation"` without running a step when a value violates them.
 
 ---
 
@@ -240,7 +243,16 @@ Target_Application.
 8. THE Replayer SHALL run in Strict_Mode by default, replaying each step only through recorded,
    deterministic means (Requirement 12).
 9. IF a step cannot be executed in Strict_Mode, THEN THE Replayer SHALL fail the call cleanly and
-   return `drifted: true`, `success: false` and a diagnostic, without guessing the element.
+   return `drifted: true`, `success: false`, `error: "step_failed"` and a `failure` diagnostic,
+   without guessing the element.
+10. THE Replayer SHALL return a result made of the fields `success`, `drifted`, `driftChecked`,
+    `healed`, `healedSteps`, `levels`, `levelFallback`, `mode`, `data`, `text`, `title`,
+    `terminalSize`, `driftReason` and `failure`, where `driftChecked` is `false` when the
+    Workflow has no recorded final Screen.
+11. WHEN a call fails, THE Replayer SHALL set `error` to one of `step_failed`, `missing_secret`,
+    `pattern_timeout`, `http_failed`, `heal_unavailable`, `result_zone_not_found`,
+    `result_extraction_failed`, `storage_state_missing`, `sandbox_unavailable`, `timeout` or
+    `validation`.
 
 ---
 
@@ -360,8 +372,8 @@ only when I allow it, so that the tool never silently acts on the wrong element.
    healing for that step, THEN THE Replayer SHALL use Strict_Mode for that step even when
    Heal_Mode is enabled.
 5. IF Level 1 and Level 2 fail in Strict_Mode, THEN THE Replayer SHALL return `success: false`
-   and `drifted: true` with a diagnostic containing the failing step, the locators tried, and a
-   screenshot path or an inline thumbnail.
+   and `drifted: true` with `error: "step_failed"` and a diagnostic containing the failing step,
+   the locators tried, and a screenshot path or an inline thumbnail.
 6. IF Level 1 and Level 2 fail in Strict_Mode, THEN THE Replayer SHALL execute no further step.
 7. WHILE Heal_Mode is enabled, WHEN all deterministic locators of a step fail or the UI has no
    DOM (Canvas, Flutter Web), THE Replayer SHALL capture a screenshot with set-of-mark overlays,
@@ -377,6 +389,20 @@ only when I allow it, so that the tool never silently acts on the wrong element.
     that Heal_Mode is unavailable.
 12. FOR ALL Workflows, THE Workflow file SHALL be byte-identical before and after any replay in
     Heal_Mode (the cache never modifies the Workflow).
+13. THE `daemonize serve` command SHALL select the mode with `--strict` or `--heal`, and the
+    generated MCP_Server SHALL read the mode from `DAEMONIZE_MODE`.
+14. WHERE the user compiles with `--heal-support`, THE Compiler SHALL copy `src/heal/**` into
+    `<out>/heal/` and the recorded thumbnails into `<out>/.daemonize/anchors/`, and WHEN the
+    user compiles without `--heal-support`, THE Compiler SHALL emit no model code.
+15. WHILE Heal_Mode is enabled, THE Replayer SHALL locate a healed step from the heal cache, from
+    the recorded coordinates (`visual.rect`) or from the model, in that order, and SHALL report
+    the source of each healed step in `healedSteps`.
+16. THE Replayer SHALL never heal a step that has a `rowBinding`.
+17. WHERE a step targets a canvas, THE Replayer SHALL replay it only in Heal_Mode, and THE
+    recorder SHALL classify canvas steps as `read` by default so that the user can edit `risk`
+    and `allowHeal`.
+18. THE Replayer SHALL honour the test seam `DAEMONIZE_HEALER_MODULE` only WHEN `NODE_ENV` equals
+    `test` or `DAEMONIZE_UNSAFE_HEALER_MODULE` equals `1`.
 
 ---
 
@@ -392,9 +418,10 @@ that calls run in milliseconds and do not depend on the front-end framework.
 2. WHEN a marked Variable value matches a request parameter (a GET query parameter, a field of a
    JSON body of POST, PUT or PATCH, or a path segment) and the response is JSON, THE recorder
    SHALL record that request as a Level 1 candidate for the step.
-3. WHERE the user compiles a Workflow or step in direct HTTP mode, THE Replayer SHALL execute the
-   recorded request with the cookies and headers read from a storageState file referenced by
-   path.
+3. WHERE the user compiles with `--http auto` (the option `--http [auto|off]`, default `off`), THE
+   Replayer SHALL execute the recorded request with the cookies and headers read from a
+   storageState file referenced by path, and SHALL report the Replay_Level of each step in
+   `levels`.
 4. WHEN the action depends on an SSR form, an opaque Server Action or pure DOM state, THE
    Replayer SHALL fall back to Level 2.
 5. THE recorder SHALL replace the values of Authorization, Cookie and Set-Cookie headers and
@@ -403,6 +430,14 @@ that calls run in milliseconds and do not depend on the front-end framework.
    storageState file or from environment variables at run time.
 7. FOR ALL recorded requests, THE serialized request SHALL contain none of the values it was
    redacted from (redaction property).
+8. IF a Level 1 request of a `read` step fails, THEN THE Replayer SHALL fall back to Level 2 and
+   report `levelFallback: true`.
+9. IF a Level 1 request of a `write` or `delete` step fails, THEN THE Replayer SHALL fail the
+   call with `error: "http_failed"` and SHALL NOT repeat the step at Level 2, so that no action
+   runs twice.
+10. FOR ALL recorded requests, THE variables bound in the HTTP recipe SHALL be exactly the
+    places (query parameter, JSON body field or path segment) where the recorded Variable value
+    appeared (binding property).
 
 ---
 
@@ -447,12 +482,15 @@ Heal_Mode can find the element again when the DOM locators fail.
 1. WHEN the recorder records a web step, THE recorder SHALL capture a Visual_Anchor containing a
    thumbnail of the targeted zone, its relative coordinates as fractions of the viewport, and a
    short human-readable description of the intent.
-2. THE recorder SHALL store thumbnails as files next to the Workflow file and SHALL reference
-   them by relative path from the Workflow file.
-3. THE compiled artifacts SHALL contain no inline thumbnail data.
-4. WHEN the targeted element is a password field, THE recorder SHALL capture no thumbnail.
+2. THE recorder SHALL store thumbnails as files in the `<workflow>.assets/` directory next to the
+   Workflow file and SHALL reference them by relative path from the Workflow file.
+3. THE compiled artifacts SHALL contain no inline thumbnail data and no thumbnail file, except
+   the copy placed in `<out>/.daemonize/anchors/` by `compile --heal-support`.
+4. WHEN the targeted element is a password field or a one-time-code field, THE recorder SHALL
+   capture no thumbnail of that region.
 5. FOR ALL Visual_Anchors, THE relative coordinates SHALL lie between 0 and 1 inclusive
    (invariant).
+6. WHERE the user passes `--no-visual` to `record`, THE recorder SHALL capture no Visual_Anchor.
 
 ---
 
@@ -467,8 +505,8 @@ file and to be injected only at run time, so that publishing a Kiro_Power never 
    OpenAPI_Spec, a Kiro_Power file or a generated test.
 2. WHEN a step needs a password or 2FA value, THE Replayer SHALL read it at run time from the
    environment variable `DAEMONIZE_SECRET_<NAME>`, or from the `env` entry of `mcp.json`.
-3. WHERE a TOTP secret is held in an environment variable, THE Replayer SHALL derive the current
-   TOTP code from it and type that code.
+3. WHERE a step has `totp: true` and a `secretRef`, THE Replayer SHALL derive the current TOTP
+   code from the base32 seed held in `DAEMONIZE_SECRET_<NAME>` and type that code.
 4. IF a required `DAEMONIZE_SECRET_<NAME>` variable is not set, THEN THE Replayer SHALL return an
    error naming the missing variable, without replaying any step.
 5. WHEN a typed value is not marked as a Variable or a Secret_Reference, THE CLI SHALL warn the
@@ -480,7 +518,19 @@ file and to be injected only at run time, so that publishing a Kiro_Power never 
    instead of the whole `document.body.innerText`.
 9. FOR ALL Workflows and all values supplied through `DAEMONIZE_SECRET_*` variables, no compiled
    artifact SHALL contain any of those values (no-leak property).
-
+10. THE `mcp.json` env SHALL contain `${NAME}` placeholders for secrets (never values) and
+    `DAEMONIZE_MODE`.
+11. WHERE a storageState is defined, THE docker replay SHALL mount it read-only at
+    `/run/daemonize/storage-state.json` and set `DAEMONIZE_STORAGE_STATE`, and a relative
+    storageState path SHALL resolve against the compiled output directory.
+12. THE Compiler SHALL emit a `.dockerignore` that excludes authentication files.
+13. THE repository SHALL provide the guard `npm run check:secrets`, which scans tracked and
+    to-be-committed files for credential shapes and reports file, line and rule but never the
+    value, and a Kiro hook SHALL run it when an example, a document or a workflow file is saved.
+14. IF the storageState file is absent, THEN THE Replayer SHALL return `error:
+    "storage_state_missing"`.
+15. IF a TOTP seed is not valid base32, THEN THE Replayer SHALL return `error: "missing_secret"`
+    naming the variable only.
 ---
 
 ### Requirement 17: Real CLI/TUI Reliability
@@ -494,16 +544,32 @@ with slow or continuously refreshing programs, so that calls do not depend on fi
    columns and rows in the Workflow.
 2. WHEN the Replayer replays a terminal Workflow, THE Replayer SHALL use the recorded columns and
    rows instead of 80x24.
-3. WHEN the user marks a Screen_Pattern before or after a step, THE recorder SHALL store the
-   pattern in the Workflow.
+3. WHEN the user adds a wait to a step, THE recorder SHALL store in the step a `waitFor` made of
+   `pattern` or `text`, optional `flags`, optional `region`, `mode` (`appear` or `disappear`),
+   `timeoutMs` and optional `when`, and WHEN the recorder detects a prompt on a keypress step,
+   THE recorder SHALL store `pattern: "^<escaped prompt>$"`, `flags: "m"`, `mode: "appear"` and
+   `timeoutMs: 15000`.
 4. WHEN a step has a Screen_Pattern, THE Replayer SHALL wait until the terminal text matches the
    pattern (`waitForPattern`) before continuing.
 5. IF a Screen_Pattern does not match within its timeout, THEN THE Replayer SHALL return
-   `success: false` and `drifted: true` with the last terminal text as diagnostic.
+   `success: false`, `drifted: true` and `error: "pattern_timeout"` with a `failure.screenExcerpt`
+   of the terminal text as diagnostic.
 6. THE generated Dockerfile SHALL accept a configurable base image, configurable system packages
    or install commands, and a configurable network profile.
 7. WHERE the user configures the packages of a real binary (sqlite3, git, psql, a Python or Go
    CLI), THE generated Dockerfile SHALL install them so that the binary runs in the Sandbox.
+8. THE recorder menu opened with Ctrl+] SHALL offer `v` (mark the last typed text as a Variable),
+   `e` (end the recording) and `w` (add a wait), and SHALL never send these keys to the program.
+9. THE Replayer SHALL evaluate a pattern wait in a `node:vm` script with a 50 ms budget, and SHALL
+   reject an over-long or catastrophic pattern (ReDoS protection).
+10. WHERE the user passes `--cols` and `--rows` to `record`, THE recorder SHALL record that size,
+    and WHEN a terminal Workflow is replayed at a different size, THE Replayer SHALL report
+    `drifted: true` with a `driftReason`.
+11. THE `daemonize sandbox build` command SHALL accept `--image`, `--package`, `--install`,
+    `--network`, `--tag`, `--no-cache` and `--print`, and THE `compile` command SHALL accept
+    `--sandbox-image`, `--sandbox-package`, `--sandbox-install` and `--sandbox-network`.
+12. IF a sandbox image, package, install command or network value does not pass validation, THEN
+    THE Compiler SHALL refuse it with an error, so that no Dockerfile injection is possible.
 
 ---
 
@@ -518,7 +584,10 @@ tool to inspect my workflows, so that I can review them before agents call them.
    descriptions, candidate Variables, correlated network parameters and a Result_Zone selector.
 2. IF no API key is available, THEN THE Compiler SHALL use deterministic rules and report that it
    did so.
-3. THE Compiler SHALL let the user edit every suggestion before it is written to the artifacts.
+3. WHERE the user passes `compile --suggest[=auto|deterministic|model]`, THE Compiler SHALL write
+   `<file>.suggestions.json` with every entry set to `accepted: false`, and SHALL apply only the
+   entries the user set to `accepted: true` (tool names, tool descriptions and Variable
+   descriptions).
 4. THE generated MCP_Server SHALL execute without calling a language model unless Heal_Mode is
    enabled.
 5. THE Studio SHALL run as a local web interface that can also be deployed as a demo.
@@ -527,6 +596,23 @@ tool to inspect my workflows, so that I can review them before agents call them.
 7. THE Studio SHALL provide an MCP playground that calls a tool and shows `drifted`, `healed` and
    a Screen preview.
 8. THE Studio SHALL display no secret value.
+9. THE `daemonize studio [dir]` command SHALL accept `--workflows`, `--port`, `--host`,
+   `--allow-remote`, `--graph`, `--open` and `--sample`, SHALL require a per-run token, a valid
+   Host header and a Content-Security-Policy of `default-src 'self'`, and SHALL accept a `--host`
+   other than loopback only with `--allow-remote`.
+10. WHEN the playground calls a `write` or `delete` tool, THE Studio SHALL ask the user for
+    confirmation before the call.
+11. WHERE `DAEMONIZE_SCREENSHOT=final` is set, THE playground SHALL return a screenshot of the
+    final Screen.
+12. THE repository SHALL provide `npm run studio:build`, which writes a static demo to
+    `dist-demo` that uses a simulation module shared with `studio --sample`, and the file
+    `.github/workflows/studio-demo.yml` SHALL publish it.
+13. FOR ALL suggestion files and all accepted-entry subsets, applying the suggestions SHALL leave
+    the replayed steps of every Workflow unchanged (invariant).
+14. FOR ALL Studio API responses, THE Studio SHALL return no value of any `DAEMONIZE_SECRET_*`
+    variable.
+15. FOR ALL playground responses, THE Studio SHALL return no value of any `DAEMONIZE_SECRET_*`
+    variable.
 
 ---
 
@@ -537,10 +623,13 @@ hold beyond a toy form.
 
 #### Acceptance Criteria
 
-1. THE repository SHALL contain an `examples/` directory with one modern web application, with
-   authentication, a dynamic table and a custom select component, reproducible with Docker or
-   locally.
-2. THE `examples/` directory SHALL contain one real CLI or TUI tool (sqlite3 or git).
+1. THE repository SHALL contain `examples/adminer/`, which wraps the real, existing web
+   application Adminer (with PostgreSQL, through Docker Compose) and exercises authentication
+   and a dynamic table. Adminer is server-rendered, so its steps replay at Level 2 only and no
+   Level 1 recipe is recorded.
+2. THE repository SHALL contain `examples/cli-sqlite/`, which wraps the real `sqlite3` shell and
+   restricts its Variables by `pattern` and `maxLength`. An example for `git` is optional and is
+   not implemented.
 3. THE integration tests SHALL record, compile and call through MCP each example.
 4. IF Docker or the example tool is unavailable, THEN THE integration tests SHALL skip with a
    message naming the missing dependency.

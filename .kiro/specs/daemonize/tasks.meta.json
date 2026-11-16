@@ -1097,6 +1097,85 @@
         "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
         "timestamp": 1794859009797
       }
+    ],
+    "21.1 Example web application": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794859052402
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794859621785
+      }
+    ],
+    "21.2 Record and compile the web example": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794859622050
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794862621339
+      }
+    ],
+    "21.3 SQLite CLI example": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794862621693
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794866316412
+      }
+    ],
+    "21.5 Leak test on examples": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794866316975
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794867230292
+      }
+    ],
+    "21.6 Documentation": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794867230480
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794867950235
+      }
+    ],
+    "21.7 Final checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1 npx vitest run tests/integration/docker-sandbox.test.ts` when Docker is up)": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794868438500
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794870399689
+      }
+    ],
+    "21. Lot 5: Proof on real software": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794870400165
+      }
     ]
   }
 }

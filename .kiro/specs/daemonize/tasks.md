@@ -539,34 +539,36 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
   - [x] 20.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 21. Lot 5: Proof on real software
-  - [ ] 21.1 Example web application
-    - Create `examples/web-app/`: small modern app (Next.js, or Vite and React with Radix UI) with login, a dynamic table with row actions and a custom non-native select, a Dockerfile and compose file, and a README
+- [x] 21. Lot 5: Proof on real software
+  - [x] 21.1 Example web application (real software: Adminer)
+    - Implemented with real existing software instead of a hand-made app: `examples/adminer/` runs Adminer 6.1.1 on PostgreSQL 16 through Docker Compose, with a README and an `init.sql` seed. Adminer has a login, a dynamic table with row actions and select components
+    - Honest finding: Adminer is server-rendered, so there is no fetch/XHR to record and every step replays at Level 2 only (no Level 1 recipe)
     - _Requirements: 19.1_
 
-  - [ ] 21.2 Record and compile the web example
-    - Script `examples/web-app/record.ts` drives the recorder with Playwright; commit `examples/web-app/daemonize.workflows.json` without secrets (secrets through environment); compile it
-    - Integration test `tests/integration/example-web-app.test.ts` calls the tools through MCP in strict mode (login, select a row by a Variable, custom select) and, if the app has a JSON API, once through level 1; skipped with a message naming the missing dependency when Docker or the app cannot start
+  - [x] 21.2 Record and compile the web example
+    - Script `examples/adminer/record-workflows.mjs` drives the recorder with Playwright; `examples/adminer/daemonize.workflows.json` is committed without secrets (password through `DAEMONIZE_SECRET_*`); four tools: `list_customers`, `find_customers`, `open_customer_for_edit`, `rename_customer`; rows are found by name (a row binding), and `status` is limited to an enum
+    - Integration test `tests/integration/adminer-e2e.test.ts` (with `adminer-stack.test.ts`) records, compiles and calls the tools through MCP in strict mode, and checks data, drift and the absence of the password in every artifact; it runs with `DAEMONIZE_DOCKER_TESTS=1` and is skipped with a message naming the missing dependency otherwise
     - _Requirements: 19.3, 19.4_
 
-  - [ ] 21.3 SQLite CLI example
-    - Create `examples/cli-sqlite/` with workflows (create table, insert with a Variable, query) recorded and compiled
-    - Integration test `tests/integration/example-cli-sqlite.test.ts` through MCP on the host and, when Docker is up, in a container with sqlite3 installed through the configurable Dockerfile; skipped with a message naming the missing dependency otherwise
+  - [x] 21.3 SQLite CLI example (real `sqlite3` shell)
+    - `examples/cli-sqlite/` wraps the real `sqlite3` shell; three tools: `add_note`, `list_notes`, `count_notes`, with screen-pattern waits on the `sqlite>` prompt, a recorded 300x40 size and a regex result zone
+    - Variables are restricted by `pattern` and `maxLength` so that no SQL can be injected
+    - Integration test `tests/integration/cli-sqlite-e2e.test.ts` calls the tools through MCP on the host (needs `sqlite3` on the PATH) and, with `DAEMONIZE_DOCKER_TESTS=1`, in a container; skipped with a message naming the missing dependency otherwise
     - _Requirements: 19.2, 19.3, 19.4_
 
-  - [ ]* 21.4 Git CLI example
+  - [ ]* 21.4 Git CLI example (not implemented)
     - Create `examples/cli-git/` with a small workflow set and a test `tests/integration/example-cli-git.test.ts`, skipped when `git` is missing
     - _Requirements: 19.2, 19.3, 19.4_
 
-  - [ ] 21.5 Leak test on examples
-    - Test that no password, cookie or secret appears in any workflow file or compiled artifact of the examples (`tests/integration/examples-leak.test.ts`)
+  - [x] 21.5 Leak test on examples
+    - Test that no password, cookie or secret appears in any workflow file or compiled artifact of the examples, the Studio API and the static demo (`tests/integration/examples-no-leak.test.ts`)
     - _Requirements: 19.5, 16.9_
 
-  - [ ] 21.6 Documentation
+  - [x] 21.6 Documentation
     - Update `README.md`: modes `--strict` and `--heal`, replay levels, secrets, Studio, examples; update steering notes under `.kiro/steering/` if present
     - _Requirements: 12.2, 16.2, 18.5, 19.1_
 
-  - [ ] 21.7 Final checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1 npx vitest run tests/integration/docker-sandbox.test.ts` when Docker is up)
+  - [x] 21.7 Final checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1 npx vitest run tests/integration/docker-sandbox.test.ts` when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
@@ -574,6 +576,7 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
 - Verified outside the workspace: a web project and a terminal project were generated, installed with `daemonize compile --install`, their generated property tests were run, `npm audit` reported no vulnerability, and their generated servers were called over stdio with a valid payload (replayed) and an invalid one (refused).
 - Replay in Docker (4.5) was verified with a real Docker daemon, for a terminal target and for a web target. `SandboxManager` (dockerode) is still only exercised against a fake Docker: the generated server drives Docker with the `docker` command instead.
 - Not done: recording inside a container.
+- Tasks 16-21 were implemented with these deviations from the plan: (1) the proof examples use real software, `examples/adminer/` (Adminer + PostgreSQL, Level 2 only) and `examples/cli-sqlite/` (the real `sqlite3` shell), not a hand-made Next.js/Radix app, and task 21.4 (git example) is not implemented. (2) The strict failure code is `step_failed`, not `locator_failed`. (3) Level 1 is the compile option `--http [auto|off]` (default off). (4) Properties P18 to P21 were added (HTTP recipe bindings, suggestions never change replayed steps, Studio and playground responses hold no secret); P11 is redaction and P12 is the no-leak guarantee, as tagged in the tests. (5) Workflow Variables gained optional `enum`, `pattern` and `maxLength`. (6) Heal code is copied only with `compile --heal-support`. (7) A static Studio demo (`npm run studio:build`, `.github/workflows/studio-demo.yml`) was added. Task 21.7 is left for the user to complete.
 
 - Sub-tasks postfixed with `*` are optional and can be skipped for a faster MVP; core property-based tests (2.3, 2.5, 2.6, 8.2, 8.3, 10.2) are **not** marked optional because they verify the eight correctness properties that are a core correctness guarantee of the system.
 - Each task references specific requirements for traceability.

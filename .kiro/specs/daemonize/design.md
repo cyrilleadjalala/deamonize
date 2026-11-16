@@ -330,12 +330,26 @@ interface ReplayResult {
   screen?: ScreenContent;
   result?: WorkflowResult;   // { screenType, title?, text } — not the raw DOM
   drifted?: boolean;         // see "Runtime drift" for the exact semantics
+  driftChecked?: boolean;    // false when the Workflow has no recorded final screen ("not compared")
+  driftReason?: string;      // e.g. terminal size differs from the recorded size
   healed?: boolean;          // a step was located by Level 3 (Heal_Mode only)
+  healedSteps?: Array<{ stepIndex: number; source: "cache" | "coordinates" | "model" }>;
+  levels?: string[];         // web: level used by each step ("http", "accessibility", "not_run")
+  levelFallback?: boolean;   // a read step fell back from Level 1 to Level 2
+  mode?: "strict" | "heal";
+  data?: unknown;            // structured result of the Result_Zone
+  text?: string;             // visible text of the final screen or of the result zone
+  title?: string;
+  terminalSize?: { cols: number; rows: number };
   failure?: ReplayFailure;   // set when success is false because of a step
-  error?: "timeout" | "sandbox_unavailable" | "locator_failed" | "heal_unavailable"
-        | "missing_secret" | "pattern_timeout" | string;
+  error?: ReplayErrorCode;
   elapsedMs: number;
 }
+
+type ReplayErrorCode =
+  | "step_failed" | "missing_secret" | "pattern_timeout" | "http_failed" | "heal_unavailable"
+  | "result_zone_not_found" | "result_extraction_failed" | "storage_state_missing"
+  | "sandbox_unavailable" | "timeout" | "validation";
 
 interface ReplayFailure {
   stepIndex: number;
@@ -343,7 +357,7 @@ interface ReplayFailure {
   levelsTried: Array<"api" | "accessibility" | "vision">;
   locatorsTried: string[];          // human-readable, secrets never included
   screenshotPath?: string;          // or an inline thumbnail in the MCP response
-  lastText?: string;                // terminal: last rendered screen text
+  screenExcerpt?: string;            // terminal: excerpt of the last rendered screen text
   missingSecret?: string;           // name of the missing DAEMONIZE_SECRET_<NAME>
 }
 ```
@@ -396,7 +410,7 @@ flowchart TD
     C -->|"no"| L3["Level 3: Healer.locate(screenshot + marks,\nvisual.thumbnail, intent)"]
     L3E -->|"ok"| HOK
     L3 -->|"locator or x,y"| EX["execute, healed = true,\nwrite locator to heal-cache.json"]
-    L3 -->|"no model / error"| HU["fail: heal_unavailable\nor locator_failed"]
+    L3 -->|"no model / error"| HU["fail: heal_unavailable\nor step_failed"]
     EX --> HOK["step done (healed)"]
     OK --> N{"more steps?"}
     HOK --> N
@@ -405,7 +419,7 @@ flowchart TD
 ```
 
 **Rules.**
-- Level 1 is a recorded candidate, used by the generated server only when compiled with `daemonize compile --http`. It runs with Playwright's `APIRequestContext` created from the same `storageState`, so no browser is launched for a step that has a recipe. A Level 1 failure falls back to Level 2 only for `risk: 'read'` steps. A `write` or `delete` step whose request may already have reached the server fails instead of falling back, because the fallback could execute the action twice.
+- Level 1 is a recorded candidate, used by the generated server only when compiled with the option `daemonize compile --http [auto|off]` (default `off`; `auto` records and uses Level 1 recipes where the application has fetch/XHR requests). It runs with Playwright's `APIRequestContext` created from the same `storageState`, so no browser is launched for a step that has a recipe. A Level 1 failure falls back to Level 2 only for `risk: 'read'` steps (the result then carries `levelFallback: true`, and `levels` lists the level each step used). A `write` or `delete` step whose request may already have reached the server fails with `error: "http_failed"` instead of falling back, because the fallback could execute the action twice.
 - Level 2 tries the `anchor` first (`getByRole(role, { name })` scoped by `parent` and the `frame` chain, and by `rowBinding` when present), then the CSS entries of `selectors[]`. A locator that matches more than one element is a failure, never resolved with `.first()` or `:nth-of-type`; the recorder instead adds `parent` or `rowBinding` until the locator is unique, and refuses to record a non-unique one with a message.
 - Level 3 exists in Heal_Mode only, and only for `risk: 'read'` steps or steps with `allowHeal: true` (requirement 12.4).
 - A strict failure ends the replay: the sandbox is stopped and no later step runs (requirement 12.6).
@@ -455,13 +469,17 @@ interface HttpRecipe {
 }
 
 interface VisualAnchor {
-  thumbnailPath: string;                 // relative to the workflow file, e.g. "workflows.thumbs/ab12-3.png"
+  thumbnailPath: string;                 // relative to the workflow file, e.g. "daemonize.workflows.json.assets/ab12-3.png"
   rect: { x: number; y: number; w: number; h: number }; // fractions of the viewport, all in [0, 1], x+w <= 1, y+h <= 1
   intent: string;                        // "click the Save button of the customer dialog"
 }
 
 interface ScreenWait {
-  pattern: string;                       // JavaScript RegExp source, flags "m"
+  pattern?: string;                      // JavaScript RegExp source (exactly one of pattern | text)
+  text?: string;                         // literal text
+  flags?: string;                        // RegExp flags, default "m"
+  region?: { row: number; col: number; rows: number; cols: number }; // restrict the match to a rectangle
+  mode: "appear" | "disappear";          // wait until it shows up, or until it is gone
   timeoutMs: number;
   when?: "before" | "after";             // relative to the step; default "after"
 }
@@ -492,7 +510,7 @@ Example, a click on the "Delete" button inside the row of a customer, with a rec
     ]
   },
   "visual": {
-    "thumbnailPath": "workflows.thumbs/3f2a-4.png",
+    "thumbnailPath": "daemonize.workflows.json.assets/3f2a-4.png",
     "rect": { "x": 0.81, "y": 0.42, "w": 0.06, "h": 0.04 },
     "intent": "click the Delete button of the customer row"
   },
@@ -509,7 +527,7 @@ A terminal step with a screen wait and a typed secret:
   "selectors": [],
   "secretRef": "DB_PASSWORD",
   "label": "password",
-  "waitFor": { "pattern": "^Password: ?$", "timeoutMs": 5000, "when": "before" }
+  "waitFor": { "pattern": "^Password: ?$", "flags": "m", "mode": "appear", "timeoutMs": 5000, "when": "before" }
 }
 ```
 
@@ -523,6 +541,13 @@ interface Workflow {
   finalZone?: ZoneSpec;                  // zone used for the drift hash; absent = whole screen
   secrets?: SecretReference[];           // names only, never values
   timeoutMs?: number;                    // per-workflow replay timeout, overrides the server default
+}
+
+interface WorkflowVariable {
+  // existing: name, type, description
+  enum?: string[];                       // the value must be one of these
+  pattern?: string;                      // JavaScript RegExp source (unicode, no flags) the whole value must match; anchor with ^ and $
+  maxLength?: number;                    // maximum length of the value
 }
 
 type ZoneSpec =
@@ -547,7 +572,7 @@ interface SandboxSpec {
 }
 ```
 
-`storageState` stays a path. The workflow file schema in `src/state/schema.ts` and the file's JSON Schema are extended with these optional properties; a file without them stays valid, so existing recordings keep working in Strict_Mode on Level 2 with `selectors[]` only.
+`WorkflowVariable.enum`, `pattern` and `maxLength` are copied into the input schema of the tool, so the generated server validates them (Zod and AJV) before any replay starts. The `cli-sqlite` example uses them to keep SQL injection out of the typed statements: a terminal Variable is a whole typed text, and its `pattern` and `maxLength` are the only guard on its content. `storageState` stays a path. The workflow file schema in `src/state/schema.ts` and the file's JSON Schema are extended with these optional properties; a file without them stays valid, so existing recordings keep working in Strict_Mode on Level 2 with `selectors[]` only.
 
 ### Replay mode and failure result
 
@@ -557,7 +582,7 @@ interface SandboxSpec {
 {
   "success": false,
   "drifted": true,
-  "error": "locator_failed",
+  "error": "step_failed",
   "failure": {
     "stepIndex": 4,
     "label": "Delete",
@@ -639,7 +664,7 @@ Requirement 13.5, 13.6, 13.7, 16.
 
 **Resolution at run time.** A step with `secretRef: "DB_PASSWORD"` reads `process.env.DAEMONIZE_SECRET_DB_PASSWORD`; the `env` entry of `mcp.json` is the usual way to provide it, because Kiro exports it to the server process. Before step 0 the runtime collects every name in `workflow.secrets`, every `secretRef` and every `http.redacted[].secret`, and returns `{ success: false, error: "missing_secret", failure: { missingSecret: "<NAME>" } }` if one is unset or empty. The error contains the variable name, never a value. In Docker the names are forwarded with `-e DAEMONIZE_SECRET_<NAME>` (see "Sandbox").
 
-**TOTP.** `totp: true` with `secretRef` makes the runtime type the current RFC 6238 code (HMAC-SHA1, 30 s step, 6 digits) derived from the base32 secret in the environment variable. It is implemented in `src/replay/runtime/totp.ts` using only `node:crypto`, copied into the output like `screen-hash.ts`, and tested against the RFC 6238 Appendix B vectors. The code is computed immediately before the step so it does not expire while earlier steps run.
+**TOTP.** `totp: true` with `secretRef` makes the runtime type the current RFC 6238 code (HMAC-SHA1, 30 s step, 6 digits) derived from the base32 seed held in `DAEMONIZE_SECRET_<NAME>`. It is implemented in `src/replay/runtime/totp.ts` using only `node:crypto`, copied into the output like `screen-hash.ts`, and tested against the RFC 6238 Appendix B vectors. The code is computed immediately before the step so it does not expire while earlier steps run.
 
 **Redaction in the recorder.** A new `src/recorder/redactor.ts` is applied to every captured request before it is stored on a step:
 - Header values of `Authorization`, `Cookie`, `Set-Cookie`, `Proxy-Authorization`, and any header whose name matches `/token|secret|api[-_]?key|session/i`, are replaced by a `Secret_Reference` and listed in `http.redacted`.
@@ -649,7 +674,9 @@ Requirement 13.5, 13.6, 13.7, 16.
 
 Redacted entries keep the name and position of the field, never the value, so the replay can rebuild the request from `storageState` or the environment.
 
-**No-leak guarantee.** `compile` writes only names. A leak check test (property 11) generates random secret values, sets them in `DAEMONIZE_SECRET_*` variables, records or builds workflows containing those names, compiles to a temporary directory, and asserts that no file there (workflow, OpenAPI, `mcp-server.js`, `replay.ts`, Kiro Power, tests, Dockerfile, `.dockerignore`) contains any secret value as a substring. The generated values are at least 8 characters, so a match cannot be a coincidence of a short string.
+**Auth files and `mcp.json`.** `mcp.json` env holds `${NAME}` placeholders for the secrets (`DAEMONIZE_SECRET_<NAME>`) and `DAEMONIZE_MODE`, never values. A `storageState` is mounted read-only at `/run/daemonize/storage-state.json` with `DAEMONIZE_STORAGE_STATE` pointing to it; a relative `storageState` path resolves against the compiled output directory, and a missing file returns `storage_state_missing`. The generated `.dockerignore` excludes auth files from the image. The repository guard `npm run check:secrets` (`scripts/check-secrets.mjs`) scans tracked and to-be-committed files for credential shapes, prints file, line and rule but never the value, and runs from the hook `.kiro/hooks/secret-scan-on-save.json`.
+
+**No-leak guarantee.** `compile` writes only names. A leak check test (property 12) generates random secret values, sets them in `DAEMONIZE_SECRET_*` variables, records or builds workflows containing those names, compiles to a temporary directory, and asserts that no file there (workflow, OpenAPI, `mcp-server.js`, `replay.ts`, Kiro Power, tests, Dockerfile, `.dockerignore`) contains any secret value as a substring. The generated values are at least 8 characters, so a match cannot be a coincidence of a short string.
 
 ---
 
@@ -697,9 +724,11 @@ Extractors are JSON, evaluated in the page (`page.evaluate`) or over the rendere
 
 Requirement 17.
 
-**Size.** `TerminalRecorder` stores `process.stdout.columns` and `rows` (fallback 80x24) in `workflow.cols` and `workflow.rows`. `PtyDriver` and the `TERMINAL_RUNTIME` create the pty and the `TerminalScreen` renderer with these values.
+**Size.** `TerminalRecorder` stores `process.stdout.columns` and `rows` (fallback 80x24) in `workflow.cols` and `workflow.rows`. `PtyDriver` and the `TERMINAL_RUNTIME` create the pty and the `TerminalScreen` renderer with these values. `record --cols/--rows` set the size explicitly (default: the user's terminal, or 80x24). A replay at a different size reports `drifted: true` with a `driftReason` and returns `terminalSize`.
 
-**`waitForPattern(screen, pattern, timeoutMs)`.** The runtime tests the RegExp (flags `m`) against the rendered screen text, not the raw byte stream. It evaluates once immediately, again after every output chunk from the pty, and on a 25 ms poll as a fallback, and resolves as soon as the test succeeds. If `timeoutMs` passes first it fails with `error: "pattern_timeout"`, `success: false`, `drifted: true`, and `failure.lastText` set to the last rendered text. `when: "before"` waits before sending the step's input, `"after"` (default) waits after it, replacing the silence-based wait for that step. Steps without `waitFor` keep the existing behaviour (short silence after output, longer grace if nothing is printed). The recorder menu gains `p` to mark the text currently displayed as a pattern for the next or previous step; the suggested pattern is the last non-empty line, escaped, anchored with `$`.
+**`waitForPattern(screen, pattern, timeoutMs)`.** The runtime tests the RegExp (flags `m`) against the rendered screen text, not the raw byte stream. It evaluates once immediately, again after every output chunk from the pty, and on a 25 ms poll as a fallback, and resolves as soon as the test succeeds. If `timeoutMs` passes first it fails with `error: "pattern_timeout"`, `success: false`, `drifted: true`, and `failure.screenExcerpt` set to the last rendered text. `when: "before"` waits before sending the step's input, `"after"` (default) waits after it, replacing the silence-based wait for that step. Steps without `waitFor` keep the existing behaviour (short silence after output, longer grace if nothing is printed). The Ctrl+] recorder menu has three keys, `v` (mark the last typed text as a Variable), `e` (end the recording) and `w` (add a wait to the step). Prompt detection is automatic: on a keypress step the recorder stores `waitFor: { pattern: "^<escaped prompt>$", flags: "m", mode: "appear", timeoutMs: 15000 }`, where the prompt is the last non-empty line shown. A wait can also use a literal `text`, a `region` and `mode: "disappear"`.
+
+**Pattern safety (ReDoS).** The pattern matcher compiles and runs each pattern inside a `node:vm` script with a 50 ms budget, so a catastrophic regular expression is stopped instead of freezing the replay. It rejects over-long patterns and patterns with catastrophic shapes before running them.
 
 **Dockerfile generation.** `generateSandboxFiles` produces, from `set.sandbox`:
 
@@ -731,7 +760,7 @@ Examples:
 { "sandbox": { "image": "node:20-bookworm-slim", "packages": ["git"], "install": ["git config --system user.name daemonize"], "network": "none" } }
 ```
 
-`daemonize sandbox build ./out --package sqlite3 --network none` builds the first one. A failed `docker build` is reported with the exit code and the build never leaves a partial `sandbox/image.json` tag marked ready.
+`daemonize sandbox build ./out --package sqlite3 --network none` builds the first one. The `sandbox build` flags are `--image`, `--package`, `--install`, `--network`, `--tag`, `--no-cache` and `--print` (print the Dockerfile instead of building). `compile` takes the same values as `--sandbox-image`, `--sandbox-package`, `--sandbox-install` and `--sandbox-network`. Image names, package names, install commands and network values are validated, and a value that could inject Dockerfile instructions is refused. A failed `docker build` is reported with the exit code and the build never leaves a partial `sandbox/image.json` tag marked ready.
 
 ---
 
@@ -772,9 +801,13 @@ interface Healer {
 
 The key is `workflowId#stepIndex`. On a later call the cached locator is tried first (deterministic, no model); if it fails the entry is dropped and the model is asked again. Coordinates are cached as `{ "point": { "x": 0.83, "y": 0.44 } }` in fractions of the viewport. The file never holds secrets or screenshots.
 
-**`healed` flag.** `healed: true` is returned whenever a step was executed through a Level 3 result or a cached heal entry.
+**`healed` flag.** `healed: true` is returned whenever a step was executed through a Level 3 result or a cached heal entry, and `healedSteps` lists `{ stepIndex, source }` for each of them.
 
-**Isolation from Strict_Mode.** The heal code lives in `src/heal/` and is emitted as a separate `heal.js` loaded by a dynamic `import()` only when `DAEMONIZE_MODE=heal`. The strict replay path does not import it, does not contain any HTTP client for a model, and reads no `DAEMONIZE_MODEL_*` variable. Strict mode therefore cannot call a model by accident, and the generated server calls a model only when `--heal` is on. The Workflow file is opened read-only by the replay; heal writes only the cache (property 15).
+**Heal sources, in order.** (1) `cache`: an entry of `heal-cache.json`; (2) `coordinates`: the recorded `visual.rect`, used for steps without DOM (canvas); (3) `model`: the `Healer`. A step with a `rowBinding` is never healed, because a guessed row could act on the wrong record. A canvas step replays only in Heal_Mode and is `read` by default; the user edits `risk` and `allowHeal` in the workflow file. Modes are selected by `serve --strict|--heal` or `DAEMONIZE_MODE`. The module named by `DAEMONIZE_HEALER_MODULE` replaces the model healer (a test seam for scripted healers) and is honoured only when `NODE_ENV === 'test'` or `DAEMONIZE_UNSAFE_HEALER_MODULE=1`.
+
+**Visual anchors.** Thumbnails are written to `<workflow>.assets/` next to the workflow file and are never part of the compiled output, except for the copy that `--heal-support` places in `<out>/.daemonize/anchors/`. `record --no-visual` captures none. The recorder never captures the region of a password or one-time-code field.
+
+**Isolation from Strict_Mode.** The heal code lives in `src/heal/`. `compile --heal-support` copies `src/heal/**` into `<out>/heal/` and the recorded thumbnails into `<out>/.daemonize/anchors/`; the server loads it by a dynamic `import()` only when `DAEMONIZE_MODE=heal`. A strict-only output (compiled without `--heal-support`) contains no model code at all, and a heal call on such a server returns `heal_unavailable`. The strict replay path does not import it, does not contain any HTTP client for a model, and reads no `DAEMONIZE_MODEL_*` variable. Strict mode therefore cannot call a model by accident, and the generated server calls a model only when `--heal` is on. The Workflow file is opened read-only by the replay; heal writes only the cache (property 15).
 
 ---
 
@@ -800,9 +833,9 @@ interface Suggestions {
 interface Suggester { suggest(set: WorkflowSet): Promise<Suggestions> }
 ```
 
-`ModelSuggester` (uses `DAEMONIZE_MODEL_*`) receives the workflow with secrets and password thumbnails already removed. `RuleSuggester` is the deterministic fallback: names from labels through `ToolNameDeriver`, variables from typed values matching the existing label extractor, correlated parameters by exact value match between typed values and recorded requests, and a result zone from the last `table`/`dl`/`output` element. `compile --suggest` picks `ModelSuggester` when a key is configured, otherwise `RuleSuggester`, and prints which one ran. Nothing is applied silently: suggestions are written to `<workflows>.suggestions.json` with `"accepted": false` on each entry, the user edits and sets `accepted: true` (or runs the interactive review, `compile --suggest --review`), and `compile` applies only accepted entries before inference.
+`ModelSuggester` (uses `DAEMONIZE_MODEL_*`) receives the workflow with secrets and password thumbnails already removed. `RuleSuggester` is the deterministic fallback: names from labels through `ToolNameDeriver`, variables from typed values matching the existing label extractor, correlated parameters by exact value match between typed values and recorded requests, and a result zone from the last `table`/`dl`/`output` element. `compile --suggest` picks `ModelSuggester` when a key is configured, otherwise `RuleSuggester`, and prints which one ran. Nothing is applied silently: `compile --suggest[=auto|deterministic|model]` (`auto` when the flag has no value) writes `<file>.suggestions.json` with `"accepted": false` on each entry, the user sets `accepted: true` on the entries to keep, and `compile` applies only accepted entries: tool names, tool descriptions and variable descriptions. `--suggest-force` rewrites an existing suggestions file and `--suggest-graph` adds graph suggestions. Applying suggestions never changes the replayed steps (property 19).
 
-**Studio.** `daemonize studio [dir] [--workflows <file>] [--port 4173]` starts `src/studio/server.ts`, a Node `http` server bound to `127.0.0.1`. It serves a static single-page app from `src/studio/app/` (plain HTML, CSS and JavaScript, no build step) and a small JSON bridge:
+**Studio.** `daemonize studio [dir] [--workflows <file>] [--port] [--host] [--allow-remote] [--graph] [--open] [--sample]` starts the Studio server, a Node `http` server bound to `127.0.0.1` by default. A non-loopback `--host` needs `--allow-remote`. Each run has a random token (header or cookie), every request must carry an allowed `Host` header (DNS-rebinding protection), a POST also needs the `x-studio-request` header and a matching Origin, and the CSP is `default-src 'self'`. `--sample` serves fictitious sample data and reads nothing from disk. It serves a static single-page app from `src/studio/app/` (plain HTML, CSS and JavaScript, no build step) and a small JSON bridge:
 
 | Endpoint | Content |
 |---|---|
@@ -813,9 +846,9 @@ interface Suggester { suggest(set: WorkflowSet): Promise<Suggestions> }
 | `GET /api/tests` | `tests/pbt-report.json` written by the generated suite's report hook |
 | `POST /api/call` | `{ tool, args }`; the bridge uses the MCP SDK client over stdio against `mcp-server.js` and returns `{ result, drifted, healed, preview }` |
 
-All responses pass through `redactForDisplay`, which removes `secrets` values and any string equal to a value of a `DAEMONIZE_SECRET_*` variable present in the bridge's environment; text coming back from a replay has those values replaced by `***`. The playground launches the server with the user's environment, which is not returned.
+All responses pass through `redactForDisplay`, which removes `secrets` values and any string equal to a value of a `DAEMONIZE_SECRET_*` variable present in the bridge's environment; text coming back from a replay has those values replaced by `***`. The playground launches the server with the user's environment, which is not returned. A call to a `write` or `delete` tool asks for confirmation first. With `DAEMONIZE_SCREENSHOT=final` the playground also returns a screenshot of the final screen. Studio responses (property 20) and playground responses (property 21) never contain a secret value.
 
-`daemonize studio --export <dir>` writes the same SPA with a `sample-data.json` built from the committed examples. When the SPA cannot reach `/api`, it loads `sample-data.json` and the playground returns recorded sample results, so the Studio can be deployed as a static demo.
+**Static demo.** `npm run studio:build` (`scripts/build-studio-demo.mjs`) writes `dist-demo/`: the same UI, `data/*.json` built from the sample data, and a playground that is a simulation running in the page. The page selects static mode with `<meta name="daemonize-mode" content="static">` and the UI reads `./data/*.json` instead of `/api/*`. The simulation module `src/studio/ui/js/sim/simulate.js` is shared with `daemonize studio --sample`, so both behave the same. `.github/workflows/studio-demo.yml` builds and publishes `dist-demo/` to GitHub Pages.
 
 ---
 
@@ -823,27 +856,29 @@ All responses pass through `redactForDisplay`, which removes `secrets` values an
 
 Requirement 19.
 
+The proof uses real, existing software instead of hand-made applications.
+
 ```
 examples/
-├── web-app/              # source, committed
-│   ├── package.json      # Next.js (App Router) + React + Radix UI
-│   ├── app/login/        # login form; credentials from EXAMPLE_USER / EXAMPLE_PASSWORD
-│   ├── app/customers/    # dynamic table: row order depends on a seeded shuffle, row actions
-│   ├── app/api/          # JSON routes used by Level 1 (GET/POST/DELETE customers)
-│   ├── components/       # Radix Select (custom select, portal), row action menu
-│   └── Dockerfile        # runs `next start`; published on a local port
-└── cli-sqlite/
-    ├── init.sql          # schema and rows
-    ├── daemonize.sandbox.json  # { "packages": ["sqlite3"], "network": "none" }
-    └── README.md
+â”œâ”€â”€ adminer/                      # real Adminer + PostgreSQL
+â”‚   â”œâ”€â”€ docker-compose.yml        # Adminer 6.1.1 and PostgreSQL 16
+â”‚   â”œâ”€â”€ init.sql                  # seeded customers
+â”‚   â”œâ”€â”€ record-workflows.mjs      # drives the recorder with Playwright
+â”‚   â”œâ”€â”€ daemonize.workflows.json  # committed, no secrets
+â”‚   â””â”€â”€ README.md
+â””â”€â”€ cli-sqlite/                   # real sqlite3 shell
+    â”œâ”€â”€ record-workflows.mjs
+    â”œâ”€â”€ daemonize.workflows.json
+    â””â”€â”€ README.md
 ```
 
-`examples/web-app` is built and started with Docker (`docker build`, `docker run -p`), and also runs locally with `npm run build && npm start`. It exercises: authentication (storageState saved by `record`, password through `DAEMONIZE_SECRET_EXAMPLE_PASSWORD`), a dynamic table (rowBinding on the customer name), and a custom select (`role=combobox` plus `role=option` in a Radix portal). `examples/cli-sqlite` wraps the `sqlite3` CLI against the database created by `init.sql`.
+`examples/adminer` wraps Adminer on PostgreSQL, started with Docker Compose. It has four tools: `list_customers`, `find_customers`, `open_customer_for_edit` and `rename_customer`. The password is a secret reference (`DAEMONIZE_SECRET_*`), rows are found by name through a row binding (`AMBIGUOUS_ROW` on duplicates), and `status` is limited to an enum. **Honest finding:** Adminer is server-rendered, so there is no fetch/XHR to record. Every step replays at Level 2 and `--http auto` produces no Level 1 recipe. The changing hidden CSRF token values seen on Adminer do not change the drift hash.
 
-Integration tests (`tests/integration/examples-web.test.ts`, `examples-sqlite.test.ts`) record the example with the real recorder drivers, compile, start `mcp-server.js` over stdio with the MCP SDK client, call each tool, and assert the result and `drifted: false`. They check that no compiled file contains the example password. A helper `tests/integration/helpers/availability.ts` detects `docker info` success and `sqlite3 -version`; tests use `describe.skipIf(!available)` and print `skipped: <dependency> not available` through `console.warn` at module load, so a missing Docker or tool is named in the output (requirement 19.4).
+`examples/cli-sqlite` wraps the real `sqlite3` shell, recorded at a 300x40 terminal size. It has three tools: `add_note`, `list_notes` and `count_notes`, with screen-pattern waits on the `sqlite>` prompt and a regex result zone. A terminal Variable is a whole typed text, so the Variables carry a `pattern` and a `maxLength` that the server validates before any SQL is typed. `data` values are strings, and an empty table gives `result_zone_not_found`. The optional git example (task 21.4) is not implemented.
+
+Integration tests: `tests/integration/adminer-e2e.test.ts` (with `adminer-stack.test.ts`) and `tests/integration/cli-sqlite-e2e.test.ts` record each example with the real recorder drivers, compile it, start `mcp-server.js` over stdio with the MCP SDK client, call each tool and check the result, drift and the absence of the password in every artifact. `tests/integration/examples-no-leak.test.ts` compiles the committed examples with random secret values in the environment and searches the output, the Studio API and the static demo for them. The Docker-based runs need `DAEMONIZE_DOCKER_TESTS=1`; tests skip with a message naming the missing dependency (Docker or `sqlite3`) (requirement 19.4).
 
 ---
-
 ## Data Models
 
 ### State_Graph JSON Schema
@@ -1113,18 +1148,17 @@ keywords: ["{target name}", "{tool_name}"]
 
 **Validates: Requirements 11.6, 11.8**
 
-### Property 11: No secret value in any artifact
-
-*For any* set of secret values supplied through `DAEMONIZE_SECRET_*` variables and any Workflow referencing those secret names, no file produced by `compile` (workflow file, OpenAPI, server source, Kiro Power files, generated tests, sandbox files) and no Studio API response SHALL contain any of the values.
-
-**Validates: Requirements 16.1, 16.9, 18.8, 19.5**
-
-### Property 12: Redaction removes sensitive values
+### Property 11: Redaction removes sensitive values
 
 *For any* recorded request containing sensitive headers, sensitive fields or token-like values, the serialized request after redaction SHALL contain none of the original sensitive values, and the redacted request SHALL list one `redacted` entry per replaced value.
 
 **Validates: Requirements 13.5, 13.7**
 
+### Property 12: No secret value in any artifact
+
+*For any* set of secret values supplied through `DAEMONIZE_SECRET_*` variables and any Workflow referencing those secret names, no file produced by `compile` (workflow file, OpenAPI, server source, Kiro Power files, generated tests, sandbox files) SHALL contain any of the values.
+
+**Validates: Requirements 16.1, 16.9, 19.5**
 ### Property 13: Relational locator is independent of row order
 
 *For any* generated table or list model with unique row keys, any permutation of its rows, and any target key, resolving a `rowBinding` plus `anchor` with the target key as variable SHALL select the action belonging to the row with that key.
@@ -1155,6 +1189,29 @@ keywords: ["{target name}", "{tool_name}"]
 
 **Validates: Requirements 15.5**
 
+### Property 18: HTTP recipe variables are bound where the recorded value was
+
+*For any* recorded request and any Variable whose value appears in it, the bindings of the recorded HTTP recipe SHALL name exactly the query parameters, JSON body fields and path segments that held that value, and no other place.
+
+**Validates: Requirements 13.2, 13.10**
+
+### Property 19: Applying suggestions never changes the replayed steps
+
+*For any* WorkflowSet and any suggestions file with any subset of entries accepted, the steps of every Workflow after applying the suggestions SHALL be identical to the steps before.
+
+**Validates: Requirements 18.1, 18.3, 18.13**
+
+### Property 20: Studio responses contain no secret value
+
+*For any* set of secret values supplied through `DAEMONIZE_SECRET_*` variables, no Studio API response SHALL contain any of the values.
+
+**Validates: Requirements 18.8, 18.14**
+
+### Property 21: Playground responses contain no secret value
+
+*For any* set of secret values supplied through `DAEMONIZE_SECRET_*` variables and any tool result returned through the playground, the playground response SHALL contain none of the values.
+
+**Validates: Requirements 18.8, 18.15**
 ---
 
 ## Error Handling
@@ -1187,13 +1244,13 @@ The Compiler resolves name conflicts deterministically during the compile phase 
 
 After generating the OpenAPI spec object, the Compiler validates it against the official OpenAPI 3.1 JSON Meta Schema using AJV. If validation fails, compilation aborts with an error listing the failing schema paths and the generated spec is not written to disk.
 
-### Strict Locator Failure
+### Strict Step Failure
 
-When Level 1 and Level 2 both fail for a step in Strict_Mode, the Replayer stops the sandbox and returns `{ success: false, drifted: true, error: "locator_failed", failure }` with the step index, the locators tried and a screenshot path. No later step runs. The MCP server returns it as a tool result (not a protocol error) with `isError: true`, so the agent can read the diagnostic. The same applies to a `waitFor` that does not match (`error: "pattern_timeout"`, `failure.lastText`).
+When Level 1 and Level 2 both fail for a step in Strict_Mode, the Replayer stops the sandbox and returns `{ success: false, drifted: true, error: "step_failed", failure }` with the step index, the locators tried and a screenshot path. No later step runs. The MCP server returns it as a tool result (not a protocol error) with `isError: true`, so the agent can read the diagnostic. The same applies to a `waitFor` that does not match (`error: "pattern_timeout"`, `failure.screenExcerpt`).
 
 ### Heal Unavailable
 
-With `--heal` and without a configured model or key, `error: "heal_unavailable"` is returned for the step whose strict locators failed, with the same diagnostic. A model error, a malformed model answer or a located element that does not exist produce `locator_failed` and nothing is written to the cache. If the cache file is unreadable or invalid JSON it is ignored and rewritten; the Workflow file is never touched.
+With `--heal` and without a configured model or key, `error: "heal_unavailable"` is returned for the step whose strict locators failed, with the same diagnostic. A model error, a malformed model answer or a located element that does not exist produce `step_failed` and nothing is written to the cache. If the cache file is unreadable or invalid JSON it is ignored and rewritten; the Workflow file is never touched.
 
 ### Missing Secret
 
@@ -1201,7 +1258,7 @@ A missing or empty `DAEMONIZE_SECRET_<NAME>` fails the call before the sandbox s
 
 ### Pattern Timeout
 
-See "Strict Locator Failure": `waitForPattern` returns `pattern_timeout` after `waitFor.timeoutMs`, with the last rendered text. It is distinct from the whole-replay `timeout`, which wins if the replay budget ends first.
+See "Strict Step Failure": `waitForPattern` returns `pattern_timeout` after `waitFor.timeoutMs`, with an excerpt of the last rendered text. It is distinct from the whole-replay `timeout`, which wins if the replay budget ends first.
 
 ### Docker Build Failure
 
@@ -1245,7 +1302,7 @@ Each property test references its design document property by tag comment:
 
 The PBT library used is `fast-check`. Arbitraries for State_Graph objects are built using `fc.record` over `fc.dictionary` for the screen map and `fc.array` for transitions.
 
-For schema round-trip properties (Properties 7 and 8), arbitraries are derived from compiled JSON Schemas with the `schema-arbitrary` converter.
+For schema round-trip properties (Properties 7 and 8), arbitraries are derived from compiled JSON Schemas with the `schema-arbitrary` converter. Properties 1 to 6 and 9 to 21 are tagged in `tests/property/` with `// Feature: daemonize, Property N: ...`. Properties 7 and 8 have no tag of their own: they are covered by the generated suite (`tests/integration/pbt-generated.test.ts`) and by `tests/unit/pbt.test.ts`.
 
 | Property | Test approach |
 |---|---|
@@ -1259,13 +1316,17 @@ For schema round-trip properties (Properties 7 and 8), arbitraries are derived f
 | P8: PBT suite invalid rejection | Per compiled schema, generated invalid payload fails validator |
 | P9: Runtime hash = ScreenHasher | Arbitrary DOM/terminal strings, compare `screen-hash.ts` with `ScreenHasher` (16 and 64 hex); plus a byte-equality check of the shipped copy |
 | P10: Zod iff AJV | `schemaArbitrary` / `invalidPayloadArbitrary` over the supported subset; eval the emitted Zod source, compare with AJV |
-| P11: No secret leak | Random secret values (min 8 chars) in `DAEMONIZE_SECRET_*`, compile to a temp dir, scan every file and every Studio response for the values |
-| P12: Redaction | Arbitrary requests with sensitive headers, fields and token-like strings; serialized output contains none of the originals |
+| P11: Redaction | Arbitrary requests with sensitive headers, fields and token-like strings; serialized output contains none of the originals |
+| P12: No secret leak | Random secret values (min 8 chars) in `DAEMONIZE_SECRET_*`, compile to a temp dir, scan every compiled file for the values |
 | P13: Row-order independence | Model-based: generated accessibility-tree model of a table, random permutations, oracle = row with the key; run `src/replay/row-resolver.ts` |
 | P14: Strict failure stops | Fake driver that fails at a random step; assert result flags and that the driver never saw a later step |
 | P15: Heal leaves workflow unchanged | Fake healer and driver, random success/failure/cache sequences; compare file bytes before and after |
 | P16: waitForPattern timing | Fake screen and fake clock, random chunk sequences and patterns; assert resolution within one poll interval of the first match, and `pattern_timeout` when none matches |
 | P17: Visual rect normalized | Arbitrary viewport and element rectangles; assert all fractions in [0, 1] and `x+w <= 1`, `y+h <= 1` |
+| P18: HTTP recipe bindings | Arbitrary requests (query, JSON body, path) and Variable values; the recipe bindings are exactly the places where the value was recorded |
+| P19: Suggestions keep steps | Arbitrary WorkflowSets and suggestion files with random accepted subsets; compare the replayed steps before and after applying |
+| P20: Studio responses without secrets | Random secret values in the environment; scan every Studio API response for them |
+| P21: Playground responses without secrets | Random secret values in the environment and in tool results; scan every playground response for them |
 
 P13 tests the pure resolver over an accessibility-tree model. The Playwright locator that implements the same rule in a browser is covered by integration tests on the example web app, not by the property.
 
@@ -1276,9 +1337,24 @@ P13 tests the pure resolver over an accessibility-tree model. The Playwright loc
 - Run the generated MCP server against `@modelcontextprotocol/inspector` to verify tool registration.
 - Parse `plugin.json` and `mcp.json`, check that the `mcp-server.js` they reference exists, and that `SKILL.md` lists every tool.
 
-- Real applications (skipped with a message naming the missing dependency when Docker or the tool is unavailable): `examples/web-app` (login with `DAEMONIZE_SECRET_*`, dynamic table row action by `rowBinding`, Radix select, Level 1 call with `--http`, strict failure after the app source is changed, heal with a stubbed `Healer`), and `examples/cli-sqlite` (query tool, `waitFor` on the `sqlite>` prompt, recorded `cols`/`rows`, docker sandbox with `--network none`). Each example is recorded, compiled, called through the MCP SDK client, and its output directory is scanned for the example password.
+- Real applications (skipped with a message naming the missing dependency when Docker or the tool is unavailable): `examples/adminer` (real Adminer and PostgreSQL through Docker Compose: login with a secret reference, rows found by name, `status` enum, drift, every step at Level 2) and `examples/cli-sqlite` (the real `sqlite3` shell: `waitFor` on the `sqlite>` prompt, recorded `cols`/`rows`, Variables checked by `pattern` and `maxLength`). Each example is recorded, compiled, called through the MCP SDK client, and its output directory is scanned for the secret values (`examples-no-leak.test.ts`). Level 1 and heal are covered by `http-replay-e2e.test.ts` and `heal-e2e.test.ts`, which use test applications and a scripted healer.
 - Page with SSE and WebSocket traffic: the same steps run in the same order as on a quiet page (requirement 14.10).
 - Docker: `sandbox build` with `sqlite3` and `git` packages, and the `docker run` arguments, including the read-only storageState mount, against a real daemon when present.
 - Generated server started without `DAEMONIZE_MODE=heal`: a network spy confirms no model request, and `heal.js` is not loaded.
 
+- Studio and static demo: `studio-server.test.ts`, `studio-playground.test.ts`, `studio-ui.test.ts`, `studio-ui-playground.test.ts` and `studio-static.test.ts`.
+
 Property-based tests do not apply to sandbox interaction (Docker I/O, Playwright, node-pty) or compilation artifact writing — these use integration tests with 1–3 representative examples.
+
+---
+
+## Known limitations
+
+- Recording happens on the host (a visible browser or a pty), not in a container. Only replay can run in Docker.
+- Terminal Variables cover whole typed text pieces only. A value inside an SQL statement typed in pieces is protected by the Variable's `pattern` and `maxLength`, not by structure.
+- The heal providers have not been run against a real model. They are tested with fakes, mocks and a scripted healer.
+- Docker replay of HTTP-only workflows is implemented but is not exercised by a container test.
+- `levels` and `levelFallback` are not part of the inferred output schema of a tool.
+- Canvas steps are `read` by default. The user edits `risk` and `allowHeal` in the workflow file.
+- The fast test project runs fully in parallel, while the integration tests are limited to 2 workers.
+- Server-rendered applications such as Adminer have no Level 1 recipe. Every step replays at Level 2.

@@ -200,6 +200,12 @@ export interface WorkflowVariable {
   type?: 'string' | 'number' | 'boolean';   // default 'string'
   description?: string;
   optional?: boolean;
+  /** The only values a call may give (a native select box with a fixed set of options): anything else is refused before the replay. */
+  enum?: string[];
+  /** Regular expression (JavaScript source, no flags, unicode) the whole value must match: anything else is refused before the replay. Anchor it with ^ and $. */
+  pattern?: string;
+  /** Longest value, in characters: a longer one is refused before the replay. */
+  maxLength?: number;
 }
 
 export interface FinalZone {

@@ -17,7 +17,7 @@ export type HashZone = {
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 // CSRF token input names
-const CSRF_INPUT_NAMES = new Set(['csrf_token', '_token', 'authenticity_token']);
+const CSRF_INPUT_NAMES = new Set(['csrf_token', '_token', 'authenticity_token', 'token', 'csrfmiddlewaretoken', '_csrf', '__requestverificationtoken']);
 
 // ANSI escape sequences: CSI sequences like \x1b[...m and others
 const ANSI_ESCAPE = /\x1b\[[0-9;]*[a-zA-Z]/g;
@@ -88,12 +88,17 @@ export function normalizeDom(html: string): string {
 
     // Parse individual attributes from the attribute string.
     const attrs = parseAttributes(attributes);
+    // The value of a CSRF token input changes on every page load and goes away with its name
+    const isCsrfInput = attrs.some((a) => a.name.toLowerCase() === 'name' && CSRF_INPUT_NAMES.has((a.value ?? '').toLowerCase()));
 
     // Filter out dynamic attributes.
     const filtered = attrs.filter((attr) => {
       const name = attr.name.toLowerCase();
       const value = attr.value ?? '';
 
+      if (isCsrfInput && name === 'value') {
+        return false;
+      }
       // Strip any id attribute whose value contains a UUID
       if (name === 'id' && UUID_PATTERN.test(value)) {
         return false;

@@ -130,6 +130,18 @@ export class SchemaInferencer {
         if (variable.description !== undefined) {
           field['description'] = variable.description;
         }
+        if (variable.enum !== undefined) {
+          delete field['anyOf'];
+          field['type'] = 'string';
+          field['enum'] = [...variable.enum];
+        }
+        if (variable.pattern !== undefined || variable.maxLength !== undefined) {
+          // Constraints on a text only: a number or a boolean has no pattern
+          delete field['anyOf'];
+          field['type'] = 'string';
+          if (variable.pattern !== undefined) field['pattern'] = variable.pattern;
+          if (variable.maxLength !== undefined) field['maxLength'] = variable.maxLength;
+        }
         properties[variable.name] = field;
         if (variable.optional) {
           required.delete(variable.name);

@@ -333,6 +333,14 @@ export const WEB_ZONE_FUNCTION = String.raw`function (root, ex) {
   function within(el, selector) {
     return el.matches(selector) ? el : el.querySelector(selector);
   }
+  var CONTROL = 'textarea, select, input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]):not([type=image])';
+  function cellValue(cell) {
+    var control = cell.querySelector(CONTROL);
+    if (!control) return txt(cell);
+    if (control.tagName === 'SELECT') return control.selectedOptions.length > 0 ? control.selectedOptions[0].text : '';
+    if (control.type === 'checkbox' || control.type === 'radio') return control.checked ? 'true' : 'false';
+    return control.value;
+  }
   function ownRows(table) {
     return Array.prototype.filter.call(table.querySelectorAll('tr, [role=row]'), function (row) {
       return row.closest(TABLE) === table;
@@ -398,7 +406,12 @@ export const WEB_ZONE_FUNCTION = String.raw`function (root, ex) {
       var tableRows = root.matches('tr, [role=row]') ? [root] : Array.prototype.slice.call(root.querySelectorAll('tr, [role=row]'));
       tableRows.forEach(function (row) {
         var cells = ownCells(row);
-        if (cells.length === 2) pairs.push([txt(cells[0]), txt(cells[1])]);
+        if (cells.length === 2) pairs.push([txt(cells[0]), cellValue(cells[1])]);
+        else if (cells.length > 2 && cells[0].matches('th')) {
+          // A form laid out as a table (label cell, helper cells, then the control): the value is the last control
+          var holders = cells.slice(1).filter(function (c) { return c.querySelector(CONTROL) !== null; });
+          if (holders.length > 0) pairs.push([txt(cells[0]), cellValue(holders[holders.length - 1])]);
+        }
       });
     }
     if (pairs.length === 0) {

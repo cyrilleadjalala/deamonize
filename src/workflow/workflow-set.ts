@@ -77,6 +77,9 @@ export const WorkflowSetSchema: Record<string, unknown> = {
         type: { type: 'string', enum: ['string', 'number', 'boolean'] },
         description: { type: 'string' },
         optional: { type: 'boolean' },
+        enum: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string' } },
+        pattern: { type: 'string', minLength: 1 },
+        maxLength: { type: 'integer', minimum: 1 },
       },
     },
     Workflow: {
@@ -427,6 +430,17 @@ export function deserializeWorkflowSet(json: string): WorkflowSet {
     );
   }
   const set = parsed as WorkflowSet;
+  // The server checks every value against the pattern of its Variable: a pattern that is not an expression would only fail at compile
+  set.workflows.forEach((workflow, w) => {
+    workflow.variables.forEach((variable, v) => {
+      if (variable.pattern === undefined) return;
+      try {
+        new RegExp(variable.pattern, 'u');
+      } catch (err) {
+        throw new DescriptiveParseError(`/workflows/${w}/variables/${v}/pattern`, 'variable-pattern', `Invalid regular expression: ${(err as Error).message}`);
+      }
+    });
+  });
   const plain = findPlainSecrets(set);
   if (plain.length > 0) {
     throw new DescriptiveParseError(

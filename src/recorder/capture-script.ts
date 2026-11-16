@@ -233,7 +233,8 @@ export const CAPTURE_SCRIPT = `
     if (title) return title;
 
     // A custom combobox usually shows its current value or prompt as text
-    if (role === 'combobox') return contentOf(el, ctx);
+    // (a native select has no such text: the labels of all its options are not its name)
+    if (role === 'combobox' && el.tagName !== 'SELECT') return contentOf(el, ctx);
     return '';
   }
 
@@ -352,6 +353,12 @@ export const CAPTURE_SCRIPT = `
     return { rowBinding: { container, key }, texts: own.cells.filter(Boolean).slice(0, MAX_ROW_TEXTS) };
   }
 
+  function isFormLayoutRow(row, el) {
+    if (row.tagName !== 'TR' || !row.firstElementChild || row.firstElementChild.tagName !== 'TH') return false;
+    if (!['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return false;
+    return !['checkbox', 'radio', 'button', 'submit', 'reset', 'image'].includes(typeOf(el));
+  }
+
   // The nearest enclosing context that tells two identical controls apart
   function parentContext(el) {
     const up = el.parentElement;
@@ -365,6 +372,11 @@ export const CAPTURE_SCRIPT = `
 
     let row = up.closest(ROW_SELECTOR);
     while (row) {
+      // A form laid out as a table (label in a th, then the control) is not a list of records: its rows are not bound
+      if (isFormLayoutRow(row, el)) {
+        row = row.parentElement ? row.parentElement.closest(ROW_SELECTOR) : null;
+        continue;
+      }
       const parts = visibleText(row);
       const binding = rowInfo(row);
       if (binding) {
@@ -615,6 +627,12 @@ export const CAPTURE_SCRIPT = `
       info.name = undefined;
     }
     info.text = undefined;
+    // A position in the parent (:nth-of-type) breaks when a sibling appears: a class that is unique in the page is steadier
+    if (info.css && info.css.indexOf(':nth-of-type') >= 0) {
+      const cls = Array.from(el.classList).find((c) => /^[a-z][a-z-]{2,30}$/.test(c));
+      const candidate = cls ? el.tagName.toLowerCase() + '.' + cls : '';
+      if (candidate && document.querySelectorAll(candidate).length === 1) info.css = candidate;
+    }
     return info;
   }
 
@@ -789,6 +807,12 @@ export const CAPTURE_SCRIPT = `
     emit('click', canvas, undefined, { box, canvas: true });
   }
 
+  // The value a select box has when the page is loaded
+  function defaultSelectValue(el) {
+    const chosen = Array.from(el.options).find((o) => o.defaultSelected);
+    return chosen ? chosen.value : el.options.length > 0 ? el.options[0].value : '';
+  }
+
   function isTextField(el) {
     if (el.tagName === 'TEXTAREA') return true;
     if (el.tagName !== 'INPUT') return false;
@@ -943,7 +967,14 @@ export const CAPTURE_SCRIPT = `
   document.addEventListener('change', (e) => {
     const el = e.target;
     if (!(el instanceof Element) || inUi(el)) return;
+    // A script of the page firing its own change event while the document is still being parsed (Adminer does it on
+    // its login form) is not something the user did; one fired later (a driven browser) still is
+    if (!e.isTrusted && document.readyState === 'loading') return;
     if (el.tagName === 'SELECT') {
+      // A change event fired by a script without any change of the value (Adminer re-fires them on its filter rows) is no choice
+      const shown = lastValues.has(el) ? lastValues.get(el) : defaultSelectValue(el);
+      lastValues.set(el, el.value);
+      if (!e.isTrusted && el.value === shown) return;
       emit('select', el, el.value);
     } else {
       flush(el);

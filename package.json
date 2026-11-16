@@ -6,11 +6,12 @@
     "daemonize": "./dist/cli/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-studio-ui.mjs",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:property": "vitest run tests/property",
-    "test:integration": "vitest run tests/integration"
+    "test:integration": "vitest run tests/integration",
+    "studio:build": "node scripts/build-studio-demo.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

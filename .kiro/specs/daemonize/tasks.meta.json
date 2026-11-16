@@ -1018,6 +1018,85 @@
         "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
         "timestamp": 1794847822716
       }
+    ],
+    "20.1 Compile-time suggester": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794847841159
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794852264410
+      }
+    ],
+    "20.2 Studio server": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794852266063
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794853415616
+      }
+    ],
+    "20.3 Studio UI": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794853416024
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794855092528
+      }
+    ],
+    "20.4 MCP playground": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794855092951
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794857139107
+      }
+    ],
+    "20.5 Static demo build": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794857161858
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794858065118
+      }
+    ],
+    "20.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794858065373
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794859009432
+      }
+    ],
+    "20. Lot 4: AI suggestions and Studio": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794859009797
+      }
     ]
   }
 }

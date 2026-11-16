@@ -65,3 +65,18 @@ export class ToolNameDeriver {
     }
   }
 }
+
+/** Reserve the accepted names first, so a derived name never takes one of them; the deriver adds _2 on a conflict. */
+export function deriveToolNames(set: { workflows: Array<{ id: string; label: string }> }, overrides: Record<string, string>): Map<string, string> {
+  const deriver = new ToolNameDeriver();
+  const names = new Map<string, string>();
+  for (const workflow of set.workflows) {
+    const override = overrides[workflow.id];
+    if (override !== undefined) names.set(workflow.id, deriver.derive(override));
+  }
+  for (const workflow of set.workflows) {
+    if (!names.has(workflow.id)) names.set(workflow.id, deriver.derive(workflow.label));
+  }
+  return names;
+}
+

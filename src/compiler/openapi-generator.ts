@@ -29,6 +29,7 @@ export class OpenApiGenerator {
         post: {
           operationId,
           summary: workflow.label,
+          ...(workflow.description === undefined ? {} : { description: workflow.description }),
           tags: ['actions'],
           requestBody: {
             required: true,

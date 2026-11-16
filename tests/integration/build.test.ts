@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000, hookTimeout: 120000 });
 import { execFileSync, spawnSync } from 'node:child_process';
-import { access, mkdtemp } from 'node:fs/promises';
+import { access, mkdtemp, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { removeDir } from '../helpers/cleanup.js';
 
@@ -17,6 +17,8 @@ describe('Build output (what `npm run build` produces)', () => {
       cwd: workspaceRoot,
       stdio: 'pipe',
     });
+    // The second half of `npm run build`: tsc emits no static files
+    execFileSync(process.execPath, [join(workspaceRoot, 'scripts/copy-studio-ui.mjs'), outDir], { cwd: workspaceRoot, stdio: 'pipe' });
   }, 120000);
 
   afterAll(async () => {
@@ -32,6 +34,14 @@ describe('Build output (what `npm run build` produces)', () => {
   it('contains the support modules copied into generated test suites', async () => {
     await expect(access(join(outDir, 'pbt', 'schema-arbitrary.js'))).resolves.toBeUndefined();
     await expect(access(join(outDir, 'pbt', 'property-runner.js'))).resolves.toBeUndefined();
+  });
+
+  it('contains the Studio UI next to the compiled Studio server', async () => {
+    for (const file of ['index.html', 'app.css', 'app.js', 'js/dom.js', 'js/views/graph.js']) {
+      await expect(access(join(outDir, 'studio', 'ui', file)), file).resolves.toBeUndefined();
+    }
+    const scripts = JSON.parse(await readFile(join(workspaceRoot, 'package.json'), 'utf-8')).scripts as Record<string, string>;
+    expect(scripts.build).toContain('copy-studio-ui');
   });
 
   it('starts the CLI and lists its commands', () => {

@@ -7,6 +7,8 @@ import { SchemaInferencer } from '../../schema/schema-inferencer.js';
 import { deserializeWorkflowSet, serializeWorkflowSet } from '../../workflow/workflow-set.js';
 import { mergeSandboxSpec, validateSandboxSpec } from '../../sandbox/dockerfile.js';
 import type { CompileResult, SandboxSpec, WorkflowSet } from '../../types.js';
+import { applySuggestions, mergeMissing, readSuggestionsFile, suggestionsPathFor, writeSuggestionsFile } from '../../suggest/apply.js';
+import { createSuggester, type CreateSuggesterOptions, type SuggestMode } from '../../suggest/model-suggester.js';
 
 export interface CompileOptions {
   /** Run `npm install` in the output directory once it is written. */
@@ -25,6 +27,19 @@ export interface CompileOptions {
   healSupport?: boolean;
   /** `--sandbox-*` flags: added to the `sandbox` block of the workflow file (which is rewritten), so the compiled project is self-describing. */
   sandbox?: SandboxSpec;
+  /**
+   * --suggest: write <file>.suggestions.json first. Off by default: without it no model is ever contacted (the accepted
+   * entries of an existing suggestions file are still applied).
+   */
+  suggest?: SuggestOptions;
+}
+
+export interface SuggestOptions extends CreateSuggesterOptions {
+  mode: SuggestMode;
+  /** --suggest-force: replace the file instead of adding only what it lacks. */
+  force?: boolean;
+  /** --suggest-graph: a State_Graph file whose final screens give the Result_Zone suggestion something to look at. */
+  graphFile?: string;
 }
 
 /** The value of `--http`: the bare flag means auto. */
@@ -46,7 +61,9 @@ export async function compile(
 ): Promise<CompileResult> {
   const set = deserializeWorkflowSet(await readFile(file, 'utf-8'));
   await persistSandboxFlags(file, set, options.sandbox);
-  const annotated = new SchemaInferencer().inferWorkflows(set);
+  if (options.suggest !== undefined) await writeSuggestions(file, set, options.suggest);
+  const { set: suggested, toolNames: toolNameOverrides } = await acceptedSuggestions(file, set);
+  const annotated = new SchemaInferencer().inferWorkflows(suggested);
   if (options.http === 'auto' && set.targetType !== 'web') {
     console.warn('--http only applies to web targets: ignored for a terminal program.');
   }
@@ -57,6 +74,7 @@ export async function compile(
     http: options.http ?? 'off',
     healSupport: options.healSupport === true,
     workflowFile: file,
+    toolNameOverrides,
   });
   if (options.healSupport === true && set.targetType === 'web') {
     console.log(`Heal support compiled in: run with "daemonize serve ${outDir} --heal" and the DAEMONIZE_MODEL_* variables. Recorded thumbnails were copied to ${join(outDir, '.daemonize', 'anchors')}.`);
@@ -97,4 +115,44 @@ async function persistSandboxFlags(file: string, set: WorkflowSet, flags: Sandbo
   validateSandboxSpec(merged, set.targetType);
   if (merged !== undefined) set.sandbox = merged;
   await writeFile(file, serializeWorkflowSet(set));
+}
+/** The final screens of the workflows, from a State_Graph file (by workflow id). */
+async function finalSnapshotsFrom(graphFile: string, set: WorkflowSet): Promise<Map<string, string>> {
+  const graph = JSON.parse(await readFile(graphFile, 'utf-8')) as { screens?: Record<string, { snapshot?: string }> };
+  const snapshots = new Map<string, string>();
+  for (const workflow of set.workflows) {
+    const snapshot = workflow.finalScreenId === undefined ? undefined : graph.screens?.[workflow.finalScreenId]?.snapshot;
+    if (typeof snapshot === 'string') snapshots.set(workflow.id, snapshot);
+  }
+  return snapshots;
+}
+
+/** `--suggest`: ask the suggester, write or merge `<file>.suggestions.json`, and say which source ran. */
+async function writeSuggestions(file: string, set: WorkflowSet, options: SuggestOptions): Promise<void> {
+  const path = suggestionsPathFor(file);
+  const finalSnapshots = options.graphFile === undefined ? undefined : await finalSnapshotsFrom(options.graphFile, set);
+  const fresh = await createSuggester(options.mode, options).suggest(set, { finalSnapshots });
+  const existing = options.force === true ? undefined : await readSuggestionsFile(path);
+  let written = fresh;
+  let note = '';
+  if (existing !== undefined) {
+    const { merged, added, keptAccepted } = mergeMissing(existing, fresh);
+    written = merged;
+    note = ` (kept your edits; added ${added} missing item(s)${keptAccepted > 0 ? `, left ${keptAccepted} accepted entr${keptAccepted > 1 ? 'ies' : 'y'} untouched` : ''})`;
+  }
+  await writeSuggestionsFile(path, written);
+  const source = fresh.source === 'model' ? `model ${fresh.model ?? ''}`.trim() : 'deterministic rules';
+  console.log(`Suggestions from ${source}: ${fresh.workflows.length} workflow(s) written to ${path}${note}.`);
+  if (fresh.fallbackReason !== undefined) console.warn(`Deterministic rules were used instead of a model: ${fresh.fallbackReason}.`);
+  console.log('Edit the file and set "accepted": true on an entry to use it; "compile" applies accepted entries only.');
+}
+
+/** Apply the accepted entries of `<file>.suggestions.json` when it exists; names and texts only. */
+async function acceptedSuggestions(file: string, set: WorkflowSet): Promise<{ set: WorkflowSet; toolNames: Record<string, string> }> {
+  const suggestions = await readSuggestionsFile(suggestionsPathFor(file));
+  if (suggestions === undefined) return { set, toolNames: {} };
+  const result = applySuggestions(set, suggestions);
+  if (result.applied.length > 0) console.log(`Applied ${result.applied.length} accepted suggestion(s) from ${suggestionsPathFor(file)}.`);
+  for (const reason of result.skipped) console.warn(`Suggestion skipped, ${reason}.`);
+  return { set: result.set, toolNames: result.toolNames };
 }

@@ -1,5 +1,5 @@
 import type { WorkflowSet, CompileResult } from '../types.js';
-import { ToolNameDeriver } from './tool-name-deriver.js';
+import { deriveToolNames } from './tool-name-deriver.js';
 import { OpenApiGenerator } from './openapi-generator.js';
 import { McpGenerator, httpEnabled, healEnabled, type GenerateOptions } from './mcp-generator.js';
 import { KiroPowerGenerator } from './kiro-power-generator.js';
@@ -135,6 +135,8 @@ export interface CompileOptions extends GenerateOptions {
    * (`<file>.assets/`) are copied to `<out>/.daemonize/anchors/`.
    */
   workflowFile?: string;
+  /** Tool names accepted from a suggestions file, by workflow id. They are made unique like any derived name. */
+  toolNameOverrides?: Record<string, string>;
 }
 
 /** Every `.ts` file under a folder, as paths relative to it (forward slashes). */
@@ -149,7 +151,6 @@ async function listSources(root: string, prefix = ''): Promise<string[]> {
 }
 
 export class Compiler {
-  private toolNameDeriver = new ToolNameDeriver();
   private openApiGenerator = new OpenApiGenerator();
   private mcpGenerator = new McpGenerator();
   private kiroPowerGenerator = new KiroPowerGenerator();
@@ -173,12 +174,8 @@ export class Compiler {
         `Workflow set contains plain-text secrets at ${plain.join(', ')}; use a secretRef or a {"$secret":"NAME"} reference instead`
       );
     }
-    // 1. Reset deriver and derive a tool name for every workflow.
-    this.toolNameDeriver.reset();
-    const toolNames = new Map<string, string>();
-    for (const workflow of set.workflows) {
-      toolNames.set(workflow.id, this.toolNameDeriver.derive(workflow.label));
-    }
+    // 1. Derive a unique tool name for every workflow (accepted names from a suggestions file first).
+    const toolNames = deriveToolNames(set, options.toolNameOverrides ?? {});
 
     // 2. Generate all artifacts.
     const openApiSpec = await this.openApiGenerator.generate(set, toolNames);

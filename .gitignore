@@ -37,3 +37,9 @@ Thumbs.db
 
 # Heal mode cache (locators a model repaired); local to a machine
 .daemonize/
+
+# Studio UI screenshots (STUDIO_SCREENSHOTS=1)
+tests/__screenshots__/
+
+# Static Studio demo (npm run studio:build)
+dist-demo/

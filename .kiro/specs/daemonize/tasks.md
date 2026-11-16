@@ -512,31 +512,31 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
   - [x] 19.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 20. Lot 4: AI suggestions and Studio
-  - [ ] 20.1 Compile-time suggester
+- [x] 20. Lot 4: AI suggestions and Studio
+  - [x] 20.1 Compile-time suggester
     - Create `src/suggest/suggester.ts` (`Suggester` interface), `src/suggest/deterministic.ts`, `src/suggest/ai-suggester.ts` (via `DAEMONIZE_MODEL_*`); add `compile --suggest` in `src/cli/commands/compile.ts`, writing an editable suggestions file the user can change before artifacts are written; report when the deterministic fallback was used
     - Tests with a fake model and without a key (`tests/unit/suggest.test.ts`)
     - _Requirements: 18.1, 18.2, 18.3_
 
-  - [ ] 20.2 Studio server
+  - [x] 20.2 Studio server
     - Create `src/studio/server.ts` (local HTTP; serves the WorkflowSet, StateGraph, schemas, PBT results and replay levels; never exposes secrets) and `src/cli/commands/studio.ts`, registered in `src/cli/index.ts`
     - Unit test that no secret value appears in any response (`tests/unit/studio.test.ts`)
     - _Requirements: 18.5, 18.6, 18.8_
 
-  - [ ] 20.3 Studio UI
+  - [x] 20.3 Studio UI
     - Static single-page UI in `src/studio/ui/` (graph view of WorkflowSet and StateGraph, level badge per step, schemas, PBT results), polished, with a sample-data mode for static demo deployment
     - _Requirements: 18.5, 18.6_
 
-  - [ ] 20.4 MCP playground
+  - [x] 20.4 MCP playground
     - Local bridge in `src/studio/playground.ts` that spawns the compiled server over stdio, lists tools, calls them and returns `drifted`, `healed` and a screen preview; wire it into `src/studio/server.ts` and the UI
     - Integration test (`tests/integration/studio-playground.test.ts`)
     - _Requirements: 18.7_
 
-  - [ ] 20.5 Static demo build
+  - [x] 20.5 Static demo build
     - Add `npm run studio:build` (`package.json`, `scripts/studio-build.mjs`) producing a deployable folder with sample data
     - _Requirements: 18.5_
 
-  - [ ] 20.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+  - [x] 20.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 21. Lot 5: Proof on real software

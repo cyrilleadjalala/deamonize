@@ -211,6 +211,8 @@ export interface FinalZone {
 export interface Workflow {
   id: string;                              // UUID
   label: string;
+  /** What an agent reads as the tool description instead of the label. Not part of the workflow file: set in memory by an accepted suggestion. */
+  description?: string;
   steps: WorkflowStep[];
   variables: WorkflowVariable[];
   finalScreenId?: ScreenId;                // used for drift detection only

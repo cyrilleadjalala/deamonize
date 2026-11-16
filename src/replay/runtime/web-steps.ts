@@ -489,6 +489,54 @@ export function saveFailureScreenshot(png: Buffer, stepIndex: number, inContaine
   return shot;
 }
 
+// ---------------------------------------------------------------------------
+// Final screenshot (DAEMONIZE_SCREENSHOT=final), used by the Studio playground
+// ---------------------------------------------------------------------------
+
+/** Fields that hold a password or a one-time code: a picture is never taken while one is visible. */
+const SENSITIVE_FIELDS = [
+  'input[type="password"]',
+  'input[autocomplete="one-time-code"]',
+  'input[name*="otp" i]',
+  'input[id*="otp" i]',
+  'input[name*="totp" i]',
+  'input[id*="totp" i]',
+].join(', ');
+
+export interface FinalShot {
+  /** Path of the PNG under the temp directory (`daemonize-shots`). */
+  screenshot?: string;
+  /** Why no picture was taken, when one was asked for. */
+  screenshotSkipped?: 'sensitive_field' | 'capture_failed';
+}
+
+/** True when a password or one-time-code field is visible in the page or one of its frames. */
+export async function hasSensitiveField(page: Page): Promise<boolean> {
+  for (const frame of page.frames()) {
+    try {
+      if ((await frame.locator(SENSITIVE_FIELDS).locator('visible=true').count()) > 0) return true;
+    } catch {
+      // A frame that cannot be queried is treated as holding nothing; the page itself is checked first
+    }
+  }
+  return false;
+}
+
+/** A picture of the final screen, saved under `daemonize-shots` in the temp directory; skipped when a sensitive field shows. */
+export async function captureFinal(page: Page): Promise<FinalShot> {
+  try {
+    if (await hasSensitiveField(page)) return { screenshotSkipped: 'sensitive_field' };
+    const png = await page.screenshot({ timeout: 3000 });
+    const dir = join(tmpdir(), 'daemonize-shots');
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, `final-${Date.now()}-${randomBytes(3).toString('hex')}.png`);
+    writeFileSync(path, png);
+    return { screenshot: path };
+  } catch {
+    return { screenshotSkipped: 'capture_failed' };
+  }
+}
+
 /** Screenshot of the page the failing step ran on; empty when the page cannot be captured. */
 export async function captureFailure(run: WebRun, stepIndex: number): Promise<FailureShot> {
   try {

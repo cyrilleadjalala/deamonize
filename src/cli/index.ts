@@ -6,8 +6,10 @@ import { record, type RecordSummary } from './commands/record.js';
 import { recordTui } from './commands/record-tui.js';
 import { parseTerminalDimension } from '../recorder/terminal-recorder.js';
 import { compile, parseHttpMode } from './commands/compile.js';
+import { parseSuggestMode } from '../suggest/model-suggester.js';
 import { merge } from './commands/merge.js';
 import { serve } from './commands/serve.js';
+import { studio, parsePort } from './commands/studio.js';
 import { buildSandboxImage } from './commands/sandbox.js';
 import { validateSandboxSpec } from '../sandbox/dockerfile.js';
 import type { SandboxSpec } from '../types.js';
@@ -38,6 +40,11 @@ function specFromFlags(flags: { image?: string; packages?: string[]; install?: s
   // The target type is known when recording; compile and build check it again against the set
   validateSandboxSpec(spec, targetType ?? 'tui');
   return spec;
+}
+/** The --suggest flags of compile, or undefined when --suggest was not given. */
+function suggestOptions(options: { suggest?: string | boolean; suggestForce?: boolean; suggestGraph?: string }): { mode: 'auto' | 'deterministic' | 'model'; force: boolean; graphFile?: string } | undefined {
+  const mode = parseSuggestMode(options.suggest);
+  return mode === undefined ? undefined : { mode, force: options.suggestForce === true, graphFile: options.suggestGraph };
 }
 export function buildProgram(): Command {
   const program = new Command();
@@ -205,12 +212,15 @@ export function buildProgram(): Command {
       'web only: execute the recorded HTTP request of each step that has one (auto, the default when the flag is given) instead of driving the page; off disables it'
     )
     .option('--heal-support', 'web only: compile in the Heal modules and the recorded thumbnails so the server can run with --heal (default off: no model code in the output)')
+    .option('--suggest [mode]', 'write <file>.suggestions.json with proposed tool names, descriptions, candidate Variables and a result zone (auto, deterministic or model; auto uses DAEMONIZE_MODEL_* when set). Off by default: no model is called without it')
+    .option('--suggest-force', 'with --suggest: replace the suggestions file instead of adding only the missing items')
+    .option('--suggest-graph <file>', 'with --suggest: a State_Graph file whose final screens are used to suggest a result zone')
     .option('--sandbox-image <ref>', 'Docker sandbox: base image of the replay container, stored in the workflow file')
     .option('--sandbox-package <name>', 'Docker sandbox: package to install in the image (repeatable), stored in the workflow file', collect)
     .option('--sandbox-install <cmd>', 'Docker sandbox: extra command to run when building the image (repeatable), stored in the workflow file', collect)
     .option('--sandbox-network <mode>', 'Docker sandbox: none or bridge (default none for a terminal program, bridge for a web page), stored in the workflow file')
     .action(async (file: string | undefined, options) => {
-      await compile(file ?? DEFAULT_WORKFLOWS_FILE, options.out, { install: options.install, http: parseHttpMode(options.http), healSupport: options.healSupport === true, sandbox: sandboxFlags(options) });
+      await compile(file ?? DEFAULT_WORKFLOWS_FILE, options.out, { install: options.install, http: parseHttpMode(options.http), healSupport: options.healSupport === true, sandbox: sandboxFlags(options), suggest: suggestOptions(options) });
     });
 
   program
@@ -253,6 +263,36 @@ export function buildProgram(): Command {
         url: options.sandboxUrl,
         timeoutMs: options.timeout,
         stepTimeoutMs: options.stepTimeout,
+      });
+    });
+
+  program
+    .command('studio [dir]')
+    .description('Open the Studio: workflows, replay levels, graph, schemas, property-test results and an MCP playground (calls the compiled server; DAEMONIZE_* variables of this shell reach it) of an output directory, in your browser')
+    .option('--workflows <file>', 'workflow file to show', DEFAULT_WORKFLOWS_FILE)
+    .option('--port <n>', 'port to listen on (default: a free one)', parsePort)
+    .option('--host <host>', 'address to listen on', '127.0.0.1')
+    .option('--allow-remote', 'accept a --host that is not this machine; the token is then the only protection')
+    .option('--graph <file>', 'State_Graph file to show (default: <dir>/state-graph.json)')
+    .option('--open', 'open the address in your browser')
+    .option('--sample', 'show built-in fictitious sample data instead of your files')
+    .action(async (dir: string | undefined, options) => {
+      const handle = await studio(dir ?? DEFAULT_OUTPUT_DIR, {
+        workflows: options.workflows,
+        port: options.port,
+        host: options.host,
+        allowRemote: options.allowRemote === true,
+        open: options.open === true,
+        sample: options.sample === true,
+        graph: options.graph,
+      });
+      // Stay up until interrupted
+      await new Promise<void>((done) => {
+        const stop = (): void => {
+          void handle.close().then(done);
+        };
+        process.once('SIGINT', stop);
+        process.once('SIGTERM', stop);
       });
     });
 

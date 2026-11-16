@@ -19,7 +19,9 @@ export function describeTool(workflow: Workflow, options: { http?: boolean } = {
   );
 
   const output = describeOutput(workflow);
-  const base = (inputs.length > 0 ? `${workflow.label}. Inputs: ${inputs.join(', ')}.` : workflow.label) + (output === undefined ? '' : ` ${output}`);
+  // An accepted suggestion replaces the label as the lead of the description
+  const lead = workflow.description ?? workflow.label;
+  const base = (inputs.length > 0 ? `${lead.replace(/[.!]+$/, '')}. Inputs: ${inputs.join(', ')}.` : lead) + (output === undefined ? '' : ` ${output}`);
   const secrets = secretEnvNames(workflow);
   const withLevel = options.http === true ? `${base} ${describeLevels(workflow)}` : base;
   return secrets.length > 0

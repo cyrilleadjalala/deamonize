@@ -9,8 +9,11 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { existsSync } from 'node:fs';
-import { mkdtemp } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -21,6 +24,8 @@ import type { WorkflowSet } from '../../src/types.js';
 import { removeDir } from '../helpers/cleanup.js';
 
 const enabled = process.env.DAEMONIZE_DOCKER_TESTS === '1';
+// Unique value of the saved login (the session cookie): it must never reach an image layer or a command line
+const SESSION = `marker-${randomUUID()}`;
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 const fixtures = join(workspaceRoot, 'tests', 'fixtures');
 
@@ -280,6 +285,18 @@ describe.skipIf(!enabled)('Replay of a web target in a Docker container', () => 
       userAgents.add(String(req.headers['user-agent'] ?? ''));
       const url = new URL(req.url ?? '/', 'http://localhost');
       res.setHeader('content-type', 'text/html');
+      if (url.pathname.startsWith('/secure')) {
+        // Only a browser that carries the session cookie of the saved login gets in
+        const signedIn = (req.headers.cookie ?? '').split('; ').includes(`session=${SESSION}`);
+        res.end(
+          !signedIn
+            ? '<html><head><title>Denied</title></head><body>Please sign in</body></html>'
+            : url.pathname === '/secure/done'
+              ? '<html><head><title>Done</title></head><body>Welcome back</body></html>'
+              : '<html><head><title>Secure</title></head><body><a href="/secure/done">Continue</a></body></html>'
+        );
+        return;
+      }
       res.end(
         url.pathname === '/result'
           ? `<html><head><title>Saved</title></head><body>Customer ${url.searchParams.get('name')} created</body></html>`
@@ -297,6 +314,12 @@ describe.skipIf(!enabled)('Replay of a web target in a Docker container', () => 
       await new Compiler().compile(new SchemaInferencer().inferWorkflows(webSet()), dir);
     } finally {
       console.log = log;
+    }
+    // Everything that could hold a login sits in the build context: no layer may end up with it
+    await mkdir(join(dir, '.daemonize'), { recursive: true });
+    await mkdir(join(dir, 'shots.assets'), { recursive: true });
+    for (const name of ['storage-state.json', 'auth-state.json', 'my.storage', 'auth-cookies.txt', '.env', '.env.local', join('.daemonize', 'state.txt'), join('shots.assets', 'login.txt')]) {
+      await writeFile(join(dir, name), `SESSION=${SESSION}\n`);
     }
     tag = await buildSandboxImage(dir);
   }, 1200000);
@@ -364,6 +387,163 @@ describe.skipIf(!enabled)('Replay of a web target in a Docker container', () => 
       await client.close();
     }
   }, 180000);
+
+  describe('saved login (storageState)', () => {
+    const secureSet = (storageState?: string): WorkflowSet => ({
+      version: '1',
+      targetType: 'web',
+      targetName: 'Docker Auth Test',
+      startUrl: `http://127.0.0.1:${port}/secure`,
+      ...(storageState === undefined ? {} : { storageState }),
+      workflows: [
+        {
+          id: 'f4444444-4444-4444-8444-444444444444',
+          label: 'Open secure area',
+          steps: [{ actionType: 'click', selectors: ['role=link[name="Continue"]', '#go'] }],
+          variables: [],
+          observedPayloads: [],
+        },
+      ],
+    });
+    const secureUrl = () => `http://host.docker.internal:${port}/secure`;
+    const dirs: string[] = [];
+    let stateDir: string;
+    let statePath: string;
+
+    /** Compile a set next to the others (so it finds node_modules) and start its server, which uses the image of the build above. */
+    async function connectSecure(storageState: string | undefined, env: Record<string, string>) {
+      const out = await mkdtemp(join(workspaceRoot, '.docker-auth-'));
+      dirs.push(out);
+      const log = console.log;
+      console.log = () => { };
+      try {
+        await new Compiler().compile(new SchemaInferencer().inferWorkflows(secureSet(storageState)), out);
+      } finally {
+        console.log = log;
+      }
+      const client = new Client({ name: 'docker-auth-test', version: '1.0.0' });
+      await client.connect(
+        new StdioClientTransport({
+          command: process.execPath,
+          args: [join(out, 'mcp-server.js')],
+          cwd: workspaceRoot,
+          env: { DAEMONIZE_SANDBOX: 'docker', DAEMONIZE_SANDBOX_IMAGE: tag, DAEMONIZE_SANDBOX_URL: secureUrl(), DAEMONIZE_STEP_TIMEOUT_MS: '2000', ...env },
+        })
+      );
+      return { client, out };
+    }
+    const callSecure = async (client: Client) => {
+      const response = await client.callTool({ name: 'open_secure_area', arguments: {} });
+      return JSON.parse((response.content as Array<{ text: string }>)[0].text);
+    };
+
+    beforeAll(async () => {
+      stateDir = await mkdtemp(join(tmpdir(), 'daemonize-docker-state-'));
+      statePath = join(stateDir, 'storage-state.json');
+      await writeFile(
+        statePath,
+        JSON.stringify({
+          cookies: [{ name: 'session', value: SESSION, domain: 'host.docker.internal', path: '/', expires: -1, httpOnly: false, secure: false, sameSite: 'Lax' }],
+          origins: [],
+        })
+      );
+    });
+
+    afterAll(async () => {
+      await removeDir(stateDir);
+      for (const out of dirs) await removeDir(out);
+    });
+
+    it('puts no storageState, env or auth file of the build context in any layer of the image', () => {
+      // Walk the whole file system of the image for the marker that was written into those files
+      const found = spawnSync(
+        'docker',
+        ['run', '--rm', '--pull', 'never', '--entrypoint', 'sh', tag, '-c', `echo '${SESSION}' > /tmp/control-file; grep -rIl --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev '${SESSION}' / 2>/dev/null; echo scan-complete`],
+        { encoding: 'utf-8', timeout: 280000 }
+      );
+      // The only hit is the control file written by the scan itself, which proves the scan finds the marker
+      expect(found.stdout.trim().split('\n')).toEqual(['/tmp/control-file', 'scan-complete']);
+    }, 300000);
+
+    it('replays with the saved login mounted read-only: it succeeds with it, and fails strictly without it', async () => {
+      const withState = await connectSecure(statePath, {});
+      try {
+        const result = await callSecure(withState.client);
+        expect(result, JSON.stringify(result)).toMatchObject({ success: true, title: 'Done' });
+        expect(result.text).toContain('Welcome back');
+        // Neither the result nor the diagnostics carry the cookie value
+        expect(JSON.stringify(result)).not.toContain(SESSION);
+      } finally {
+        await withState.client.close();
+      }
+
+      const without = await connectSecure(undefined, {});
+      try {
+        const result = await callSecure(without.client);
+        expect(result, JSON.stringify(result)).toMatchObject({ success: false, drifted: true, error: 'step_failed' });
+        expect(JSON.stringify(result)).not.toContain(SESSION);
+      } finally {
+        await without.client.close();
+      }
+    }, 240000);
+
+    it('reports a missing saved login with its path', async () => {
+      const missing = join(stateDir, 'no-such-state.json');
+      const { client } = await connectSecure(missing, {});
+      try {
+        const result = await callSecure(client);
+        expect(result).toMatchObject({ success: false, error: 'storage_state_missing', failure: { path: missing } });
+      } finally {
+        await client.close();
+      }
+    }, 120000);
+
+    it('resolves the saved login from DAEMONIZE_STORAGE_STATE on the host', async () => {
+      const { client } = await connectSecure(undefined, { DAEMONIZE_STORAGE_STATE: statePath });
+      try {
+        const result = await callSecure(client);
+        expect(result, JSON.stringify(result)).toMatchObject({ success: true, title: 'Done' });
+      } finally {
+        await client.close();
+      }
+    }, 120000);
+
+    it('builds docker arguments that mount the file read-only, which the container cannot modify or leak into the command line', async () => {
+      const out = await mkdtemp(join(workspaceRoot, '.docker-auth-'));
+      dirs.push(out);
+      const log = console.log;
+      console.log = () => { };
+      try {
+        await new Compiler().compile(new SchemaInferencer().inferWorkflows(secureSet(statePath)), out);
+      } finally {
+        console.log = log;
+      }
+      process.env.DAEMONIZE_SANDBOX_IMAGE = tag;
+      let args: string[];
+      try {
+        const mod = await import(/* @vite-ignore */ pathToFileURL(join(out, 'docker-replay.js')).href);
+        args = mod.buildDockerArgs({ name: 'daemonize-ro-probe', timeoutEnv: [], steps: [], storagePath: statePath }) as string[];
+      } finally {
+        delete process.env.DAEMONIZE_SANDBOX_IMAGE;
+      }
+
+      // The command line: an absolute path and a read-only mount, never the content of the file
+      expect(args).toContain(`${statePath}:/run/daemonize/storage-state.json:ro`);
+      expect(args).toContain('DAEMONIZE_STORAGE_STATE=/run/daemonize/storage-state.json');
+      expect(args.join(' ')).not.toContain(SESSION);
+
+      // The same mount, as the container sees it: readable, not writable (the image is the last argument)
+      const probe = spawnSync(
+        'docker',
+        [...args.slice(0, -1), '--entrypoint', 'sh', args[args.length - 1], '-c', 'cat "$DAEMONIZE_STORAGE_STATE" > /dev/null && echo readable; (echo x >> "$DAEMONIZE_STORAGE_STATE") 2>/dev/null && echo writable || echo read-only'].filter((a) => a !== '-i'),
+        { encoding: 'utf-8', timeout: 60000 }
+      );
+      expect(probe.stdout, probe.stderr).toContain('readable');
+      expect(probe.stdout).toContain('read-only');
+      expect(probe.stdout).not.toContain('writable');
+      expect(readFileSync(statePath, 'utf-8')).toContain(SESSION); // untouched
+    }, 120000);
+  });
 
   it('leaves no container behind', () => {
     const left = spawnSync('docker', ['ps', '-a', '--filter', 'name=daemonize-', '--format', '{{.Names}}'], {

@@ -7,6 +7,8 @@ import type { Workflow, WorkflowSet } from '../types.js';
 // itself may not carry call signatures in TypeScript's view.
 const addFormats = _addFormats as unknown as (ajv: Ajv2020) => void;
 
+const SECRET_NAME_PATTERN = '^[A-Z][A-Z0-9_]*$';
+
 /**
  * JSON Schema (draft 2020-12) for the persisted Workflow set.
  */
@@ -23,6 +25,8 @@ export const WorkflowSetSchema: Record<string, unknown> = {
     startUrl: { type: 'string' },
     startCommand: { type: 'array', minItems: 1, items: { type: 'string' } },
     storageState: { type: 'string' },
+    sandbox: { $ref: '#/$defs/Sandbox' },
+    timeoutMs: { type: 'integer', minimum: 1 },
     workflows: { type: 'array', items: { $ref: '#/$defs/Workflow' } },
   },
   // A web target needs its URL, a terminal target its command
@@ -44,12 +48,23 @@ export const WorkflowSetSchema: Record<string, unknown> = {
       properties: {
         actionType: {
           type: 'string',
-          enum: ['click', 'keypress', 'form_submit', 'type', 'select'],
+          enum: ['click', 'keypress', 'form_submit', 'type', 'select', 'hover', 'scrollIntoView', 'switch_page'],
         },
         selectors: { type: 'array', items: { type: 'string' } },
         value: { type: 'string' },
         variable: { type: 'string' },
         label: { type: 'string' },
+        anchor: { $ref: '#/$defs/Anchor' },
+        rowBinding: { $ref: '#/$defs/RowBinding' },
+        http: { $ref: '#/$defs/Http' },
+        visual: { $ref: '#/$defs/Visual' },
+        risk: { type: 'string', enum: ['read', 'write', 'delete'] },
+        allowHeal: { type: 'boolean' },
+        secretRef: { type: 'string', pattern: SECRET_NAME_PATTERN },
+        totp: { type: 'boolean' },
+        resultZone: { $ref: '#/$defs/ResultZone' },
+        waitFor: { $ref: '#/$defs/ScreenWait' },
+        timeoutMs: { type: 'integer', minimum: 1 },
       },
     },
     Variable: {
@@ -94,6 +109,236 @@ export const WorkflowSetSchema: Record<string, unknown> = {
         observedPayloads: { type: 'array', items: { type: 'object' } },
         inputSchema: { type: 'object' },
         outputSchema: { type: 'object' },
+        cols: { type: 'integer', minimum: 1 },
+        rows: { type: 'integer', minimum: 1 },
+        secrets: {
+          type: 'array',
+          items: {
+            oneOf: [
+              { type: 'string', pattern: SECRET_NAME_PATTERN },
+              { $ref: '#/$defs/SecretReference' },
+            ],
+          },
+        },
+        timeoutMs: { type: 'integer', minimum: 1 },
+      },
+    },
+    Rect: {
+      type: 'object',
+      required: ['row', 'col', 'rows', 'cols'],
+      additionalProperties: false,
+      properties: {
+        row: { type: 'integer', minimum: 0 },
+        col: { type: 'integer', minimum: 0 },
+        rows: { type: 'integer', minimum: 1 },
+        cols: { type: 'integer', minimum: 1 },
+      },
+    },
+    Anchor: {
+      type: 'object',
+      required: ['role', 'name', 'frame'],
+      additionalProperties: false,
+      properties: {
+        role: { type: 'string', minLength: 1 },
+        name: { type: 'string' },
+        parent: {
+          type: 'object',
+          required: ['kind', 'name'],
+          additionalProperties: false,
+          properties: {
+            kind: { type: 'string', enum: ['dialog', 'region', 'heading', 'label'] },
+            name: { type: 'string' },
+          },
+        },
+        frame: { type: 'array', items: { type: 'integer', minimum: 0 } },
+        frameHints: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: { name: { type: 'string' }, title: { type: 'string' }, src: { type: 'string' } },
+          },
+        },
+        popup: {
+          type: 'object',
+          required: ['page'],
+          additionalProperties: false,
+          properties: {
+            page: { type: 'integer', minimum: 0 },
+            opens: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    RowBinding: {
+      type: 'object',
+      required: ['container'],
+      additionalProperties: false,
+      properties: {
+        container: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            kind: { type: 'string', enum: ['row', 'card', 'listitem'] },
+            role: { type: 'string', minLength: 1 },
+            selectorHint: { type: 'string', minLength: 1 },
+          },
+        },
+        key: {
+          type: 'object',
+          required: ['text'],
+          additionalProperties: false,
+          properties: {
+            text: { type: 'string' },
+            column: { type: 'string', minLength: 1 },
+          },
+        },
+        variable: { type: 'string', minLength: 1 },
+      },
+    },
+    SecretValueRef: {
+      type: 'object',
+      required: ['$secret'],
+      additionalProperties: false,
+      properties: { $secret: { type: 'string', pattern: SECRET_NAME_PATTERN } },
+    },
+    Http: {
+      type: 'object',
+      required: ['method', 'url', 'query', 'bindings', 'redacted'],
+      additionalProperties: false,
+      properties: {
+        method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] },
+        url: { type: 'string', minLength: 1 },
+        query: { type: 'object', additionalProperties: { type: 'string' } },
+        body: {},
+        headers: {
+          type: 'object',
+          additionalProperties: {
+            oneOf: [{ type: 'string' }, { $ref: '#/$defs/SecretValueRef' }],
+          },
+        },
+        bindings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['variable', 'in', 'name'],
+            additionalProperties: false,
+            properties: {
+              variable: { type: 'string', minLength: 1 },
+              in: { type: 'string', enum: ['query', 'body', 'path'] },
+              name: { type: 'string' },
+            },
+          },
+        },
+        redacted: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['in', 'name', 'secret'],
+            additionalProperties: false,
+            properties: {
+              in: { type: 'string', enum: ['header', 'query', 'body'] },
+              name: { type: 'string' },
+              secret: { type: 'string', pattern: SECRET_NAME_PATTERN },
+            },
+          },
+        },
+      },
+    },
+    Visual: {
+      type: 'object',
+      required: ['thumbnailPath', 'rect', 'intent'],
+      additionalProperties: false,
+      properties: {
+        thumbnailPath: { type: 'string', minLength: 1 },
+        rect: {
+          type: 'object',
+          required: ['x', 'y', 'w', 'h'],
+          additionalProperties: false,
+          properties: {
+            x: { type: 'number', minimum: 0, maximum: 1 },
+            y: { type: 'number', minimum: 0, maximum: 1 },
+            w: { type: 'number', minimum: 0, maximum: 1 },
+            h: { type: 'number', minimum: 0, maximum: 1 },
+          },
+        },
+        intent: { type: 'string' },
+      },
+    },
+    ScreenWait: {
+      type: 'object',
+      required: ['pattern', 'timeoutMs'],
+      additionalProperties: false,
+      properties: {
+        pattern: { type: 'string', minLength: 1 },
+        timeoutMs: { type: 'integer', minimum: 1 },
+        when: { type: 'string', enum: ['before', 'after'] },
+      },
+    },
+    FieldSpec: {
+      type: 'object',
+      required: ['name', 'selector'],
+      additionalProperties: false,
+      properties: {
+        name: { type: 'string', minLength: 1 },
+        selector: { type: 'string' },
+        attr: { type: 'string' },
+      },
+    },
+    ResultZone: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        selector: { type: 'string', minLength: 1 },
+        rect: { $ref: '#/$defs/Rect' },
+        extractor: {
+          oneOf: [
+            {
+              type: 'object',
+              required: ['kind'],
+              additionalProperties: false,
+              properties: { kind: { const: 'text' } },
+            },
+            {
+              type: 'object',
+              required: ['kind', 'fields'],
+              additionalProperties: false,
+              properties: {
+                kind: { const: 'fields' },
+                fields: { type: 'array', items: { $ref: '#/$defs/FieldSpec' } },
+              },
+            },
+            {
+              type: 'object',
+              required: ['kind', 'rowSelector', 'columns'],
+              additionalProperties: false,
+              properties: {
+                kind: { const: 'table' },
+                rowSelector: { type: 'string' },
+                columns: { type: 'array', items: { $ref: '#/$defs/FieldSpec' } },
+              },
+            },
+          ],
+        },
+      },
+    },
+    SecretReference: {
+      type: 'object',
+      required: ['name', 'kind'],
+      additionalProperties: false,
+      properties: {
+        name: { type: 'string', pattern: SECRET_NAME_PATTERN },
+        kind: { type: 'string', enum: ['password', 'totp', 'token', 'header'] },
+      },
+    },
+    Sandbox: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        image: { type: 'string', minLength: 1 },
+        packages: { type: 'array', items: { type: 'string' } },
+        install: { type: 'array', items: { type: 'string' } },
+        network: { type: 'string', enum: ['none', 'bridge'] },
       },
     },
   },
@@ -110,6 +355,60 @@ function createValidator(): ValidateFunction {
   return compiled;
 }
 
+const SENSITIVE_KEY = /^(authorization|cookie|set-cookie|token)$/i;
+const PASSWORD_SELECTOR = /type\s*=\s*["']?password/i;
+const PASSWORD_LABEL = /pass(word|wd)|mot de passe/i;
+
+function isSecretReference(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as Record<string, unknown>)['$secret'] === 'string'
+  );
+}
+
+function walkSensitiveKeys(value: unknown, path: string, out: string[]): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => walkSensitiveKeys(item, `${path}[${i}]`, out));
+  } else if (typeof value === 'object' && value !== null) {
+    for (const [key, child] of Object.entries(value)) {
+      const childPath = `${path}.${key}`;
+      if (SENSITIVE_KEY.test(key) && !isSecretReference(child)) {
+        out.push(childPath);
+      } else if (!isSecretReference(child)) {
+        walkSensitiveKeys(child, childPath, out);
+      }
+    }
+  }
+}
+
+/**
+ * Find literals that must be Secret_References: a `value` on a step typing a
+ * secret (`secretRef`, `totp` or a password field) and any authorization,
+ * cookie, set-cookie or token key inside an `http` recipe. Returns JSON paths.
+ */
+export function findPlainSecrets(set: WorkflowSet): string[] {
+  const found: string[] = [];
+  (set.workflows ?? []).forEach((workflow, wi) => {
+    (workflow.steps ?? []).forEach((step, si) => {
+      const base = `$.workflows[${wi}].steps[${si}]`;
+      const typesSecret =
+        step.secretRef !== undefined ||
+        step.totp === true ||
+        (step.actionType === 'type' &&
+          ((step.selectors ?? []).some((s) => PASSWORD_SELECTOR.test(s)) ||
+            (step.label !== undefined && PASSWORD_LABEL.test(step.label))));
+      if (typesSecret && step.value !== undefined) found.push(`${base}.value`);
+      if (step.http !== undefined) {
+        const { redacted: _redacted, bindings: _bindings, ...rest } = step.http;
+        walkSensitiveKeys(rest, `${base}.http`, found);
+      }
+    });
+  });
+  return found;
+}
+
 /**
  * Serialize a Workflow set to pretty-printed JSON (2-space indentation),
  * validating it against the Workflow set JSON Schema first.
@@ -118,6 +417,12 @@ export function serializeWorkflowSet(set: WorkflowSet): string {
   const validate = createValidator();
   if (!validate(set)) {
     throw new Error(`Workflow set validation failed: ${JSON.stringify(validate.errors, null, 2)}`);
+  }
+  const plain = findPlainSecrets(set);
+  if (plain.length > 0) {
+    throw new Error(
+      `Workflow set contains plain-text secrets at ${plain.join(', ')}; use a secretRef or a {"$secret":"NAME"} reference instead`,
+    );
   }
   return JSON.stringify(set, null, 2);
 }
@@ -142,7 +447,16 @@ export function deserializeWorkflowSet(json: string): WorkflowSet {
       firstError.message ?? 'Unknown validation error',
     );
   }
-  return parsed as WorkflowSet;
+  const set = parsed as WorkflowSet;
+  const plain = findPlainSecrets(set);
+  if (plain.length > 0) {
+    throw new DescriptiveParseError(
+      plain[0],
+      'secret-safety',
+      `plain-text secret at ${plain.join(', ')}; use a secretRef or a {"$secret":"NAME"} reference`,
+    );
+  }
+  return set;
 }
 
 /**

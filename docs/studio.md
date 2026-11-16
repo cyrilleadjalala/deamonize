@@ -53,7 +53,7 @@ by the build. It is git-ignored and generated; do not edit it.
 
 `.github/workflows/studio-demo.yml` builds the demo with Node 22 (`npm ci`, `npm run build`, `npm run studio:build`)
 and publishes `dist-demo/` on every push to `main` and on manual dispatch. For this to work, enable Pages once:
-**Settings > Pages > Source: GitHub Actions**. The site is then served at `https://<user>.github.io/<repo>/`.
+**Settings > Pages > Source: GitHub Actions**. The site is then served at `https://<user>.github.io/<repo>/`. This repository's demo: https://cyrilleadjalala.github.io/deamonize/
 Nothing is deployed until you do that and the workflow has run.
 
 ## Screenshots

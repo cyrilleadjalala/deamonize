@@ -3,8 +3,9 @@ import { ToolNameDeriver } from './tool-name-deriver.js';
 import { OpenApiGenerator } from './openapi-generator.js';
 import { McpGenerator } from './mcp-generator.js';
 import { KiroPowerGenerator } from './kiro-power-generator.js';
-import { writeFile, mkdir, access } from 'node:fs/promises';
-import { join } from 'node:path';
+import { writeFile, mkdir, access, readFile } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 // What the generated server needs at run time (it has no Daemonize dependency).
@@ -27,6 +28,18 @@ const TEST_DEPENDENCIES = {
   vite: '^7.3.8',
   vitest: '^5.1.0',
 };
+
+// Shared pure run-time logic, copied verbatim into the output (the shipped file is the tested file).
+// Resolved from src/compiler or dist/compiler alike: both sit two levels under the package root.
+const RUNTIME_SCREEN_HASH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'replay',
+  'runtime',
+  'screen-hash.ts'
+);
 
 export class Compiler {
   private toolNameDeriver = new ToolNameDeriver();
@@ -54,6 +67,7 @@ export class Compiler {
     const imageTag = `${slugOf(set.targetName)}-sandbox`;
     const dockerReplaySource = this.mcpGenerator.generateDockerReplay(set, imageTag);
     const sandbox = this.mcpGenerator.generateSandboxFiles(set);
+    const screenHashSource = await readFile(RUNTIME_SCREEN_HASH, 'utf-8');
     const kiroPower = this.kiroPowerGenerator.generate(set, toolNames, outputDir);
     const powerName = kiroPower.plugin.name;
 
@@ -75,6 +89,8 @@ export class Compiler {
       replay: join(outputDir, 'replay.js'),
       dockerReplaySource: join(outputDir, 'docker-replay.ts'),
       dockerReplay: join(outputDir, 'docker-replay.js'),
+      screenHashSource: join(outputDir, 'screen-hash.ts'),
+      screenHash: join(outputDir, 'screen-hash.js'),
       plugin: join(outputDir, 'plugin.json'),
       mcp: join(outputDir, 'mcp.json'),
       skill: join(outputDir, 'skills', powerName, 'SKILL.md'),
@@ -89,6 +105,8 @@ export class Compiler {
       writeFile(files.replay, this.toJavaScript(replaySource)),
       writeFile(files.dockerReplaySource, dockerReplaySource),
       writeFile(files.dockerReplay, this.toJavaScript(dockerReplaySource)),
+      writeFile(files.screenHashSource, screenHashSource),
+      writeFile(files.screenHash, this.toJavaScript(screenHashSource)),
       writeFile(files.plugin, JSON.stringify(kiroPower.plugin, null, 2)),
       writeFile(files.mcp, JSON.stringify(kiroPower.mcp, null, 2)),
       writeFile(files.skill, kiroPower.skill),

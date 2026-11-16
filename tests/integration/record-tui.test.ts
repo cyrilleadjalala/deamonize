@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PassThrough } from 'node:stream';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { recordTui, type TerminalInput } from '../../src/cli/commands/record-tui.js';
@@ -8,6 +8,7 @@ import { MENU_KEY } from '../../src/recorder/key-tokenizer.js';
 import { Replayer } from '../../src/replayer/replayer.js';
 import { PtyDriver } from '../../src/sandbox/pty-driver.js';
 import { deserializeWorkflowSet } from '../../src/workflow/workflow-set.js';
+import { removeDir } from '../helpers/cleanup.js';
 
 const greeter = join(resolve(import.meta.dirname, '..'), 'fixtures', 'greeter.mjs');
 
@@ -41,7 +42,7 @@ describe('recordTui: record a terminal program, then replay it', () => {
   });
 
   afterAll(async () => {
-    await rm(dir, { recursive: true, force: true });
+    await removeDir(dir);
   });
 
   it('records the keys, a variable named from the menu, and the final screen', async () => {

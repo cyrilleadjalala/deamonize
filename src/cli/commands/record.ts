@@ -12,6 +12,7 @@ export interface RecordOptions {
   out: string;                  // Workflow set file; created, or merged into when it exists
   storageState?: string;        // Playwright storage state: start the recording already logged in
   headless?: boolean;           // default false: the user needs to see the browser
+  finalZone?: string;           // CSS selector: drift is judged on this part of the final page only
   /**
    * Replaces the wait for the user (Enter key or closing the window).
    * The session ends when it resolves; used to drive the page from tests.
@@ -39,7 +40,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
 
   // The browser going away on its own (crash, killed) is not the user ending the session
   let closing = false;
-  let signalStopped: (reason: string) => void = () => {};
+  let signalStopped: (reason: string) => void = () => { };
   const stopped = new Promise<never>((_, reject) => {
     signalStopped = (reason) => {
       if (!closing) {
@@ -47,7 +48,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
       }
     };
   });
-  stopped.catch(() => {});
+  stopped.catch(() => { });
   browser.on('disconnected', () => signalStopped('the browser exited'));
 
   let recorder: WorkflowRecorder | undefined;
@@ -70,8 +71,11 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     await Promise.race([session, stopped]);
 
     // The final screen is only available while the window is still open
-    const finalScreen = page.isClosed() ? undefined : await captureFinalScreen(page);
-    const workflow = recorder.finish(finalScreen);
+    const finalScreen = page.isClosed() ? undefined : await captureFinalScreen(page, options.finalZone);
+    const workflow = recorder.finish(
+      finalScreen,
+      options.finalZone !== undefined ? { selector: options.finalZone } : undefined
+    );
 
     const totalWorkflows = await saveWorkflow(options.out, target, workflow);
 
@@ -89,12 +93,12 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     throw await interrupted((err as Error).message, options.out, target, recorder, live);
   } finally {
     closing = true;
-    await browser.close().catch(() => {});
+    await browser.close().catch(() => { });
   }
 }
 
 /** The browser went away on its own while the user was recording. */
-class BrowserStoppedError extends Error {}
+class BrowserStoppedError extends Error { }
 
 /**
  * The browser stopped while recording: say so, and keep what was recorded in a
@@ -133,7 +137,13 @@ async function waitForUser(page: Page): Promise<void> {
   }
 }
 
-async function captureFinalScreen(page: Page): Promise<ScreenContent> {
-  const raw = await page.content();
+async function captureFinalScreen(page: Page, zone?: string): Promise<ScreenContent> {
+  // With a zone, only that element is kept: it is what the generated server hashes at run time
+  const raw =
+    zone === undefined
+      ? await page.content()
+      : await page.locator(zone).first().evaluate((el: Element) => el.outerHTML, { timeout: 5000 }).catch(() => {
+        throw new Error(`The final zone "${zone}" matches nothing on the final page`);
+      });
   return { type: 'dom', raw, normalized: raw, capturedAt: Date.now() };
 }

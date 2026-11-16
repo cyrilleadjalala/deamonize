@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildProgram } from '../../src/cli/index.js';
@@ -9,6 +9,7 @@ import { record } from '../../src/cli/commands/record.js';
 import { serve } from '../../src/cli/commands/serve.js';
 import { compile } from '../../src/cli/commands/compile.js';
 import { deserializeWorkflowSet } from '../../src/workflow/workflow-set.js';
+import { removeDir } from '../helpers/cleanup.js';
 
 const FORM_PAGE = `<!doctype html>
 <html><head><title>New customer</title></head>
@@ -47,7 +48,7 @@ describe('CLI: record → compile → merge', () => {
   afterAll(async () => {
     await new Promise<void>((done) => httpServer?.close(() => done()));
     if (dir) {
-      await rm(dir, { recursive: true, force: true });
+      await removeDir(dir);
     }
   });
 
@@ -136,6 +137,8 @@ describe('CLI: record → compile → merge', () => {
       'replay.js',
       'replay.ts',
       'sandbox',
+      'screen-hash.js',
+      'screen-hash.ts',
       'skills',
       'tests',
       'vitest.config.ts',

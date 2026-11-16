@@ -74,6 +74,11 @@ export interface WorkflowVariable {
   optional?: boolean;
 }
 
+export interface FinalZone {
+  selector?: string;
+  rect?: { row: number; col: number; rows: number; cols: number };
+}
+
 // A complete recorded path from a known start state; one MCP tool per workflow
 export interface Workflow {
   id: string;                              // UUID
@@ -81,6 +86,9 @@ export interface Workflow {
   steps: WorkflowStep[];
   variables: WorkflowVariable[];
   finalScreenId?: ScreenId;                // used for drift detection only
+  // Restricts the drift hash to a part of the final screen (web: CSS selector;
+  // terminal: rectangle, 0-based). finalScreenId is then the hash of that zone.
+  finalZone?: FinalZone;
   observedPayloads: Record<string, unknown>[];
   inputSchema?: Record<string, unknown>;   // JSON Schema object
   outputSchema?: Record<string, unknown>;  // JSON Schema object

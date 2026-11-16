@@ -1,5 +1,6 @@
 import type { SandboxDriver } from '../sandbox/driver.js';
 import { ScreenHasher } from '../state/screen-hasher.js';
+import { cropTerminal } from '../replay/runtime/screen-hash.js';
 import { extractResult } from './result-extractor.js';
 import type {
   Workflow,
@@ -17,7 +18,7 @@ export type DriverFactory = () => SandboxDriver;
 export class Replayer {
   private readonly hasher = new ScreenHasher();
 
-  constructor(private readonly createDriver: DriverFactory) {}
+  constructor(private readonly createDriver: DriverFactory) { }
 
   /**
    * Replay a workflow from scratch: every call gets a fresh sandbox, so no
@@ -66,7 +67,14 @@ export class Replayer {
         elapsedMs: elapsed(),
       };
       if (workflow.finalScreenId !== undefined) {
-        result.drifted = this.hasher.computeId(outcome) !== workflow.finalScreenId;
+        // A terminal zone is cropped like at recording time; a web zone needs a browser
+        // and is only judged by the generated server.
+        const rect = workflow.finalZone?.rect;
+        const compared: ScreenContent =
+          outcome.type === 'terminal' && rect !== undefined
+            ? { ...outcome, raw: cropTerminal(outcome.raw, rect) }
+            : outcome;
+        result.drifted = this.hasher.computeId(compared) !== workflow.finalScreenId;
       }
       return result;
     } catch (err) {

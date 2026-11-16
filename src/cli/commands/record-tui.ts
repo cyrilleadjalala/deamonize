@@ -1,6 +1,7 @@
 import pty from 'node-pty';
 import { TerminalRecorder } from '../../recorder/terminal-recorder.js';
 import { TerminalScreen } from '../../sandbox/terminal-screen.js';
+import { cropTerminal } from '../../replay/runtime/screen-hash.js';
 import { saveWorkflow } from './save-workflow.js';
 import type { RecordSummary } from './record.js';
 import type { ScreenContent } from '../../types.js';
@@ -24,6 +25,7 @@ export interface RecordTuiOptions {
   cols?: number;                // default: the width of the output terminal, or 80
   rows?: number;                // default: the height of the output terminal, or 24
   stabilizeMs?: number;         // silence that counts as "the screen is stable", default 150
+  finalRect?: { row: number; col: number; rows: number; cols: number }; // drift is judged on this part of the final screen only
   input?: TerminalInput;        // default: process.stdin
   output?: { write(data: string): unknown; columns?: number; rows?: number }; // default: process.stdout
 }
@@ -101,10 +103,11 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
 
     // Let the program finish drawing before keeping the screen it ended on
     await screen.settle(stabilizeMs, 2000);
-    const text = screen.text();
+    const fullText = screen.text();
+    const text = options.finalRect ? cropTerminal(fullText, options.finalRect) : fullText;
     const finalScreen: ScreenContent = { type: 'terminal', raw: text, normalized: text, capturedAt: Date.now() };
 
-    const workflow = recorder.finish(finalScreen);
+    const workflow = recorder.finish(finalScreen, options.finalRect ? { rect: options.finalRect } : undefined);
     const totalWorkflows = await saveWorkflow(
       options.out,
       { targetType: 'tui', name: options.name, startCommand: options.command },

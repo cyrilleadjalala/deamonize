@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -11,6 +11,7 @@ import { invalidPayloadArbitrary } from '../../src/pbt/schema-arbitrary.js';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import { Compiler } from '../../src/compiler/compiler.js';
 import type { WorkflowSet } from '../../src/types.js';
+import { closeClient, removeDir } from '../helpers/cleanup.js';
 
 const FORM_PAGE = `<!doctype html>
 <html><head><title>New customer</title></head>
@@ -34,6 +35,7 @@ describe('Workflow end to end (record → compile → serve → call)', () => {
   let httpServer: Server;
   let outputDir: string;
   let client: Client;
+  let transport: StdioClientTransport;
   let annotated: WorkflowSet;
 
   beforeAll(async () => {
@@ -63,8 +65,7 @@ describe('Workflow end to end (record → compile → serve → call)', () => {
           observedPayloads: [],
         },
         {
-          // Observed as a string and as a number: the schema accepts both, which
-          // the generated zod schema cannot express, so only AJV can refuse a boolean
+          // Observed as a string and as a number: the schema accepts both (anyOf)
           id: '55555555-5555-4555-8555-555555555555',
           label: 'Submit code',
           steps: [{ actionType: 'type', selectors: ['#name'], variable: 'code' }],
@@ -78,7 +79,7 @@ describe('Workflow end to end (record → compile → serve → call)', () => {
     // resolve @modelcontextprotocol/sdk, zod and playwright from node_modules.
     outputDir = await mkdtemp(join(workspaceRoot, '.e2e-'));
     const log = console.log;
-    console.log = () => {};
+    console.log = () => { };
     try {
       annotated = new SchemaInferencer().inferWorkflows(set);
       await new Compiler().compile(annotated, outputDir);
@@ -105,24 +106,23 @@ describe('Workflow end to end (record → compile → serve → call)', () => {
     );
 
     client = new Client({ name: 'e2e-test', version: '1.0.0' });
-    await client.connect(
-      new StdioClientTransport({
-        command: process.execPath,
-        args: [join(outputDir, 'mcp-server.js')],
-        cwd: workspaceRoot,
-        // Lets the run use an already installed browser instead of the one Playwright expects
-        env: process.env.DAEMONIZE_CHROMIUM_PATH
-          ? { DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH }
-          : undefined,
-      }),
-    );
+    transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [join(outputDir, 'mcp-server.js')],
+      cwd: workspaceRoot,
+      // Lets the run use an already installed browser instead of the one Playwright expects
+      env: process.env.DAEMONIZE_CHROMIUM_PATH
+        ? { DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH }
+        : undefined,
+    });
+    await client.connect(transport);
   }, 60000);
 
   afterAll(async () => {
-    await client?.close();
+    await closeClient(client, transport);
     await new Promise<void>((done) => httpServer?.close(() => done()));
     if (outputDir) {
-      await rm(outputDir, { recursive: true, force: true });
+      await removeDir(outputDir);
     }
   });
 
@@ -151,16 +151,11 @@ describe('Workflow end to end (record → compile → serve → call)', () => {
   }, 30000);
 
   it('refuses a payload that breaks the inferred schema, without replaying anything', async () => {
-    const response = await client.callTool({ name: 'submit_code', arguments: { code: true } });
-    const content = response.content as Array<{ type: string; text: string }>;
-    const result = JSON.parse(content[0].text);
+    // The schema accepts a string or a number; the generated zod schema now enforces
+    // that union itself, so the MCP layer refuses the boolean before the AJV check
+    const refused = await callAndGetText('submit_code', { code: true });
 
-    expect(response.isError).toBe(true);
-    expect(result).toMatchObject({ success: false, error: 'validation' });
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0]).toEqual(
-      expect.objectContaining({ instancePath: '/code', message: expect.any(String) })
-    );
+    expect(refused.refused).toBe(true);
   }, 30000);
 
   it('never replays a payload generated to break the schema of any tool', async () => {
@@ -168,7 +163,6 @@ describe('Workflow end to end (record → compile → serve → call)', () => {
       'Create customer': 'create_customer',
       'Submit code': 'submit_code',
     };
-    let refusedByAjv = 0;
 
     for (const workflow of annotated.workflows) {
       const tool = toolNames[workflow.label];
@@ -183,14 +177,8 @@ describe('Workflow end to end (record → compile → serve → call)', () => {
         // of the generated server; either way nothing must be replayed.
         const text = await callAndGetText(tool, payload as Record<string, unknown>);
         expect(text.refused, `${tool} accepted ${JSON.stringify(payload)}`).toBe(true);
-        if (text.validation) {
-          refusedByAjv += 1;
-        }
       }
     }
-
-    // The alternatives of "submit_code" can only be enforced by AJV
-    expect(refusedByAjv).toBeGreaterThan(0);
   }, 120000);
 
   async function callAndGetText(

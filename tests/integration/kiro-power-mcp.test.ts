@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { Compiler } from '../../src/compiler/compiler.js';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
+import { closeClient, removeDir } from '../helpers/cleanup.js';
 import type { WorkflowSet } from '../../src/types.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
@@ -36,6 +37,7 @@ describe('Kiro Power import: mcp.json launches the generated server (Requirement
   let outputDir: string;
   let otherCwd: string;
   let client: Client;
+  let transport: StdioClientTransport;
   let mcp: { mcpServers: Record<string, { command: string; args: string[]; env?: Record<string, string> }> };
 
   beforeAll(async () => {
@@ -44,7 +46,7 @@ describe('Kiro Power import: mcp.json launches the generated server (Requirement
     otherCwd = await mkdtemp(join(tmpdir(), 'daemonize-cwd-'));
 
     const log = console.log;
-    console.log = () => {};
+    console.log = () => { };
     try {
       await new Compiler().compile(new SchemaInferencer().inferWorkflows(set), outputDir);
     } finally {
@@ -61,21 +63,21 @@ describe('Kiro Power import: mcp.json launches the generated server (Requirement
 
     // Exactly what Kiro does: spawn command + args from a directory unrelated to the Power
     client = new Client({ name: 'kiro-power-test', version: '1.0.0' });
-    await client.connect(
-      new StdioClientTransport({
-        command,
-        args,
-        env: { ...(process.env as Record<string, string>), ...(env ?? {}) },
-        cwd: otherCwd,
-      }),
-    );
+    transport = new StdioClientTransport({
+      command,
+      args,
+      env: { ...(process.env as Record<string, string>), ...(env ?? {}) },
+      cwd: otherCwd,
+    });
+    await client.connect(transport);
   }, 60000);
 
   afterAll(async () => {
-    await client?.close();
+    // The server runs in otherCwd: it must have exited before that directory can be removed
+    await closeClient(client, transport);
     for (const dir of [outputDir, otherCwd]) {
       if (dir) {
-        await rm(dir, { recursive: true, force: true });
+        await removeDir(dir);
       }
     }
   });

@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { Compiler } from '../../src/compiler/compiler.js';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import type { WorkflowSet } from '../../src/types.js';
+import { closeClient, removeDir } from '../helpers/cleanup.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 const greeter = join(workspaceRoot, 'tests', 'fixtures', 'greeter.mjs');
@@ -36,12 +37,13 @@ const set: WorkflowSet = {
 describe('Terminal workflow end to end (compile → serve → call)', () => {
   let outputDir: string;
   let client: Client;
+  let transport: StdioClientTransport;
 
   beforeAll(async () => {
     // Under the workspace so the generated server finds node-pty and @xterm/headless in node_modules
     outputDir = await mkdtemp(join(workspaceRoot, '.tui-e2e-'));
     const log = console.log;
-    console.log = () => {};
+    console.log = () => { };
     try {
       await new Compiler().compile(new SchemaInferencer().inferWorkflows(set), outputDir);
     } finally {
@@ -53,14 +55,14 @@ describe('Terminal workflow end to end (compile → serve → call)', () => {
       execFileSync(
         process.execPath,
         [
-        join(workspaceRoot, 'node_modules/typescript/bin/tsc'),
-        join(outputDir, 'mcp-server.ts'),
-        '--noEmit',
-        '--target', 'ES2022',
-        '--module', 'NodeNext',
-        '--moduleResolution', 'NodeNext',
-        '--strict',
-        '--skipLibCheck',
+          join(workspaceRoot, 'node_modules/typescript/bin/tsc'),
+          join(outputDir, 'mcp-server.ts'),
+          '--noEmit',
+          '--target', 'ES2022',
+          '--module', 'NodeNext',
+          '--moduleResolution', 'NodeNext',
+          '--strict',
+          '--skipLibCheck',
           '--types', 'node',
         ],
         { cwd: workspaceRoot, stdio: 'pipe' },
@@ -71,15 +73,14 @@ ${(err as { stdout?: Buffer }).stdout?.toString()}`);
     }
 
     client = new Client({ name: 'tui-e2e-test', version: '1.0.0' });
-    await client.connect(
-      new StdioClientTransport({ command: process.execPath, args: [join(outputDir, 'mcp-server.js')], cwd: workspaceRoot }),
-    );
+    transport = new StdioClientTransport({ command: process.execPath, args: [join(outputDir, 'mcp-server.js')], cwd: workspaceRoot });
+    await client.connect(transport);
   }, 60000);
 
   afterAll(async () => {
-    await client?.close();
+    await closeClient(client, transport);
     if (outputDir) {
-      await rm(outputDir, { recursive: true, force: true });
+      await removeDir(outputDir);
     }
   });
 

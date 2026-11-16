@@ -153,8 +153,12 @@ export class SchemaInferencer {
             type: 'boolean',
             description: 'True when the resulting screen differs from the recorded one',
           },
+          driftChecked: {
+            type: 'boolean',
+            description: 'False when the workflow has no recorded final screen, so drifted could not be judged',
+          },
         },
-        required: ['screenType', 'text'],
+        required: ['screenType', 'text', 'drifted', 'driftChecked'],
       };
     }
 

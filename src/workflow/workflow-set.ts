@@ -73,6 +73,24 @@ export const WorkflowSetSchema: Record<string, unknown> = {
         steps: { type: 'array', minItems: 1, items: { $ref: '#/$defs/Step' } },
         variables: { type: 'array', items: { $ref: '#/$defs/Variable' } },
         finalScreenId: { type: 'string', pattern: '^[0-9a-f]{16}$' },
+        finalZone: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            selector: { type: 'string', minLength: 1 },
+            rect: {
+              type: 'object',
+              required: ['row', 'col', 'rows', 'cols'],
+              additionalProperties: false,
+              properties: {
+                row: { type: 'integer', minimum: 0 },
+                col: { type: 'integer', minimum: 0 },
+                rows: { type: 'integer', minimum: 1 },
+                cols: { type: 'integer', minimum: 1 },
+              },
+            },
+          },
+        },
         observedPayloads: { type: 'array', items: { type: 'object' } },
         inputSchema: { type: 'object' },
         outputSchema: { type: 'object' },

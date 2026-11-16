@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { removeDir } from '../helpers/cleanup.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 
@@ -19,7 +20,7 @@ describe('Build output (what `npm run build` produces)', () => {
 
   afterAll(async () => {
     if (outDir) {
-      await rm(outDir, { recursive: true, force: true });
+      await removeDir(outDir);
     }
   });
 
@@ -42,5 +43,5 @@ describe('Build output (what `npm run build` produces)', () => {
     for (const command of ['record', 'compile', 'merge', 'serve']) {
       expect(run.stdout).toContain(command);
     }
-  });
+  }, 60000); // the CLI imports Playwright, node-pty and others at start: slow when the whole suite runs in parallel
 });

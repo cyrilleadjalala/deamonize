@@ -1,5 +1,6 @@
 import { KEY_SEQUENCES } from '../sandbox/keys.js';
 import { describeTool } from './tool-description.js';
+import { propertyToZodSource } from './zod-translator.js';
 import type { Workflow, WorkflowSet } from '../types.js';
 
 // The sandbox image of a web target starts from the Playwright image of this exact version,
@@ -27,8 +28,19 @@ const REPLAY_COMMON = [
   `// Where a replay starts when it runs in a sandbox that cannot reach the recorded one.`,
   `export type Overrides = { command?: string[]; url?: string };`,
   ``,
+  `// What the call is compared with to tell whether the application still looks as recorded.`,
+  `// finalZone limits the comparison: a CSS selector (web) or a rectangle of the screen (terminal).`,
+  `export type Zone = { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } };`,
+  `export type Final = { finalScreenId?: string; finalZone?: Zone };`,
+  ``,
   `const TIMEOUT_MS = 10000;`,
   `const MAX_TEXT_LENGTH = 20000;`,
+  ``,
+  `// Without a recorded final screen nothing can be compared: drifted is false and driftChecked says so.`,
+  `function driftFields(hash: string | undefined, final: Final): { drifted: boolean; driftChecked: boolean } {`,
+  `  if (final.finalScreenId === undefined) return { drifted: false, driftChecked: false };`,
+  `  return { drifted: hash !== final.finalScreenId, driftChecked: true };`,
+  `}`,
   ``,
   `function resolveValue(step: Step, args: Record<string, unknown>): string | undefined {`,
   `  if (step.variable !== undefined) {`,
@@ -101,7 +113,7 @@ const WEB_RUNTIME = [
   `  throw lastError instanceof Error ? lastError : new Error("No selector matched for step");`,
   `}`,
   ``,
-  `export async function replay(steps: Step[], args: Record<string, unknown>, overrides: Overrides = {}) {`,
+  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, overrides: Overrides = {}) {`,
   `  const startedAt = Date.now();`,
   `  const browser = await chromium.launch({`,
   `    headless: true,`,
@@ -120,11 +132,24 @@ const WEB_RUNTIME = [
   `        await runStep(page, step, args);`,
   `      }`,
   `      const text = await page.evaluate(() => document.body.innerText);`,
+  `      // The same screen as at recording time: the whole page, or only the zone when there is one`,
+  `      let hash: string | undefined;`,
+  `      if (final.finalScreenId !== undefined) {`,
+  `        const zone = final.finalZone?.selector;`,
+  `        // A zone that matches nothing leaves hash undefined, which counts as drift`,
+  `        const raw = zone === undefined`,
+  `          ? await page.content()`,
+  `          : (await page.locator(zone).count()) === 0`,
+  `            ? undefined`,
+  `            : await page.locator(zone).first().evaluate((el: Element) => el.outerHTML, { timeout: STEP_TIMEOUT_MS }).catch(() => undefined);`,
+  `        hash = raw === undefined ? undefined : screenId("dom", raw);`,
+  `      }`,
   `      return {`,
   `        success: true,`,
   `        screenType: "dom",`,
   `        title: await page.title(),`,
   `        text: text.slice(0, MAX_TEXT_LENGTH),`,
+  `        ...driftFields(hash, final),`,
   `        elapsedMs: Date.now() - startedAt`,
   `      };`,
   `    };`,
@@ -152,7 +177,7 @@ const TERMINAL_RUNTIME = [
   `// @xterm/headless is CommonJS: take the class from the default export.`,
   `const { Terminal } = xtermHeadless;`,
   ``,
-  `export async function replay(steps: Step[], args: Record<string, unknown>, overrides: Overrides = {}) {`,
+  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, overrides: Overrides = {}) {`,
   `  const startedAt = Date.now();`,
   `  const screen = new Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true, scrollback: 0 });`,
   `  let lastActivityAt = Date.now();`,
@@ -228,10 +253,17 @@ const TERMINAL_RUNTIME = [
   `        writesSinceTouch = 0;`,
   `        await settle();`,
   `      }`,
+  `      const finalText = screenText();`,
+  `      let hash: string | undefined;`,
+  `      if (final.finalScreenId !== undefined) {`,
+  `        const rect = final.finalZone?.rect;`,
+  `        hash = screenId("terminal", rect === undefined ? finalText : cropTerminal(finalText, rect));`,
+  `      }`,
   `      return {`,
   `        success: true,`,
   `        screenType: "terminal",`,
-  `        text: screenText().slice(0, MAX_TEXT_LENGTH),`,
+  `        text: finalText.slice(0, MAX_TEXT_LENGTH),`,
+  `        ...driftFields(hash, final),`,
   `        elapsedMs: Date.now() - startedAt`,
   `      };`,
   `    };`,
@@ -265,10 +297,11 @@ const CONTAINER_ENTRY = [
   `  const request = JSON.parse(input) as {`,
   `    steps: Step[];`,
   `    args: Record<string, unknown>;`,
+  `    final?: Final;`,
   `    command?: string[];`,
   `    url?: string;`,
   `  };`,
-  `  const result = await replay(request.steps, request.args, { command: request.command, url: request.url });`,
+  `  const result = await replay(request.steps, request.args, request.final ?? {}, { command: request.command, url: request.url });`,
   `  process.stdout.write(JSON.stringify(result) + "\\n");`,
   `  process.exit(0);`,
   `}`,
@@ -292,7 +325,7 @@ const DOCKER_RUNTIME = [
   `const REPLAY_TIMEOUT_MS = 10000;`,
   `const STARTUP_ALLOWANCE_MS = 20000;`,
   ``,
-  `export async function replayInDocker(steps: Step[], args: Record<string, unknown>) {`,
+  `export async function replayInDocker(steps: Step[], args: Record<string, unknown>, final: Final = {}) {`,
   `  const startedAt = Date.now();`,
   `  const fail = (error: string) => ({ success: false, error, elapsedMs: Date.now() - startedAt });`,
   ``,
@@ -347,7 +380,7 @@ const DOCKER_RUNTIME = [
   `    });`,
   `    // The container may end before it has read everything`,
   `    child.stdin.on("error", () => {});`,
-  `    child.stdin.end(JSON.stringify({ steps, args, command: COMMAND, url: URL_OVERRIDE }));`,
+  `    child.stdin.end(JSON.stringify({ steps, args, final, command: COMMAND, url: URL_OVERRIDE }));`,
   `  });`,
   `}`,
 ];
@@ -427,18 +460,22 @@ export class McpGenerator {
 
     const lines: string[] = [
       ...(set.targetType === 'web'
-        ? [`import { chromium, type Page } from "playwright";`]
-        : [`import pty from "node-pty";`, `import xtermHeadless from "@xterm/headless";`]),
+        ? [`import { chromium, type Page } from "playwright";`, `import { screenId } from "./screen-hash.js";`]
+        : [
+          `import pty from "node-pty";`,
+          `import xtermHeadless from "@xterm/headless";`,
+          `import { screenId, cropTerminal } from "./screen-hash.js";`,
+        ]),
       ``,
       ...(set.targetType === 'web'
         ? [
-            `const START_URL = ${JSON.stringify(set.startUrl)};`,
-            `const STORAGE_STATE: string | undefined = ${JSON.stringify(set.storageState)};`,
-          ]
+          `const START_URL = ${JSON.stringify(set.startUrl)};`,
+          `const STORAGE_STATE: string | undefined = ${JSON.stringify(set.storageState)};`,
+        ]
         : [
-            `const START_COMMAND: string[] = ${JSON.stringify(set.startCommand)};`,
-            `const KEY_SEQUENCES: Record<string, string> = ${JSON.stringify(KEY_SEQUENCES)};`,
-          ]),
+          `const START_COMMAND: string[] = ${JSON.stringify(set.startCommand)};`,
+          `const KEY_SEQUENCES: Record<string, string> = ${JSON.stringify(KEY_SEQUENCES)};`,
+        ]),
       ``,
       ...REPLAY_COMMON,
       ...(set.targetType === 'web' ? WEB_RUNTIME : TERMINAL_RUNTIME),
@@ -460,7 +497,7 @@ export class McpGenerator {
     const terminal = set.targetType === 'tui';
     const lines: string[] = [
       `import { spawn } from "node:child_process";`,
-      `import type { Step } from "./replay.js";`,
+      `import type { Step, Final } from "./replay.js";`,
       ``,
       `const DEFAULT_IMAGE = ${JSON.stringify(imageTag)};`,
       terminal
@@ -501,6 +538,7 @@ export class McpGenerator {
       'COPY sandbox/package.json ./package.json',
       'RUN npm install --omit=dev',
       'COPY replay.js ./replay.js',
+      'COPY screen-hash.js ./screen-hash.js',
       terminal ? 'USER node' : 'USER pwuser',
       'ENTRYPOINT ["node", "replay.js", "--container"]',
       '',
@@ -557,7 +595,7 @@ export class McpGenerator {
       `        isError: true`,
       `      };`,
       `    }`,
-      `    const result = await runReplay(${JSON.stringify(workflow.steps)}, args);`,
+      `    const result = await runReplay(${JSON.stringify(workflow.steps)}, args, ${JSON.stringify(this.finalOf(workflow))});`,
       `    return {`,
       `      content: [{ type: "text", text: JSON.stringify(result) }],`,
       `      isError: !result.success`,
@@ -567,6 +605,14 @@ export class McpGenerator {
     );
 
     return lines.join('\n');
+  }
+
+  /** The recorded final screen of a workflow (and its zone), embedded for the drift check. */
+  private finalOf(workflow: Workflow): { finalScreenId?: string; finalZone?: Workflow['finalZone'] } {
+    const final: { finalScreenId?: string; finalZone?: Workflow['finalZone'] } = {};
+    if (workflow.finalScreenId !== undefined) final.finalScreenId = workflow.finalScreenId;
+    if (workflow.finalZone !== undefined) final.finalZone = workflow.finalZone;
+    return final;
   }
 
   /** Input schema of each tool, keyed by tool name. */
@@ -606,52 +652,12 @@ export class McpGenerator {
     for (const [propName, propSchema] of Object.entries(
       properties as Record<string, unknown>
     )) {
-      const propDef = propSchema as Record<string, unknown>;
-      let zodExpr = this.jsonSchemaToZod(propDef);
-
-      // Wrap optional fields
-      if (!required.includes(propName)) {
-        zodExpr += '.optional()';
-      }
-
-      // Append description
-      if (typeof propDef['description'] === 'string') {
-        zodExpr += `.describe(${JSON.stringify(propDef['description'])})`;
-      }
+      // Recursive translation; optional unless required, then described
+      const zodExpr = propertyToZodSource(propSchema, required.includes(propName), `#/properties/${propName}`).source;
 
       lines.push(`${JSON.stringify(propName)}: ${zodExpr},`);
     }
 
     return lines;
-  }
-
-  /**
-   * Map a single JSON Schema property definition to a Zod expression string.
-   * Handles type, format, and falls back to z.unknown() for complex/unrecognised schemas.
-   */
-  private jsonSchemaToZod(propDef: Record<string, unknown>): string {
-    const type = propDef['type'];
-    const format = propDef['format'];
-
-    if (type === 'string') {
-      if (format === 'email') return 'z.string().email()';
-      if (format === 'uuid') return 'z.string().uuid()';
-      if (format === 'date-time') return 'z.string().datetime()';
-      return 'z.string()';
-    }
-
-    if (type === 'number' || type === 'integer') {
-      return 'z.number()';
-    }
-
-    if (type === 'boolean') {
-      return 'z.boolean()';
-    }
-
-    if (type === 'null') {
-      return 'z.null()';
-    }
-
-    return 'z.unknown()';
   }
 }

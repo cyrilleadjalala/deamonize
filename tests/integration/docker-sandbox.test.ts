@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -17,6 +17,7 @@ import { buildSandboxImage, assertSandboxReady } from '../../src/cli/commands/sa
 import { Compiler } from '../../src/compiler/compiler.js';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import type { WorkflowSet } from '../../src/types.js';
+import { removeDir } from '../helpers/cleanup.js';
 
 const enabled = process.env.DAEMONIZE_DOCKER_TESTS === '1';
 const workspaceRoot = resolve(import.meta.dirname, '../..');
@@ -73,7 +74,7 @@ describe.skipIf(!enabled)('Replay in a Docker container', () => {
     // Under the workspace so the generated server finds its modules in node_modules
     dir = await mkdtemp(join(workspaceRoot, '.docker-e2e-'));
     const log = console.log;
-    console.log = () => {};
+    console.log = () => { };
     try {
       await new Compiler().compile(new SchemaInferencer().inferWorkflows(set), dir);
     } finally {
@@ -84,7 +85,7 @@ describe.skipIf(!enabled)('Replay in a Docker container', () => {
 
   afterAll(async () => {
     if (dir) {
-      await rm(dir, { recursive: true, force: true });
+      await removeDir(dir);
     }
     if (tag) {
       spawnSync('docker', ['rmi', tag], { stdio: 'ignore' });
@@ -104,6 +105,8 @@ describe.skipIf(!enabled)('Replay in a Docker container', () => {
       const result = await call(client, { your_name: 'Ada' });
 
       expect(result).toMatchObject({ success: true, screenType: 'terminal' });
+      // The container reports drift like the host: this workflow has no recorded final screen
+      expect(result).toMatchObject({ drifted: false, driftChecked: false });
       expect(result.text).toContain('Hello again Ada!');
     } finally {
       await client.close();
@@ -134,7 +137,7 @@ describe.skipIf(!enabled)('Replay in a Docker container', () => {
     };
     const probeDir = await mkdtemp(join(workspaceRoot, '.docker-probe-'));
     const log = console.log;
-    console.log = () => {};
+    console.log = () => { };
     try {
       await new Compiler().compile(new SchemaInferencer().inferWorkflows(probeSet), probeDir);
     } finally {
@@ -179,7 +182,7 @@ describe.skipIf(!enabled)('Replay in a Docker container', () => {
       expect(facts.network).toBe('unreachable');
     } finally {
       await client.close();
-      await rm(probeDir, { recursive: true, force: true });
+      await removeDir(probeDir);
     }
   }, 180000);
 
@@ -286,7 +289,7 @@ describe.skipIf(!enabled)('Replay of a web target in a Docker container', () => 
 
     dir = await mkdtemp(join(workspaceRoot, '.docker-web-'));
     const log = console.log;
-    console.log = () => {};
+    console.log = () => { };
     try {
       await new Compiler().compile(new SchemaInferencer().inferWorkflows(webSet()), dir);
     } finally {
@@ -298,7 +301,7 @@ describe.skipIf(!enabled)('Replay of a web target in a Docker container', () => 
   afterAll(async () => {
     await new Promise<void>((done) => httpServer?.close(() => done()));
     if (dir) {
-      await rm(dir, { recursive: true, force: true });
+      await removeDir(dir);
     }
     if (tag) {
       spawnSync('docker', ['rmi', tag], { stdio: 'ignore' });

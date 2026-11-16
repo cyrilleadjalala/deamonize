@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { KiroPowerGenerator, toKebabCase } from '../../src/compiler/kiro-power-generator.js';
@@ -8,6 +8,7 @@ import { Compiler } from '../../src/compiler/compiler.js';
 import { describeTool } from '../../src/compiler/tool-description.js';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import type { Workflow, WorkflowSet } from '../../src/types.js';
+import { removeDir } from '../helpers/cleanup.js';
 
 function workflow(id: string, label: string, overrides: Partial<Workflow> = {}): Workflow {
   return {
@@ -53,7 +54,7 @@ describe('Compiler outputs', () => {
   });
 
   afterAll(async () => {
-    await rm(dir, { recursive: true, force: true });
+    await removeDir(dir);
   });
 
   const readJson = async (file: string) => JSON.parse(await readFile(join(dir, file), 'utf-8'));
@@ -80,6 +81,36 @@ describe('Compiler outputs', () => {
       'create_customer_3',
       'one_two_three_four_five_six_seven_eight_nine_ten_eleven_twelve',
     ]);
+  });
+
+  it('mentions drifted and driftChecked in the output schema, the OpenAPI document and the skill', async () => {
+    const openapi = await readJson('openapi.json');
+    const skill = await readFile(join(dir, 'skills', 'legacy-crm', 'SKILL.md'), 'utf-8');
+    const response = Object.values<any>(openapi.paths)[0].post.responses['200'];
+    const schema = response.content['application/json'].schema;
+
+    expect(schema.properties.drifted.type).toBe('boolean');
+    expect(schema.properties.driftChecked.type).toBe('boolean');
+    expect(schema.required).toEqual(expect.arrayContaining(['drifted', 'driftChecked']));
+    expect(response.description).toContain('drifted');
+    expect(skill).toContain('driftChecked');
+  });
+
+  it('writes generated files that import nothing from src/', async () => {
+    const generated = ['mcp-server', 'replay', 'docker-replay', 'screen-hash'].flatMap((name) => [`${name}.ts`, `${name}.js`]);
+    for (const file of generated) {
+      const source = await readFile(join(dir, file), 'utf-8');
+      const specifiers = [
+        ...source.matchAll(/\bfrom\s*["']([^"']+)["']/g),
+        ...source.matchAll(/\bimport\s*["']([^"']+)["']/g),
+        ...source.matchAll(/\b(?:require|import)\s*\(\s*["']([^"']+)["']/g),
+      ].map((m) => m[1]);
+
+      expect(specifiers.length, file).toBeGreaterThan(0);
+      for (const specifier of specifiers) {
+        expect(specifier, `${file} imports ${specifier}`).not.toMatch(/(^|\/)src\//);
+      }
+    }
   });
 
   describe('Kiro Power manifest', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import fc from 'fast-check';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Ajv2020 } from 'ajv/dist/2020.js';
@@ -14,6 +14,7 @@ import { checkProperty, getReports, printReport } from '../../src/pbt/property-r
 import { PbtGenerator } from '../../src/pbt/pbt-generator.js';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import type { WorkflowSet } from '../../src/types.js';
+import { removeDir } from '../helpers/cleanup.js';
 
 const schemas: Record<string, Record<string, unknown>> = {
   'bounds and required': {
@@ -257,7 +258,7 @@ describe('PbtGenerator', () => {
         './property-runner.js',
       ]);
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      await removeDir(dir);
     }
   });
 
@@ -285,7 +286,7 @@ describe('PbtGenerator', () => {
       expect(source).toContain('multipleOf');
       expect(source).not.toContain('checkProperty');
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      await removeDir(dir);
     }
   });
 });

@@ -29,8 +29,13 @@ export function buildProgram(): Command {
     .option('-o, --out <file>', 'workflow file to create or add to', DEFAULT_WORKFLOWS_FILE)
     .option('--storage-state <file>', 'web only: Playwright storage state, to start already logged in')
     .option('--headless', 'web only: run the browser without a window')
+    .option('--final-zone <selector>', 'web only: CSS selector; drift is judged on this part of the final page only')
+    .option('--final-rect <row,col,rows,cols>', 'tui only: rectangle of the final screen (0-based); drift is judged on it only')
     .action(async (target: string[], options) => {
       if (options.type === 'tui') {
+        if (options.finalZone !== undefined) {
+          throw new Error('--final-zone is for web recordings; use --final-rect with --type tui');
+        }
         console.log(
           chalk.cyan(
             'Recording. Use the program as usual. Ctrl+] opens a menu: v marks the last typed text as a variable, e ends the recording.'
@@ -41,6 +46,7 @@ export function buildProgram(): Command {
           label: options.label,
           name: options.name ?? target[0],
           out: options.out,
+          finalRect: options.finalRect === undefined ? undefined : parseRect(options.finalRect),
         });
         console.log(`\r\n${chalk.green(describeSummary(summary))}`);
         if (summary.programExitCode !== undefined) {
@@ -56,6 +62,9 @@ export function buildProgram(): Command {
         return;
       }
 
+      if (options.finalRect !== undefined) {
+        throw new Error('--final-rect is for terminal recordings (--type tui); use --final-zone for a web page');
+      }
       if (options.type !== 'web') {
         throw new Error(`Unknown type "${options.type}": use web or tui`);
       }
@@ -75,6 +84,7 @@ export function buildProgram(): Command {
         out: options.out,
         storageState: options.storageState,
         headless: options.headless,
+        finalZone: options.finalZone,
       });
       console.log(chalk.green(describeSummary(summary)));
     });
@@ -135,6 +145,15 @@ export function buildProgram(): Command {
     });
 
   return program;
+}
+
+function parseRect(text: string): { row: number; col: number; rows: number; cols: number } {
+  const parts = text.split(',').map((part) => Number(part.trim()));
+  const [row, col, rows, cols] = parts;
+  if (parts.length !== 4 || !parts.every(Number.isInteger) || row < 0 || col < 0 || rows < 1 || cols < 1) {
+    throw new Error(`Invalid --final-rect "${text}": expected row,col,rows,cols (0-based, size at least 1)`);
+  }
+  return { row, col, rows, cols };
 }
 
 function describeSummary(summary: RecordSummary): string {

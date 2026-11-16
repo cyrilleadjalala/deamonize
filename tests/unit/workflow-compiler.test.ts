@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import { Compiler } from '../../src/compiler/compiler.js';
 import { McpGenerator } from '../../src/compiler/mcp-generator.js';
 import type { WorkflowSet } from '../../src/types.js';
+import { removeDir } from '../helpers/cleanup.js';
 
 const set: WorkflowSet = {
   version: '1',
@@ -86,7 +87,7 @@ describe('Compiler with workflows', () => {
       expect(plugin.keywords).toContain('create_customer');
     } finally {
       console.log = log;
-      await rm(dir, { recursive: true, force: true });
+      await removeDir(dir);
     }
   });
 });
@@ -103,7 +104,8 @@ describe('McpGenerator', () => {
     expect(source).toContain('import { replayInDocker } from "./docker-replay.js"');
     expect(source).toContain('process.env.DAEMONIZE_SANDBOX === "docker" ? replayInDocker : replay');
     expect(source).toContain('"selectors":["role=button[name=\\"Save\\"]","#save"]');
-    expect(source).toContain('"email": z.string().email().describe("Customer e-mail")');
+    // The email format is checked with the ajv-formats regex, so Zod and AJV agree
+    expect(source).toMatch(/"email": z\.string\(\)\.regex\(\/\^\[a-z0-9!#\$%&'\*\+\/=\?\^_[^\n]*\/i\)\.describe\("Customer e-mail"\)/);
     expect(source).toContain('validatePayload("create_customer", args)');
   });
 

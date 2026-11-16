@@ -3,6 +3,7 @@ import { ScreenHasher } from '../state/screen-hasher.js';
 import type {
   RecordedAction,
   ScreenContent,
+  FinalZone,
   Workflow,
   WorkflowStep,
   WorkflowVariable,
@@ -25,7 +26,7 @@ export class WorkflowRecorder {
   private readonly variables = new Map<string, WorkflowVariable>();
   private readonly payload: Record<string, unknown> = {};
 
-  constructor(private readonly label: string) {}
+  constructor(private readonly label: string) { }
 
   /** Append a step performed by the user. Returns its index. */
   addStep(step: RecordedStep): number {
@@ -71,7 +72,7 @@ export class WorkflowRecorder {
   }
 
   /** Finish the recording with the screen the user ended on. */
-  finish(finalScreen?: ScreenContent): Workflow {
+  finish(finalScreen?: ScreenContent, finalZone?: FinalZone): Workflow {
     if (this.steps.length === 0) {
       throw new Error('Cannot finish a workflow without steps');
     }
@@ -84,7 +85,12 @@ export class WorkflowRecorder {
       observedPayloads: Object.keys(this.payload).length > 0 ? [{ ...this.payload }] : [],
     };
     if (finalScreen !== undefined) {
+      // With a zone, the caller passes the zone's content (web: outerHTML of the element;
+      // terminal: the cropped text), hashed here exactly like at run time.
       workflow.finalScreenId = this.hasher.computeId(finalScreen);
+      if (finalZone !== undefined) {
+        workflow.finalZone = structuredClone(finalZone);
+      }
     }
     return workflow;
   }

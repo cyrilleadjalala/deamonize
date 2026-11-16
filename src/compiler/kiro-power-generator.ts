@@ -129,7 +129,7 @@ export class KiroPowerGenerator {
       ...toolSections,
       '## Drift',
       '',
-      'A result with `drifted: true` means the application changed since the workflow was recorded. Double-check the result before relying on it.',
+      'A result with `drifted: true` means the final screen differs from the one recorded (only the recorded zone is compared when the workflow has one), so the application probably changed. Double-check the result before relying on it. `driftChecked: false` means no final screen was recorded: `drifted` is then always `false` and says nothing.',
       '',
     ].join('\n');
 

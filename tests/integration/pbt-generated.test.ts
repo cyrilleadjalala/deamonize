@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { compile } from '../../src/cli/commands/compile.js';
 import { serializeWorkflowSet } from '../../src/workflow/workflow-set.js';
 import type { WorkflowSet } from '../../src/types.js';
+import { removeDir } from '../helpers/cleanup.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 
@@ -65,7 +66,7 @@ describe('Generated property-based test suite', () => {
 
   afterAll(async () => {
     if (dir) {
-      await rm(dir, { recursive: true, force: true });
+      await removeDir(dir);
     }
   });
 

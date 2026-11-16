@@ -161,6 +161,7 @@ describe('secrets: TOTP, resolution at run time and no leak', () => {
     const mcp = JSON.parse(readFileSync(join(outputDir, 'mcp.json'), 'utf8'));
     const env = Object.values(mcp.mcpServers as Record<string, { env: Record<string, string> }>)[0].env;
     expect(env).toEqual({
+      DAEMONIZE_MODE: 'strict',
       DAEMONIZE_SECRET_OTP: '${DAEMONIZE_SECRET_OTP}',
       DAEMONIZE_SECRET_PASSWORD: '${DAEMONIZE_SECRET_PASSWORD}',
     });

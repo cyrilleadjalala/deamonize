@@ -17,6 +17,11 @@ export interface CompileOptions {
    * all steps do; `off` (default) replays through the page only.
    */
   http?: 'off' | 'auto';
+  /**
+   * Emit the Heal modules and copy the recorded thumbnails to `<out>/.daemonize/anchors/`, so the server can be run
+   * with `--heal`. Off by default: the server then contains no model code at all.
+   */
+  healSupport?: boolean;
 }
 
 /** The value of `--http`: the bare flag means auto. */
@@ -41,7 +46,17 @@ export async function compile(
   if (options.http === 'auto' && set.targetType !== 'web') {
     console.warn('--http only applies to web targets: ignored for a terminal program.');
   }
-  const result = await new Compiler().compile(annotated, outDir, { http: options.http ?? 'off' });
+  if (options.healSupport === true && set.targetType !== 'web') {
+    console.warn('--heal-support only applies to web targets: ignored for a terminal program.');
+  }
+  const result = await new Compiler().compile(annotated, outDir, {
+    http: options.http ?? 'off',
+    healSupport: options.healSupport === true,
+    workflowFile: file,
+  });
+  if (options.healSupport === true && set.targetType === 'web') {
+    console.log(`Heal support compiled in: run with "daemonize serve ${outDir} --heal" and the DAEMONIZE_MODEL_* variables. Recorded thumbnails were copied to ${join(outDir, '.daemonize', 'anchors')}.`);
+  }
 
   const tests = await new PbtGenerator().generate(annotated, result.toolNames, outDir);
   console.log(`Generated ${tests.files.length} test file(s) in ${join(outDir, 'tests')}`);

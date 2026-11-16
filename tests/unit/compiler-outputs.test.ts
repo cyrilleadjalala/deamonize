@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { access, mkdtemp, readFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { KiroPowerGenerator, toKebabCase } from '../../src/compiler/kiro-power-generator.js';
@@ -251,5 +251,47 @@ describe('KiroPowerGenerator', () => {
 
     expect(power.skill).toContain('### `log_out`');
     expect(power.skill).toContain('Inputs: none.');
+  });
+});
+
+describe('Compiler outputs and Visual_Anchors', () => {
+  it('keeps rect and intent but no thumbnail path, image data or assets folder in any artifact', async () => {
+    const out = await mkdtemp(join(tmpdir(), 'daemonize-visual-'));
+    try {
+      const withVisual: WorkflowSet = {
+        ...set,
+        workflows: [
+          workflow('d5555555-5555-4555-8555-555555555555', 'Save customer', {
+            steps: [
+              {
+                actionType: 'click',
+                selectors: ['#go'],
+                visual: {
+                  thumbnailPath: 'workflows.json.assets/step-d5555555-5555-4555-8555-555555555555-0.png',
+                  rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 },
+                  intent: "Click the button 'Save'",
+                },
+              },
+            ],
+          }),
+        ],
+      };
+      const log = console.log;
+      console.log = () => { };
+      try {
+        await new Compiler().compile(new SchemaInferencer().inferWorkflows(withVisual), out);
+      } finally {
+        console.log = log;
+      }
+      const files = (await readdir(out, { recursive: true, withFileTypes: true })).filter((e) => e.isFile());
+      expect(files.length).toBeGreaterThan(5);
+      for (const entry of files) {
+        const text = await readFile(join(entry.parentPath, entry.name), 'utf-8');
+        if (entry.name === '.dockerignore') continue; // lists `*.assets` as something to leave out of the image
+        expect(text, entry.name).not.toMatch(/data:image\/[a-z+]+;base64,[A-Za-z0-9+\/]{40,}|iVBORw0KGgo|\.assets[\\/]|step-d5555555/);
+      }
+    } finally {
+      await removeDir(out);
+    }
   });
 });

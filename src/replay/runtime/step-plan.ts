@@ -17,6 +17,22 @@ import { totp } from './totp.js';
 
 export type StepRiskLike = 'read' | 'write' | 'delete';
 
+/** How a call is replayed: strict (recorded, deterministic means only) or heal (a vision step may locate an element). */
+export type ReplayMode = 'strict' | 'heal';
+
+/** Anything but the exact word `heal` is strict: a typo can never switch healing on. */
+export function parseMode(value: string | undefined): ReplayMode {
+  return value?.trim().toLowerCase() === 'heal' ? 'heal' : 'strict';
+}
+
+/** The recorded look of a step's target (thumbnails are not part of the compiled workflow, only their file name). */
+export interface VisualLike {
+  thumbnailPath?: string;
+  /** Fractions of the viewport in [0, 1]. */
+  rect: { x: number; y: number; w: number; h: number };
+  intent: string;
+}
+
 export interface AnchorLike {
   role: string;
   name: string;
@@ -36,6 +52,9 @@ export interface StepLike {
   anchor?: AnchorLike;
   rowBinding?: RowBindingLike;
   risk?: StepRiskLike;
+  /** A write or delete step is only healed when this is true. */
+  allowHeal?: boolean;
+  visual?: VisualLike;
   secretRef?: string;
   totp?: boolean;
   timeoutMs?: number;
@@ -61,7 +80,8 @@ export interface LocatorCandidate {
 /** Names longer than this were cut by the recorder: they can only be matched as a prefix. */
 export const MAX_ACCESSIBLE_NAME = 80;
 const SCOPE_KINDS = new Set<string>(['dialog', 'region', 'heading']);
-const NON_ROLES = new Set(['', 'generic', 'document']);
+// A canvas has no accessible content: such a step is located by its coordinates, never by role
+const NON_ROLES = new Set(['', 'generic', 'document', 'canvas']);
 const OPTION_ROLES = new Set(['option']);
 
 /** Quote a name for the description of a Playwright call. */
@@ -358,16 +378,71 @@ export function failureResult(failure: StepFailure, elapsedMs: number): {
 export class StepExecutionError extends Error {
   constructor(
     readonly tried: string[],
-    readonly reason: string
+    readonly reason: string,
+    /** The page could not be matched to the recorded step (heal mode may then look for the element). */
+    readonly healable: boolean = false
   ) {
     super(reason);
     this.name = 'StepExecutionError';
   }
 }
 
+// ---------------------------------------------------------------------------
+// Heal mode decisions (pure; the browser work lives in the optional heal modules)
+// ---------------------------------------------------------------------------
+
+/**
+ * May this step enter the heal path at all? Only in heal mode, never for a page switch or a step bound to a table
+ * row, and only for a read step or a step the user explicitly opted in with `allowHeal: true`. A write or delete
+ * step is otherwise strict.
+ */
+export function healEligible(step: StepLike, mode: ReplayMode): boolean {
+  if (mode !== 'heal') return false;
+  if (step.actionType === 'switch_page') return false;
+  // A step in a table row or list item is found by its Variable: a look-alike row is the wrong row, never a repair
+  if (step.rowBinding !== undefined) return false;
+  return (step.risk ?? 'read') === 'read' || step.allowHeal === true;
+}
+
+/** May a vision model be asked about this step? Eligible, and a model is configured. */
+export function shouldHeal(step: StepLike, mode: ReplayMode, healerAvailable: boolean): boolean {
+  return healerAvailable && healEligible(step, mode);
+}
+
+/** A step recorded where the page has no DOM target (a canvas): no locator exists, only a Visual_Anchor. */
+export function hasNoDomTarget(step: StepLike): boolean {
+  if (step.visual === undefined) return false;
+  const anchor = step.anchor;
+  const noAnchor = anchor === undefined || NON_ROLES.has(anchor.role) || anchor.name === '';
+  return step.selectors.length === 0 && noAnchor;
+}
+
+/** Heal mode was requested but cannot run (no model configured, or the server was built without it). */
+export class HealUnavailableError extends Error {
+  constructor(
+    readonly tried: string[],
+    readonly reason: string
+  ) {
+    super(reason);
+    this.name = 'HealUnavailableError';
+  }
+}
+
+/** Heal was attempted and did not find the element; the step failed and is not retried. */
+export class HealFailedError extends Error {
+  constructor(
+    readonly tried: string[],
+    readonly reason: string,
+    readonly heal: { attempted: true; reason: string }
+  ) {
+    super(reason);
+    this.name = 'HealFailedError';
+  }
+}
+
 export type StrictOutcome =
   | { ok: true }
-  | { ok: false; stepIndex: number; step: StepLike; tried: string[]; reason: string };
+  | { ok: false; stepIndex: number; step: StepLike; tried: string[]; reason: string; cause?: unknown };
 
 /**
  * Run the steps in order and stop at the first one that fails: no later step is started.
@@ -381,9 +456,10 @@ export async function runStepsStrict<S extends StepLike>(
     try {
       await execute(steps[index], index);
     } catch (err) {
-      const tried = err instanceof StepExecutionError ? err.tried : [];
-      const reason = err instanceof StepExecutionError ? err.reason : (err as Error)?.message ?? String(err);
-      return { ok: false, stepIndex: index, step: steps[index], tried, reason };
+      const known = err instanceof StepExecutionError || err instanceof HealUnavailableError || err instanceof HealFailedError;
+      const tried = known ? (err as StepExecutionError).tried : [];
+      const reason = known ? (err as StepExecutionError).reason : (err as Error)?.message ?? String(err);
+      return { ok: false, stepIndex: index, step: steps[index], tried, reason, cause: err };
     }
   }
   return { ok: true };

@@ -112,7 +112,7 @@ describe('Level 1: direct HTTP replay (record, compile --http, call over MCP)', 
     expect(readFileSync(join(outputDir, 'http-replay.ts'), 'utf8')).toBe(readFileSync(join(workspaceRoot, 'src/replay/runtime/http-replay.ts'), 'utf8'));
     const mcp = JSON.parse(readFileSync(join(outputDir, 'mcp.json'), 'utf8'));
     const env = Object.values(mcp.mcpServers as Record<string, { env: Record<string, string> }>)[0].env;
-    expect(env).toEqual({ DAEMONIZE_SECRET_AUTHORIZATION: '${DAEMONIZE_SECRET_AUTHORIZATION}' });
+    expect(env).toEqual({ DAEMONIZE_MODE: 'strict', DAEMONIZE_SECRET_AUTHORIZATION: '${DAEMONIZE_SECRET_AUTHORIZATION}' });
     const skill = readFileSync(join(outputDir, 'skills', Object.keys(mcp.mcpServers)[0], 'SKILL.md'), 'utf8');
     expect(skill).toContain('## HTTP replay');
     expect(skill).toContain('Runs over HTTP, without a browser.');

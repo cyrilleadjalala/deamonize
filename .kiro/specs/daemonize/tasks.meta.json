@@ -835,6 +835,97 @@
         "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
         "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
         "timestamp": 1794832536495
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794832828777
+      }
+    ],
+    "17. Lot 2a: Stack-independent web engine, levels 2 and 1": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794832828928
+      }
+    ],
+    "18.1 Capture visual anchors": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794832829086
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794835336683
+      }
+    ],
+    "18.2 Write property test for visual anchor rects — Property 17": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794835336852
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794835617546
+      }
+    ],
+    "18.3 Healer interface, providers and cache": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794835619127
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794836077102
+      }
+    ],
+    "18.4 `--strict` and `--heal` modes": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794836077467
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794837787807
+      }
+    ],
+    "18.5 Write property test for workflow immutability — Property 15": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794837789173
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794838665597
+      }
+    ],
+    "18.6 Verify no model call without `--heal`": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794838740838
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794839244179
+      }
+    ],
+    "18.7 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794839244960
       }
     ]
   }

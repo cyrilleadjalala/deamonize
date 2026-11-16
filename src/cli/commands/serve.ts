@@ -18,6 +18,8 @@ export interface ServeOptions {
   timeoutMs?: number;
   /** Timeout of a step (DAEMONIZE_STEP_TIMEOUT_MS). */
   stepTimeoutMs?: number;
+  /** `strict` (default): deterministic replay only. `heal`: a vision model may locate an element (DAEMONIZE_MODE). */
+  mode?: 'strict' | 'heal';
 }
 
 /**
@@ -41,6 +43,16 @@ export async function serve(dir: string, options: ServeOptions = {}): Promise<nu
 
   // The timeouts reach the server (and, in Docker mode, the container) through the environment
   const env: NodeJS.ProcessEnv = { ...process.env };
+  // The mode is always set by this command: without a flag it is strict, whatever the environment says
+  const mode = options.mode ?? 'strict';
+  env.DAEMONIZE_MODE = mode;
+  if (mode === 'heal') {
+    try {
+      await access(join(dir, 'heal', 'heal-step.js'));
+    } catch {
+      console.error(`Heal mode was requested but ${dir} was compiled without heal support: calls that need a heal will fail with heal_unavailable. Recompile with "daemonize compile --heal-support".`);
+    }
+  }
   if (options.timeoutMs !== undefined) env.DAEMONIZE_TIMEOUT_MS = String(options.timeoutMs);
   if (options.stepTimeoutMs !== undefined) env.DAEMONIZE_STEP_TIMEOUT_MS = String(options.stepTimeoutMs);
   if (options.sandbox === 'docker') {

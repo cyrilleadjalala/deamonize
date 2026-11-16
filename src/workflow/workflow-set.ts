@@ -256,7 +256,7 @@ export const WorkflowSetSchema: Record<string, unknown> = {
     },
     Visual: {
       type: 'object',
-      required: ['thumbnailPath', 'rect', 'intent'],
+      required: ['rect', 'intent'],
       additionalProperties: false,
       properties: {
         thumbnailPath: { type: 'string', minLength: 1 },
@@ -441,4 +441,15 @@ export function mergeWorkflowSets(base: WorkflowSet, newer: WorkflowSet): Workfl
     byId.set(workflow.id, structuredClone(workflow));
   }
   return { ...structuredClone(newer), workflows: [...byId.values()] };
+}
+
+/** A copy of the set without the thumbnail paths of the Visual_Anchors (their rect and intent stay). */
+export function withoutThumbnails(set: WorkflowSet): WorkflowSet {
+  const copy = structuredClone(set);
+  for (const workflow of copy.workflows ?? []) {
+    for (const step of workflow.steps ?? []) {
+      if (step.visual !== undefined) delete step.visual.thumbnailPath;
+    }
+  }
+  return copy;
 }

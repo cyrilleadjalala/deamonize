@@ -206,7 +206,9 @@ describe('Property 12: no env-supplied secret value appears in any compiled arti
             expect(await scanForValues(outDir, values)).toEqual([]);
             // The names are what the artifacts carry
             const mcp = JSON.parse(readFileSync(join(outDir, 'mcp.json'), 'utf8'));
-            const env = Object.values(mcp.mcpServers as Record<string, { env: Record<string, string> }>)[0].env;
+            const { DAEMONIZE_MODE: mode, ...env } = Object.values(mcp.mcpServers as Record<string, { env: Record<string, string> }>)[0].env;
+            // The replay mode is an editable default, not a secret: the only other thing the env holds
+            expect(mode).toBe('strict');
             const typed = new Set(set.workflows.flatMap((w) => w.steps.flatMap((s) => (s.secretRef === undefined ? [] : [s.secretRef]))));
             // Names that only appear as {"$secret": NAME} references in a recorded HTTP request are listed too
             const referenced = new Set(
@@ -226,7 +228,7 @@ describe('Property 12: no env-supplied secret value appears in any compiled arti
               expect(existsSync(join(httpDir, 'http-replay.js'))).toBe(true);
               expect(await scanForValues(httpDir, values)).toEqual([]);
               const httpMcp = JSON.parse(readFileSync(join(httpDir, 'mcp.json'), 'utf8'));
-              expect(Object.keys(Object.values(httpMcp.mcpServers as Record<string, { env: Record<string, string> }>)[0].env).sort()).toEqual(expected);
+              expect(Object.keys(Object.values(httpMcp.mcpServers as Record<string, { env: Record<string, string> }>)[0].env).filter((k) => k !== 'DAEMONIZE_MODE').sort()).toEqual(expected);
             }
             for (const [name, placeholder] of Object.entries(env)) expect(placeholder).toBe(`\${${name}}`);
             // A literal secret makes the compiler refuse: the path is named, the value is not, nothing is written
@@ -283,6 +285,7 @@ describe('mcp.json placeholders (checked-in sample shape of the secrets end-to-e
         const mcp = JSON.parse(readFileSync(join(outDir, 'mcp.json'), 'utf8'));
         const env = Object.values(mcp.mcpServers as Record<string, { env: Record<string, string> }>)[0].env;
         expect(env).toEqual({
+          DAEMONIZE_MODE: 'strict',
           DAEMONIZE_SECRET_OTP: '${DAEMONIZE_SECRET_OTP}',
           DAEMONIZE_SECRET_PASSWORD: '${DAEMONIZE_SECRET_PASSWORD}',
         });

@@ -35,6 +35,7 @@ export function buildProgram(): Command {
     .option('--result-kind <kind>', 'web only: how to read the result zone: text, table, list, fields, json or attribute (default: suggested from the element)')
     .option('--capture-network', 'web only: observe fetch/XHR requests and record Level 1 HTTP recipes (default)')
     .option('--no-capture-network', 'web only: do not observe network requests; every step stays Level 2')
+    .option('--no-visual', 'web only: do not capture Visual_Anchors (no thumbnail, no rect, no intent)')
     .option('--result-rect <row,col,rows,cols>', 'tui only: part of the final screen (0-based) the tool returns as `text` and `data`')
     .option('--result-regex <regex>', 'tui only: regular expression applied to the result zone; its named groups become `data`')
     .option('--result-regex-flags <flags>', 'tui only: flags of --result-regex (default m; add g for every match as an array)')
@@ -113,8 +114,12 @@ export function buildProgram(): Command {
         resultZone: options.resultZone,
         resultKind: options.resultKind,
         captureNetwork: options.captureNetwork ?? true,
+        visual: options.visual !== false,
       });
       console.log(chalk.green(describeSummary(summary)));
+      if (options.visual !== false) {
+        console.log(chalk.cyan(`${summary.thumbnails} thumbnail(s) saved in ${summary.out}.assets/ (never for password, one-time-code or token fields)`));
+      }
       for (const step of summary.network ?? []) {
         const name = step.label === undefined ? '' : ` "${step.label}"`;
         console.log(
@@ -150,8 +155,9 @@ export function buildProgram(): Command {
       '--http [mode]',
       'web only: execute the recorded HTTP request of each step that has one (auto, the default when the flag is given) instead of driving the page; off disables it'
     )
+    .option('--heal-support', 'web only: compile in the Heal modules and the recorded thumbnails so the server can run with --heal (default off: no model code in the output)')
     .action(async (file: string | undefined, options) => {
-      await compile(file ?? DEFAULT_WORKFLOWS_FILE, options.out, { install: options.install, http: parseHttpMode(options.http) });
+      await compile(file ?? DEFAULT_WORKFLOWS_FILE, options.out, { install: options.install, http: parseHttpMode(options.http), healSupport: options.healSupport === true });
     });
 
   program
@@ -176,6 +182,8 @@ export function buildProgram(): Command {
     )
     .option('--sandbox-command <json>', 'sandbox only: command to start in the container, as a JSON array, e.g. \'["node","/app/x.mjs"]\'')
     .option('--sandbox-url <url>', 'sandbox only: address the browser opens in the container')
+    .option('--strict', 'replay only through recorded, deterministic means; a step that cannot be performed fails the call (default)')
+    .option('--heal', 'when every locator of a read step fails (or the page has no DOM), let a vision model locate the element; needs a server compiled with --heal-support')
     .option('--timeout <ms>', 'timeout of a whole call, in ms (DAEMONIZE_TIMEOUT_MS; default 30000)', Number)
     .option('--step-timeout <ms>', 'timeout of a step, in ms (DAEMONIZE_STEP_TIMEOUT_MS; default 8000)', Number)
     .action(async (dir: string | undefined, options) => {
@@ -183,6 +191,7 @@ export function buildProgram(): Command {
         throw new Error(`Unknown sandbox "${options.sandbox}": use docker`);
       }
       process.exitCode = await serve(dir ?? DEFAULT_OUTPUT_DIR, {
+        mode: parseServeMode(options),
         sandbox: options.sandbox,
         memoryMb: options.memory,
         cpus: options.cpus,
@@ -205,6 +214,14 @@ export function buildProgram(): Command {
     });
 
   return program;
+}
+
+/** `--strict` and `--heal` exclude each other; neither means strict. */
+export function parseServeMode(options: { strict?: boolean; heal?: boolean }): 'strict' | 'heal' {
+  if (options.strict === true && options.heal === true) {
+    throw new Error('--strict and --heal cannot be used together: choose one (strict is the default)');
+  }
+  return options.heal === true ? 'heal' : 'strict';
 }
 
 const WEB_RESULT_KINDS = ['text', 'table', 'list', 'fields', 'json', 'attribute'];

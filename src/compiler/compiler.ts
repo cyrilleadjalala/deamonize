@@ -1,13 +1,13 @@
 import type { WorkflowSet, CompileResult } from '../types.js';
 import { ToolNameDeriver } from './tool-name-deriver.js';
 import { OpenApiGenerator } from './openapi-generator.js';
-import { McpGenerator, httpEnabled, type GenerateOptions } from './mcp-generator.js';
+import { McpGenerator, httpEnabled, healEnabled, type GenerateOptions } from './mcp-generator.js';
 import { KiroPowerGenerator } from './kiro-power-generator.js';
-import { writeFile, mkdir, access, readFile } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { writeFile, mkdir, access, readFile, readdir } from 'node:fs/promises';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { findPlainSecrets } from '../workflow/workflow-set.js';
+import { findPlainSecrets, withoutThumbnails } from '../workflow/workflow-set.js';
 
 // What the generated server needs at run time (it has no Daemonize dependency).
 const SERVER_DEPENDENCIES = {
@@ -112,6 +112,32 @@ const RUNTIME_HTTP_REPLAY = join(
   'http-replay.ts'
 );
 
+// The heal modules (`--heal-support` only): src/heal/ is copied verbatim into <out>/heal/. It uses only Node
+// built-ins, fetch and structural page types, so the generated server needs nothing from this package.
+const RUNTIME_HEAL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'heal');
+
+/** Where the recorded thumbnails of a heal-supported output live, relative to the output directory. */
+export const ANCHORS_DIR = join('.daemonize', 'anchors');
+
+export interface CompileOptions extends GenerateOptions {
+  /**
+   * The workflow file the set was read from. With `healSupport`, the thumbnails next to it
+   * (`<file>.assets/`) are copied to `<out>/.daemonize/anchors/`.
+   */
+  workflowFile?: string;
+}
+
+/** Every `.ts` file under a folder, as paths relative to it (forward slashes). */
+async function listSources(root: string, prefix = ''): Promise<string[]> {
+  const found: string[] = [];
+  for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
+    const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) found.push(...(await listSources(root, relative)));
+    else if (entry.isFile() && entry.name.endsWith('.ts')) found.push(relative);
+  }
+  return found.sort();
+}
+
 export class Compiler {
   private toolNameDeriver = new ToolNameDeriver();
   private openApiGenerator = new OpenApiGenerator();
@@ -123,7 +149,11 @@ export class Compiler {
    * Writes files to outputDir.
    * Returns the CompileResult with all generated artifacts.
    */
-  async compile(set: WorkflowSet, outputDir: string, options: GenerateOptions = {}): Promise<CompileResult> {
+  async compile(recorded: WorkflowSet, outputDir: string, options: CompileOptions = {}): Promise<CompileResult> {
+    const heal = healEnabled(recorded, options);
+    // Thumbnails stay next to the Workflow file: artifacts keep only the rect and the intent of a Visual_Anchor.
+    // With --heal-support, the thumbnails are copied to <out>/.daemonize/anchors/ and the steps keep that relative path.
+    const set = heal ? await withAnchorThumbnails(recorded, outputDir, options.workflowFile) : withoutThumbnails(recorded);
     const http = httpEnabled(set, options);
     // A literal secret (typed value, credential header or cookie) would be copied into every artifact:
     // refuse before writing anything. Only the JSON paths are reported, never the values.
@@ -158,6 +188,20 @@ export class Compiler {
     // Level 1 (--http): the runtime that executes recorded requests, copied verbatim like the other run-time modules
     const httpReplaySource = http ? await readFile(RUNTIME_HTTP_REPLAY, 'utf-8') : undefined;
     const kiroPower = this.kiroPowerGenerator.generate(set, toolNames, outputDir, options);
+    // The heal modules, only for a web target compiled with --heal-support
+    const healSources = heal ? await listSources(RUNTIME_HEAL_DIR) : [];
+    const healFiles = new Map<string, string>();
+    for (const relative of healSources) healFiles.set(relative, await readFile(join(RUNTIME_HEAL_DIR, relative), 'utf-8'));
+    assertNoThumbnails({
+      'openapi.json': JSON.stringify(openApiSpec),
+      'mcp-server.ts': mcpServerSource,
+      'replay.ts': replaySource,
+      'docker-replay.ts': dockerReplaySource,
+      'plugin.json': JSON.stringify(kiroPower.plugin),
+      'mcp.json': JSON.stringify(kiroPower.mcp),
+      'SKILL.md': kiroPower.skill,
+      'POWER.md': kiroPower.powerMd,
+    });
     const powerName = kiroPower.plugin.name;
 
     // 3. Build the name-map (plain object for JSON serialisation).
@@ -226,6 +270,10 @@ export class Compiler {
         writeFile(join(outputDir, 'http-replay.ts'), httpReplaySource),
         writeFile(join(outputDir, 'http-replay.js'), this.toJavaScript(httpReplaySource)),
       ]),
+      ...[...healFiles].flatMap(([relative, source]) => [
+        this.writeInto(join(outputDir, 'heal', relative), source),
+        this.writeInto(join(outputDir, 'heal', relative.replace(/\.ts$/, '.js')), this.toJavaScript(source)),
+      ]),
       writeFile(files.plugin, JSON.stringify(kiroPower.plugin, null, 2)),
       writeFile(files.mcp, JSON.stringify(kiroPower.mcp, null, 2)),
       writeFile(files.skill, kiroPower.skill),
@@ -250,6 +298,11 @@ export class Compiler {
       kiroPower: { ...kiroPower, plugin: { ...kiroPower.plugin }, mcp: { ...kiroPower.mcp } },
       toolNames,
     };
+  }
+
+  private async writeInto(path: string, content: string): Promise<void> {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, content);
   }
 
   /** Transpile the generated server to an ES module that Node can run directly. */
@@ -304,6 +357,42 @@ export class Compiler {
       await access(path);
     } catch {
       await writeFile(path, content);
+    }
+  }
+}
+
+/**
+ * A copy of the set whose Visual_Anchor thumbnails were copied from `<workflowFile>.assets/` to
+ * `<out>/.daemonize/anchors/`; each step then refers to its picture by that relative path. A thumbnail
+ * that cannot be read is dropped from its step (the heal then has no picture to compare with).
+ */
+async function withAnchorThumbnails(recorded: WorkflowSet, outputDir: string, workflowFile: string | undefined): Promise<WorkflowSet> {
+  const copy = structuredClone(recorded);
+  const target = join(outputDir, ANCHORS_DIR);
+  for (const workflow of copy.workflows ?? []) {
+    for (const step of workflow.steps ?? []) {
+      const visual = step.visual;
+      if (visual?.thumbnailPath === undefined) continue;
+      const name = visual.thumbnailPath.split(/[\\/]/).pop() as string;
+      try {
+        if (workflowFile === undefined) throw new Error('no workflow file');
+        const picture = await readFile(resolve(dirname(resolve(workflowFile)), visual.thumbnailPath));
+        await mkdir(target, { recursive: true });
+        await writeFile(join(target, name), picture);
+        visual.thumbnailPath = `${ANCHORS_DIR.replace(/\\/g, '/')}/${name}`;
+      } catch {
+        delete visual.thumbnailPath;
+      }
+    }
+  }
+  return copy;
+}
+
+/** Generated artifacts never carry a thumbnail: no inline image data and no path into the assets folder. */
+function assertNoThumbnails(artifacts: Record<string, string>): void {
+  for (const [name, text] of Object.entries(artifacts)) {
+    if (/data:image\/[a-z+]+;base64,[A-Za-z0-9+\/]{40,}|iVBORw0KGgo|\.assets[\\/]/.test(text)) {
+      throw new Error(`Generated artifact ${name} would contain a thumbnail or a reference to one`);
     }
   }
 }

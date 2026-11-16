@@ -358,7 +358,7 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
   - [x] 16.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 17. Lot 2a: Stack-independent web engine, levels 2 and 1
+- [x] 17. Lot 2a: Stack-independent web engine, levels 2 and 1
   - [x] 17.1 Extend the workflow model
     - Add to `src/types.ts`, the WorkflowSet JSON schema and `src/workflow/workflow-set.ts` the step and workflow fields from the design: `anchor`, `rowBinding`, `http`, `visual`, `risk`, `resultZone`, `timeoutMs`, `secretRef`, `totp`, `allowHeal`, workflow `finalZone`, `secrets`
     - Backward compatible: existing workflow files still load and round-trip
@@ -442,45 +442,45 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
     - Integration test against a local JSON API plus SPA (`tests/integration/http-replay.test.ts`)
     - _Requirements: 12.1, 13.3, 13.4, 13.6_
 
-  - [-] 17.15 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+  - [x] 17.15 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 18. Lot 2b: Visual anchors and Heal mode
-  - [ ] 18.1 Capture visual anchors
+  - [x] 18.1 Capture visual anchors
     - Per step, capture a thumbnail of the target zone (never of password fields), the relative rect in [0,1] and an intent description, stored in `<file>.assets/` and referenced by relative path
     - Files: `src/recorder/visual-anchor.ts`, `src/recorder/live-recorder.ts`, `src/workflow/workflow-set.ts`
     - Test that compiled artifacts contain no inline thumbnail (`tests/unit/compiler-outputs.test.ts`)
     - _Requirements: 15.1, 15.2, 15.3, 15.4_
 
-  - [ ]* 18.2 Write property test for visual anchor rects — Property 17
+  - [x]* 18.2 Write property test for visual anchor rects — Property 17
     - **Property 17: Relative coordinates lie within [0,1]**
     - For any viewport and element box, the computed relative rect has every coordinate between 0 and 1 inclusive
     - File: `tests/property/visual-anchor.property.test.ts`
     - **Validates: Requirements 15.5**
     - _Tag comment: `// Feature: daemonize, Property 17: visual anchor rect invariant`_
 
-  - [ ] 18.3 Healer interface, providers and cache
+  - [x] 18.3 Healer interface, providers and cache
     - Create `src/heal/healer.ts` (interface, providers selected by `DAEMONIZE_MODEL_*` env, set-of-mark screenshot builder, fake provider for tests) and `src/heal/cache.ts` (`.daemonize/heal-cache.json`, separate from the workflow file)
     - _Requirements: 12.7, 12.9, 12.11_
 
-  - [ ] 18.4 `--strict` and `--heal` modes
+  - [x] 18.4 `--strict` and `--heal` modes
     - Add `--strict` (default) and `--heal` to `src/cli/commands/serve.ts` and to the generated server (`src/compiler/mcp-generator.ts`); return `healed: true` for level 3 actions; write and delete steps require `allowHeal`; report heal unavailable when no model or key is configured
     - Unit tests with the fake provider, including a Canvas page where only coordinates work and cache reuse on the second call (`tests/unit/heal.test.ts`)
     - _Requirements: 12.2, 12.3, 12.4, 12.7, 12.8, 12.9, 12.11_
 
-  - [ ]* 18.5 Write property test for workflow immutability — Property 15
+  - [x]* 18.5 Write property test for workflow immutability — Property 15
     - **Property 15: Workflow file is byte-identical after heal**
     - For any workflow and any healing sequence with the fake provider, the workflow file bytes are unchanged and only the cache file changes
     - File: `tests/property/heal-immutability.property.test.ts`
     - **Validates: Requirements 12.9, 12.12**
     - _Tag comment: `// Feature: daemonize, Property 15: heal never modifies the workflow`_
 
-  - [ ] 18.6 Verify no model call without `--heal`
+  - [x] 18.6 Verify no model call without `--heal`
     - Test that the generated server makes no model call (fake provider counts calls) in strict mode, including after a failure
     - File: `tests/integration/workflow-e2e.test.ts`
     - _Requirements: 12.10, 18.4_
 
-  - [ ] 18.7 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+  - [-] 18.7 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 19. Lot 3: Real CLI/TUI reliability

@@ -13,12 +13,32 @@ export type HttpMode = 'off' | 'auto';
 
 export interface GenerateOptions {
   http?: HttpMode;
+  /**
+   * `compile --heal-support`: emit the Heal modules (`heal/`) and the code that loads them when `DAEMONIZE_MODE=heal`.
+   * Off by default, so a strict-only server contains no model code at all.
+   */
+  healSupport?: boolean;
 }
 
 /** Level 1 only exists for web targets. */
 export function httpEnabled(set: WorkflowSet, options: GenerateOptions): boolean {
   return set.targetType === 'web' && options.http === 'auto';
 }
+
+/** Level 3 (heal) only exists for web targets, and only when compiled with `--heal-support`. */
+export function healEnabled(set: WorkflowSet, options: GenerateOptions): boolean {
+  return set.targetType === 'web' && options.healSupport === true;
+}
+
+/** The settings that choose and reach the model of a heal; only their names are ever written to a file. */
+export const MODEL_ENV_NAMES = [
+  'DAEMONIZE_MODEL_PROVIDER',
+  'DAEMONIZE_MODEL_NAME',
+  'DAEMONIZE_MODEL_API_KEY',
+  'DAEMONIZE_MODEL_BASE_URL',
+  'ANTHROPIC_API_KEY',
+  'OPENAI_API_KEY',
+];
 
 /**
  * Standalone runtime embedded in every generated server. Each call starts from
@@ -41,6 +61,9 @@ const REPLAY_COMMON = [
   `  anchor?: any;`,
   `  rowBinding?: any;`,
   `  risk?: "read" | "write" | "delete";`,
+  `  // Level 3 (web): see step-plan.ts. A write or delete step is healed only with allowHeal.`,
+  `  allowHeal?: boolean;`,
+  `  visual?: any;`,
   `  secretRef?: string;`,
   `  totp?: boolean;`,
   `  // Level 1 (web, compiled with --http): see http-replay.ts`,
@@ -57,7 +80,7 @@ const REPLAY_COMMON = [
   `// finalZone limits the comparison: a CSS selector (web) or a rectangle of the screen (terminal).`,
   `export type Zone = { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } };`,
   `export type ResultZone = Zone & { extractor?: ExtractorLike };`,
-  `export type Final = { finalScreenId?: string; finalZone?: Zone; resultZone?: ResultZone };`,
+  `export type Final = { finalScreenId?: string; finalZone?: Zone; resultZone?: ResultZone; workflowId?: string };`,
   ``,
   `const MAX_TEXT_LENGTH = 20000;`,
   ``,
@@ -115,6 +138,42 @@ const WEB_SHARED = [
   `// Timeout of a step (its action and the wait on its effect): the step's own, DAEMONIZE_STEP_TIMEOUT_MS, 8 s.`,
   `const STEP_TIMEOUT_MS = resolveStepTimeoutMs({ env: process.env.DAEMONIZE_STEP_TIMEOUT_MS });`,
   ``,
+  `// strict (the default) or heal; anything but the exact word "heal" is strict`,
+  `const MODE: ReplayMode = parseMode(process.env.DAEMONIZE_MODE);`,
+  `// The steps of this call that a heal performed, and the heal session of the call`,
+  `type HealTrack = { healedSteps: Array<{ stepIndex: number; source: string }>; session?: any };`,
+  ``,
+  `function errorParts(err: unknown): { tried: string[]; reason: string } {`,
+  `  if (err instanceof StepExecutionError || err instanceof HealUnavailableError || err instanceof HealFailedError) return { tried: err.tried, reason: err.reason };`,
+  `  return { tried: [], reason: (err as Error)?.message ?? String(err) };`,
+  `}`,
+  ``,
+  `// The result of a step that failed: the strict diagnostic, and what heal mode adds to it`,
+  `async function stepFailureResult(webRun: WebRun, outcome: { stepIndex: number; step: Step; tried: string[]; reason: string; cause?: unknown }, startedAt: number, extra: Record<string, unknown> = {}) {`,
+  `  const shot = await captureFailure(webRun, outcome.stepIndex);`,
+  `  const failure = describeFailure({`,
+  `    stepIndex: outcome.stepIndex,`,
+  `    step: outcome.step,`,
+  `    tried: outcome.tried,`,
+  `    reason: outcome.reason,`,
+  `    screenshot: shot.screenshot,`,
+  `    thumbnail: shot.thumbnail,`,
+  `    secrets: webRun.secrets`,
+  `  });`,
+  `  let failed: Record<string, unknown> = { ...failureResult(failure, Date.now() - startedAt), ...extra };`,
+  `  // Heal mode was asked for but cannot run: said as such, not as a plain strict failure`,
+  `  if (outcome.cause instanceof HealUnavailableError) failed = { ...failed, error: "heal_unavailable" };`,
+  `  // Heal ran and found nothing`,
+  `  else if (outcome.cause instanceof HealFailedError) failed = { ...failed, heal: outcome.cause.heal };`,
+  `  // In a container the host keeps the picture: it travels in the result and the host saves it`,
+  `  return shot.data === undefined ? failed : { ...failed, failure: { ...(failed.failure as object), screenshotData: shot.data } };`,
+  `}`,
+  ``,
+  `// What a call reports about heal: always present in heal mode, absent in strict mode`,
+  `function modeFields(track: HealTrack): Record<string, unknown> {`,
+  `  return { mode: MODE, ...(MODE === "heal" ? { healed: track.healedSteps.length > 0, healedSteps: track.healedSteps } : {}) };`,
+  `}`,
+  ``,
   `// The result of a call that ends on a page: its title, visible text (or the data of the Result_Zone) and the drift check.`,
   `async function finishWeb(webRun: WebRun, page: Page, final: Final, startedAt: number, deadline: number, extra: Record<string, unknown> = {}) {`,
   `  // The steps may have moved to another page (a pop-up)`,
@@ -157,9 +216,67 @@ const WEB_SHARED = [
   `}`,
 ];
 
+// One web step. A server compiled without --heal-support has no heal code: asking for heal mode is reported as
+// unavailable on the step where heal would have been needed, and the strict path is otherwise untouched.
+const WEB_STEP_STRICT = [
+  `async function runStep(webRun: WebRun, step: Step, _index: number, args: Record<string, unknown>, timeoutMs: number, _track: HealTrack, _final: Final): Promise<void> {`,
+  `  try {`,
+  `    await executeWebStep(webRun, step, args, { timeoutMs });`,
+  `  } catch (err) {`,
+  `    if (err instanceof StepExecutionError && err.healable && healEligible(step, MODE)) {`,
+  `      throw new HealUnavailableError(err.tried, "heal mode was requested but this server was compiled without --heal-support (recompile with: daemonize compile --heal-support). The deterministic locators had failed: " + err.reason);`,
+  `    }`,
+  `    throw err;`,
+  `  }`,
+  `}`,
+  ``,
+];
+
+// With --heal-support: when every deterministic locator of an eligible step failed, the heal modules are loaded
+// (a dynamic import, only now) and look for the element: cached locator, recorded coordinates, then the model.
+const WEB_STEP_HEAL = [
+  `async function runStep(webRun: WebRun, step: Step, index: number, args: Record<string, unknown>, timeoutMs: number, track: HealTrack, final: Final): Promise<void> {`,
+  `  try {`,
+  `    await executeWebStep(webRun, step, args, { timeoutMs });`,
+  `  } catch (err) {`,
+  `    if (!(err instanceof StepExecutionError) || !err.healable || !healEligible(step, MODE)) throw err;`,
+  `    const page = webRun.pages[webRun.current];`,
+  `    if (page === undefined || page.isClosed()) throw err;`,
+  `    if (track.session === undefined) {`,
+  `      try {`,
+  `        const heal = await import("./heal/heal-step.js");`,
+  `        track.session = heal.createHealSession({`,
+  `          workflowId: final.workflowId ?? "workflow",`,
+  `          baseDir: dirname(fileURLToPath(import.meta.url)),`,
+  `          protectedPaths: process.env.DAEMONIZE_WORKFLOW_FILE ? [process.env.DAEMONIZE_WORKFLOW_FILE, process.env.DAEMONIZE_WORKFLOW_FILE + ".assets"] : []`,
+  `        });`,
+  `      } catch (loadError) {`,
+  `        throw new HealUnavailableError(err.tried, "heal mode was requested but the heal modules could not be loaded (" + String((loadError as Error).message).split("\\n")[0] + "). The deterministic locators had failed: " + err.reason);`,
+  `      }`,
+  `    }`,
+  `    let value: string | undefined;`,
+  `    try {`,
+  `      value = resolveStepValue(step, args, process.env);`,
+  `    } catch {`,
+  `      value = undefined;`,
+  `    }`,
+  `    const outcome = await track.session.heal({ page, step, stepIndex: index, value, noDomTarget: hasNoDomTarget(step), timeoutMs, secrets: webRun.secrets });`,
+  `    if (outcome.ok) {`,
+  `      track.healedSteps.push({ stepIndex: index, source: outcome.source });`,
+  `      return;`,
+  `    }`,
+  `    if (outcome.unavailable) {`,
+  `      throw new HealUnavailableError(err.tried, "heal mode was requested but is unavailable: " + outcome.reason + ". The deterministic locators had failed: " + err.reason);`,
+  `    }`,
+  `    throw new HealFailedError(err.tried, err.reason, { attempted: true, reason: outcome.reason });`,
+  `  }`,
+  `}`,
+  ``,
+];
+
 // Web targets, without --http: Level 2 only.
 const WEB_RUNTIME = [
-  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}) {`,
+  `async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides, track: HealTrack) {`,
   `  const startedAt = Date.now();`,
   `  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });`,
   `  const deadline = startedAt + TIMEOUT_MS;`,
@@ -190,26 +307,12 @@ const WEB_RUNTIME = [
   `      await page.goto(overrides.url ?? START_URL, { timeout: TIMEOUT_MS });`,
   `      await waitForEffect(page as unknown as SettlePage, { timeoutMs: boundStepTimeoutMs(STEP_TIMEOUT_MS, deadline - Date.now()) });`,
   `      // Strict mode: the first step that no locator can perform stops the replay, no later step runs`,
-  `      const outcome = await runStepsStrict(steps, async (step) => {`,
+  `      const outcome = await runStepsStrict(steps, async (step, index) => {`,
   `        // A step never waits longer than what is left of the whole replay`,
   `        const timeoutMs = boundStepTimeoutMs(resolveStepTimeoutMs({ step: step.timeoutMs, env: process.env.DAEMONIZE_STEP_TIMEOUT_MS }), deadline - Date.now());`,
-  `        await executeWebStep(webRun, step, args, { timeoutMs });`,
+  `        await runStep(webRun, step, index, args, timeoutMs, track, final);`,
   `      });`,
-  `      if (!outcome.ok) {`,
-  `        const shot = await captureFailure(webRun, outcome.stepIndex);`,
-  `        const failure = describeFailure({`,
-  `          stepIndex: outcome.stepIndex,`,
-  `          step: outcome.step,`,
-  `          tried: outcome.tried,`,
-  `          reason: outcome.reason,`,
-  `          screenshot: shot.screenshot,`,
-  `          thumbnail: shot.thumbnail,`,
-  `          secrets: webRun.secrets`,
-  `        });`,
-  `        const failed = failureResult(failure, Date.now() - startedAt);`,
-  `        // In a container the host keeps the picture: it travels in the result and the host saves it`,
-  `        return shot.data === undefined ? failed : { ...failed, failure: { ...failed.failure, screenshotData: shot.data } };`,
-  `      }`,
+  `      if (!outcome.ok) return await stepFailureResult(webRun, outcome, startedAt);`,
   `      return await finishWeb(webRun, page, final, startedAt, deadline);`,
   `    };`,
   `    const timeout = new Promise<never>((_, reject) => {`,
@@ -230,7 +333,7 @@ const WEB_RUNTIME = [
 // fallback of a read step), at which point the field-filling steps skipped so far are replayed on the page.
 // A write or delete step whose request failed is never repeated on another level.
 const WEB_RUNTIME_HTTP = [
-  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}) {`,
+  `async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides, track: HealTrack) {`,
   `  const startedAt = Date.now();`,
   `  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });`,
   `  const deadline = startedAt + TIMEOUT_MS;`,
@@ -286,21 +389,10 @@ const WEB_RUNTIME_HTTP = [
   `      const ui = async (index: number): Promise<Record<string, unknown> | undefined> => {`,
   `        const open = await openBrowser();`,
   `        try {`,
-  `          await executeWebStep(open.webRun, steps[index], variables, { timeoutMs: stepTimeout(steps[index]) });`,
+  `          await runStep(open.webRun, steps[index], index, variables, stepTimeout(steps[index]), track, final);`,
   `          return undefined;`,
   `        } catch (err) {`,
-  `          const shot = await captureFailure(open.webRun, index);`,
-  `          const failure = describeFailure({`,
-  `            stepIndex: index,`,
-  `            step: steps[index],`,
-  `            tried: err instanceof StepExecutionError ? err.tried : [],`,
-  `            reason: err instanceof StepExecutionError ? err.reason : (err as Error)?.message ?? String(err),`,
-  `            screenshot: shot.screenshot,`,
-  `            thumbnail: shot.thumbnail,`,
-  `            secrets: open.webRun.secrets`,
-  `          });`,
-  `          const failed = { ...failureResult(failure, Date.now() - startedAt), levels, ...(levelFallback ? { levelFallback: true } : {}) };`,
-  `          return shot.data === undefined ? failed : { ...failed, failure: { ...failed.failure, screenshotData: shot.data } };`,
+  `          return await stepFailureResult(open.webRun, { stepIndex: index, step: steps[index], ...errorParts(err), cause: err }, startedAt, { levels, ...(levelFallback ? { levelFallback: true } : {}) });`,
   `        }`,
   `      };`,
   ``,
@@ -372,7 +464,7 @@ const TERMINAL_RUNTIME = [
   `// @xterm/headless is CommonJS: take the class from the default export.`,
   `const { Terminal } = xtermHeadless;`,
   ``,
-  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}) {`,
+  `async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides) {`,
   `  const startedAt = Date.now();`,
   `  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });`,
   `  const screen = new Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true, scrollback: 0 });`,
@@ -493,6 +585,26 @@ const TERMINAL_RUNTIME = [
   `}`,
 ];
 
+// The exported replay: the core, plus what every result says about the mode (and, in heal mode, about healing).
+const WEB_REPLAY_ENTRY = [
+  ``,
+  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}) {`,
+  `  const track: HealTrack = { healedSteps: [] };`,
+  `  const result = await replayCore(steps, args, final, limits, overrides, track);`,
+  `  return { ...modeFields(track), ...result };`,
+  `}`,
+];
+
+// A terminal program is never healed: heal mode only changes what the result reports.
+const TERMINAL_REPLAY_ENTRY = [
+  ``,
+  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}) {`,
+  `  const result = await replayCore(steps, args, final, limits, overrides);`,
+  `  const heal = process.env.DAEMONIZE_MODE?.trim().toLowerCase() === "heal";`,
+  `  return { mode: heal ? "heal" : "strict", ...(heal ? { healed: false, healedSteps: [] } : {}), ...result };`,
+  `}`,
+];
+
 // Container entry point of replay.js: `node replay.js --container` reads one request on stdin and
 // prints the result as one line on stdout. Nothing else is written to stdout.
 const CONTAINER_ENTRY = [
@@ -561,11 +673,28 @@ const DOCKER_RUNTIME = [
   ``,
   `// The arguments of docker run. Secrets are named without a value (docker reads them from this process's environment),`,
   `// so no secret appears on a command line; the saved login is a read-only bind mount, never part of the image.`,
-  `export function buildDockerArgs(options: { name: string; timeoutEnv: string[]; steps: Step[]; storagePath?: string }): string[] {`,
+  `// Where heal keeps its files on the host: the cache folder (read and written) and the recorded thumbnails (read-only).`,
+  `export type HealMounts = { cacheDir: string; cacheFile: string; anchorsDir: string };`,
+  `const HEAL_CACHE_IN_CONTAINER = "/run/daemonize/heal";`,
+  `const ANCHORS_IN_CONTAINER = "/run/daemonize/anchors";`,
+  ``,
+  `export function buildDockerArgs(options: { name: string; timeoutEnv: string[]; steps: Step[]; storagePath?: string; mode?: "strict" | "heal"; heal?: HealMounts }): string[] {`,
   `  const secretEnv = [...new Set([`,
   `    ...options.steps.filter((s) => s.secretRef !== undefined).map((s) => secretEnvName(s.secretRef as string)),`,
   `    ...HTTP_SECRET_VARIABLES(options.steps),`,
   `  ])].flatMap((variable) => ["-e", variable]);`,
+  `  const mode = options.mode === "heal" ? "heal" : "strict";`,
+  `  // The settings of the model by name only (docker copies the value from this process), and only for a heal`,
+  `  const modelEnv = mode === "heal" && HEAL_SUPPORT ? MODEL_ENV_NAMES.flatMap((variable) => ["-e", variable]) : [];`,
+  `  // The cache is the one thing a heal writes; the thumbnails are read-only, like the saved login`,
+  `  const healMounts = mode === "heal" && HEAL_SUPPORT && options.heal !== undefined`,
+  `    ? [`,
+  `        "-v", options.heal.cacheDir + ":" + HEAL_CACHE_IN_CONTAINER,`,
+  `        "-e", "DAEMONIZE_HEAL_CACHE=" + HEAL_CACHE_IN_CONTAINER + "/" + options.heal.cacheFile,`,
+  `        "-v", options.heal.anchorsDir + ":" + ANCHORS_IN_CONTAINER + ":ro",`,
+  `        "-e", "DAEMONIZE_ANCHORS_DIR=" + ANCHORS_IN_CONTAINER`,
+  `      ]`,
+  `    : [];`,
   `  return [`,
   `    "run", "--rm", "-i", "--name", options.name,`,
   `    // Never download an image implicitly: it must have been built on purpose`,
@@ -575,7 +704,10 @@ const DOCKER_RUNTIME = [
   `    "--pids-limit", "256", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",`,
   `    ...EXTRA_FLAGS,`,
   `    ...options.timeoutEnv,`,
+  `    "-e", "DAEMONIZE_MODE=" + mode,`,
   `    ...secretEnv,`,
+  `    ...modelEnv,`,
+  `    ...healMounts,`,
   `    ...(options.storagePath === undefined ? [] : ["-v", options.storagePath + ":" + STORAGE_STATE_IN_CONTAINER + ":ro", "-e", "DAEMONIZE_STORAGE_STATE=" + STORAGE_STATE_IN_CONTAINER]),`,
   `    ...MOUNTS.flatMap((mount) => ["-v", mount]),`,
   `    IMAGE`,
@@ -608,7 +740,22 @@ const DOCKER_RUNTIME = [
   `  }`,
   ``,
   `  const name = "daemonize-" + Math.random().toString(36).slice(2, 10);`,
-  `  const dockerArgs = buildDockerArgs({ name, timeoutEnv, steps, storagePath });`,
+  `  // Heal mode: the cache and the thumbnails are folders of this server's output directory (or DAEMONIZE_HEAL_CACHE)`,
+  `  const mode = process.env.DAEMONIZE_MODE?.trim().toLowerCase() === "heal" ? "heal" : "strict";`,
+  `  let heal: HealMounts | undefined;`,
+  `  if (mode === "heal" && HEAL_SUPPORT) {`,
+  `    const here = dirname(fileURLToPath(import.meta.url));`,
+  `    const cacheFile = process.env.DAEMONIZE_HEAL_CACHE ? resolve(process.env.DAEMONIZE_HEAL_CACHE) : join(here, ".daemonize", "heal-cache.json");`,
+  `    const anchorsDir = join(here, ".daemonize", "anchors");`,
+  `    try {`,
+  `      mkdirSync(dirname(cacheFile), { recursive: true });`,
+  `      mkdirSync(anchorsDir, { recursive: true });`,
+  `      heal = { cacheDir: dirname(cacheFile), cacheFile: basename(cacheFile), anchorsDir };`,
+  `    } catch {`,
+  `      heal = undefined;`,
+  `    }`,
+  `  }`,
+  `  const dockerArgs = buildDockerArgs({ name, timeoutEnv, steps, storagePath, mode, heal });`,
   ``,
   `  return new Promise<Record<string, unknown>>((resolve) => {`,
   `    const child = spawn(DOCKER, dockerArgs, { stdio: ["pipe", "pipe", "pipe"] });`,
@@ -701,6 +848,13 @@ export class McpGenerator {
       `// DAEMONIZE_SANDBOX=docker replays every call in a throw-away container instead of on this machine.`,
       `const runReplay = process.env.DAEMONIZE_SANDBOX === "docker" ? replayInDocker : replay;`,
       ``,
+      `// DAEMONIZE_MODE=strict (the default) or heal. Every result says which mode produced it; a result that did not`,
+      `// get as far as a replay (a refused payload, a sandbox that did not start) is completed here.`,
+      `const MODE = process.env.DAEMONIZE_MODE?.trim().toLowerCase() === "heal" ? "heal" : "strict";`,
+      `function withMode(result: object): object {`,
+      `  return { mode: MODE, ...(MODE === "heal" ? { healed: false, healedSteps: [] } : {}), ...result };`,
+      `}`,
+      ``,
       `const server = new McpServer({`,
       `  name: ${JSON.stringify(set.targetName)},`,
       `  version: "1.0.0"`,
@@ -723,6 +877,7 @@ export class McpGenerator {
   generateReplay(set: WorkflowSet, options: GenerateOptions = {}): string {
     this.assertTarget(set);
     const http = httpEnabled(set, options);
+    const heal = healEnabled(set, options);
 
     const lines: string[] = [
       ...(set.targetType === 'web'
@@ -735,7 +890,7 @@ export class McpGenerator {
           `import { waitForEffect, resolveTimeoutMs, resolveStepTimeoutMs, boundStepTimeoutMs, type SettlePage } from "./settle.js";`,
           `import { createWebRun, executeWebStep, captureFailure, extractWebZone, type WebRun } from "./web-steps.js";`,
           `import { boundText, redactDeep, zoneFailureResult, type ExtractorLike } from "./extract.js";`,
-          `import { missingSecrets, secretValues, redactSecrets, runStepsStrict, describeFailure, failureResult, StepExecutionError } from "./step-plan.js";`,
+          `import { missingSecrets, secretValues, redactSecrets, runStepsStrict, describeFailure, failureResult, StepExecutionError, HealUnavailableError, HealFailedError, healEligible, hasNoDomTarget, parseMode, resolveStepValue, type ReplayMode } from "./step-plan.js";`,
           ...(http
             ? [`import { planSteps, runHttpStep, withRecordedDefaults, rebaseOrigin, missingHttpSecrets, httpSecretValues, buildHttpResult, httpFailureResult, scrub } from "./http-replay.js";`]
             : []),
@@ -759,7 +914,14 @@ export class McpGenerator {
         ]),
       ``,
       ...REPLAY_COMMON,
-      ...(set.targetType === 'web' ? [...WEB_SHARED, ...(http ? WEB_RUNTIME_HTTP : WEB_RUNTIME)] : TERMINAL_RUNTIME),
+      ...(set.targetType === 'web'
+        ? [
+          ...WEB_SHARED,
+          ...(heal ? WEB_STEP_HEAL : WEB_STEP_STRICT),
+          ...(http ? WEB_RUNTIME_HTTP : WEB_RUNTIME),
+          ...WEB_REPLAY_ENTRY,
+        ]
+        : [...TERMINAL_RUNTIME, ...TERMINAL_REPLAY_ENTRY]),
       ...CONTAINER_ENTRY,
     ];
     return lines.join('\n') + '\n';
@@ -781,7 +943,7 @@ export class McpGenerator {
       `import { spawn } from "node:child_process";`,
       `import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";`,
       `import { tmpdir } from "node:os";`,
-      `import { dirname, join, resolve } from "node:path";`,
+      `import { basename, dirname, join, resolve } from "node:path";`,
       `import { fileURLToPath } from "node:url";`,
       `import type { Step, Final, Limits } from "./replay.js";`,
       `import { resolveTimeoutMs } from "./settle.js";`,
@@ -797,6 +959,12 @@ export class McpGenerator {
       http
         ? `const HTTP_MISSING_SECRETS = (steps: Step[]): string[] => missingHttpSecrets(steps, process.env);`
         : `const HTTP_MISSING_SECRETS = (_steps: Step[]): string[] => [];`,
+      ``,
+      healEnabled(set, options)
+        ? `// Heal mode (compiled with --heal-support): the settings of the model are forwarded by name, like the secrets.`
+        : `// Heal mode is not compiled in.`,
+      `const HEAL_SUPPORT = ${JSON.stringify(healEnabled(set, options))};`,
+      `const MODEL_ENV_NAMES: string[] = ${JSON.stringify(healEnabled(set, options) ? MODEL_ENV_NAMES : [])};`,
       ``,
       `const DEFAULT_IMAGE = ${JSON.stringify(imageTag)};`,
       `const WEB_TARGET = ${JSON.stringify(!terminal)};`,
@@ -843,7 +1011,7 @@ export class McpGenerator {
       'COPY screen-hash.js ./screen-hash.js',
       'COPY settle.js ./settle.js',
       'COPY extract.js ./extract.js',
-      ...(terminal ? [] : ['COPY row-resolver.js ./row-resolver.js', 'COPY step-plan.js ./step-plan.js', 'COPY totp.js ./totp.js', 'COPY web-steps.js ./web-steps.js', ...(http ? ['COPY http-replay.js ./http-replay.js'] : [])]),
+      ...(terminal ? [] : ['COPY row-resolver.js ./row-resolver.js', 'COPY step-plan.js ./step-plan.js', 'COPY totp.js ./totp.js', 'COPY web-steps.js ./web-steps.js', ...(http ? ['COPY http-replay.js ./http-replay.js'] : []), ...(healEnabled(set, options) ? ['# Heal modules (--heal-support). The cache and the recorded thumbnails are mounted when a call runs, never copied.', 'COPY heal ./heal'] : [])]),
       terminal ? 'USER node' : 'USER pwuser',
       'ENTRYPOINT ["node", "replay.js", "--container"]',
       '',
@@ -917,13 +1085,13 @@ export class McpGenerator {
       `    const errors = validatePayload(${JSON.stringify(toolName)}, args);`,
       `    if (errors !== null) {`,
       `      return {`,
-      `        content: [{ type: "text", text: JSON.stringify({ success: false, error: "validation", errors }) }],`,
+      `        content: [{ type: "text", text: JSON.stringify(withMode({ success: false, error: "validation", errors })) }],`,
       `        isError: true`,
       `      };`,
       `    }`,
       `    const result = await runReplay(${JSON.stringify(workflow.steps)}, args, ${JSON.stringify(this.finalOf(workflow))}, { callMs: _timeoutMs, workflowMs: ${JSON.stringify(workflow.timeoutMs)}, setMs: ${JSON.stringify(set.timeoutMs)} });`,
       `    return {`,
-      `      content: [{ type: "text", text: JSON.stringify(result) }],`,
+      `      content: [{ type: "text", text: JSON.stringify(withMode(result)) }],`,
       `      isError: !result.success`,
       `    };`,
       `  }`,
@@ -938,12 +1106,14 @@ export class McpGenerator {
     finalScreenId?: string;
     finalZone?: Workflow['finalZone'];
     resultZone?: Omit<ResultZone, 'schema'>;
+    workflowId?: string;
   } {
     const final: {
       finalScreenId?: string;
       finalZone?: Workflow['finalZone'];
       resultZone?: Omit<ResultZone, 'schema'>;
-    } = {};
+      workflowId?: string;
+    } = { workflowId: workflow.id };
     if (workflow.finalScreenId !== undefined) final.finalScreenId = workflow.finalScreenId;
     if (workflow.finalZone !== undefined) final.finalZone = workflow.finalZone;
     // The schema of `data` is documentation (OpenAPI), not needed to extract

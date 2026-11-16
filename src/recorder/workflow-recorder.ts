@@ -10,6 +10,7 @@ import type {
   ResultZone,
   StepActionType,
   StepRisk,
+  VisualAnchor,
   Workflow,
   WorkflowStep,
   WorkflowVariable,
@@ -36,6 +37,9 @@ export class WorkflowRecorder {
   private readonly steps: WorkflowStep[] = [];
   private readonly variables = new Map<string, WorkflowVariable>();
   private readonly payload: Record<string, unknown> = {};
+
+  /** Known from the start: thumbnails are named after it while the recording runs. */
+  readonly id = randomUUID();
 
   constructor(private readonly label: string) { }
 
@@ -68,6 +72,15 @@ export class WorkflowRecorder {
     }
     this.steps.push(recorded);
     return this.steps.length - 1;
+  }
+
+  /** Attach the Visual_Anchor captured for a step. */
+  setVisual(stepIndex: number, visual: VisualAnchor): void {
+    const step = this.steps[stepIndex];
+    if (step === undefined) {
+      throw new Error(`No step at index ${stepIndex}`);
+    }
+    step.visual = structuredClone(visual);
   }
 
   /** Replace the anchor of a recorded step (the page title is only known after the page loaded). */
@@ -170,7 +183,7 @@ export class WorkflowRecorder {
     }
 
     const workflow: Workflow = {
-      id: randomUUID(),
+      id: this.id,
       label: this.label,
       steps: this.steps.map((s) => structuredClone(s)),
       variables: [...this.variables.values()],

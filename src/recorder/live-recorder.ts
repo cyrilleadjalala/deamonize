@@ -4,6 +4,7 @@ import { buildSelectors, buildZoneSelector, type ElementInfo } from './selector-
 import type { WorkflowRecorder } from './workflow-recorder.js';
 import { NetworkCapture } from './network-capture.js';
 import { buildHttpRecipe } from './http-correlate.js';
+import { prepareVisualAnchor, writeThumbnail, type PreparedVisual } from './visual-anchor.js';
 import type { Anchor, ExtractorKind, ResultZone, RowBinding, StepActionType, StepRisk, WorkflowVariable } from '../types.js';
 
 /** The part of Playwright's binding source the recorder uses. */
@@ -15,6 +16,7 @@ interface BindingSource {
 export interface CapturedEvent {
   actionType: StepActionType;
   info: ElementInfo;
+  box?: { x: number; y: number; width: number; height: number };   // target in the viewport of the top page, measured by the page
   anchor?: Anchor;              // role, accessible name, parent context, frame path
   frameComplete?: boolean;      // false when the page could not walk up to the top document (cross-origin)
   value?: string;
@@ -24,6 +26,7 @@ export interface CapturedEvent {
   inForm?: boolean;             // Enter pressed in a field of a form
   rowBinding?: RowBinding;      // the target lies in a table row, card or list item
   rowTexts?: string[];          // texts of that row, to recognise the value of a variable in it
+  canvas?: boolean;             // a click on a <canvas>: no selector, only the clicked point (`box`)
 }
 
 /** Where an event came from, when known by the recorder and not only by the page. */
@@ -36,6 +39,11 @@ export interface HandleContext {
 export interface LiveRecorderOptions {
   /** Observe fetch/XHR requests to record Level 1 recipes (default false). */
   captureNetwork?: boolean;
+  /**
+   * Capture a Visual_Anchor (rect, intent and a thumbnail in `<workflowFile>.assets/`) for each step with a target.
+   * Off when absent. `thumbnails: false` keeps rect and intent and takes no picture.
+   */
+  visual?: { workflowFile: string; thumbnails?: boolean };
 }
 
 /** Which replay level can be used for a step, and why not Level 1 when it cannot. */
@@ -76,6 +84,7 @@ const SECRET_NAME = /^[A-Z][A-Z0-9_]*$/;
 const MIN_SUBSTRING_LENGTH = 3;   // a shorter variable value only selects a row when a cell equals it
 const POPUP_SETTLE_MS = 50;
 const POPUP_LOAD_TIMEOUT_MS = 3000;
+const VISUAL_TIMEOUT_MS = 4000;
 
 /**
  * Classify what a step may change in the application: clicks on buttons and
@@ -115,6 +124,8 @@ export class LiveRecorder {
   private zone: ResultZone | undefined;
   private readonly network: NetworkCapture | undefined;
   private readonly stepActions = new Map<number, number>();
+  private readonly visual: LiveRecorderOptions['visual'];
+  private thumbnails = 0;
 
   constructor(
     private readonly page: Page,
@@ -122,6 +133,7 @@ export class LiveRecorder {
     options: LiveRecorderOptions = {},
   ) {
     this.pages = [page];
+    this.visual = options.visual;
     this.network = options.captureNetwork === true ? new NetworkCapture(page.context()) : undefined;
   }
 
@@ -192,6 +204,16 @@ export class LiveRecorder {
   /** The Result_Zone the user marked in the page, if any (the last mark wins). */
   get resultZone(): ResultZone | undefined {
     return this.zone === undefined ? undefined : structuredClone(this.zone);
+  }
+
+  /** Wait until every event reported so far is recorded, with its visual anchor. Call it before `finish`. */
+  async idle(): Promise<void> {
+    await this.queue;
+  }
+
+  /** Number of thumbnails written so far. */
+  get thumbnailCount(): number {
+    return this.thumbnails;
   }
 
   /** Number of steps recorded so far. */
@@ -269,12 +291,15 @@ export class LiveRecorder {
   private enqueue(source: BindingSource, event: CapturedEvent, pageIndex: number): Promise<number | null> {
     // The action starts now, when the page reports it, not when the queue reaches it
     const actionId = this.network?.beginAction();
+    const prepared = this.prepareVisual(event, source.frame);
     const run = async (): Promise<number | null> => {
       const ctx: HandleContext = { pageIndex, actionId };
       if (event.frameComplete === false && source.frame.parentFrame() !== null) {
         ctx.frame = await frameChain(source.frame).catch(() => undefined);
       }
-      return this.handle(event, ctx);
+      const index = this.handle(event, ctx);
+      if (index !== null) await this.attachVisual(index, await prepared);
+      return index;
     };
     const result = this.queue.then(run, run);
     this.queue = result.catch(() => undefined);
@@ -283,17 +308,21 @@ export class LiveRecorder {
 
   /** Turn one captured event into a recorded step. Returns its index, or null when ignored. */
   handle(event: CapturedEvent, ctx: HandleContext = {}): number | null {
-    const selectors = buildSelectors(event.info);
-    if (selectors.length === 0) {
+    // A click on a canvas has no selector by design: it is replayed from the Visual_Anchor rectangle (heal mode)
+    const canvas = event.canvas === true && event.actionType === 'click' && event.box !== undefined && this.visual !== undefined;
+    const selectors = canvas ? [] : buildSelectors(event.info);
+    if (selectors.length === 0 && !canvas) {
       return null;
     }
 
     this.switchTo(ctx.pageIndex ?? this.current);
 
     const secretRef = event.secretRef !== undefined && SECRET_NAME.test(event.secretRef) ? event.secretRef : undefined;
-    const anchor = event.anchor === undefined
-      ? undefined
-      : { ...event.anchor, frame: ctx.frame ?? event.anchor.frame };
+    const anchor = canvas
+      ? { role: 'canvas', name: event.info.name ?? '', frame: ctx.frame ?? event.anchor?.frame ?? [] }
+      : event.anchor === undefined
+        ? undefined
+        : { ...event.anchor, frame: ctx.frame ?? event.anchor.frame };
 
     const index = this.recorder.addStep({
       actionType: event.actionType,
@@ -321,6 +350,48 @@ export class LiveRecorder {
     return index;
   }
 
+  /**
+   * Start the Visual_Anchor of an event as soon as the page reports it, before the action changes the page, in
+   * parallel with the events queued before it. Never rejects: a picture that cannot be taken only leaves the step
+   * without thumbnail (or without visual anchor when its target cannot be located).
+   */
+  private prepareVisual(event: CapturedEvent, frame: Frame): Promise<PreparedVisual | undefined> {
+    const visual = this.visual;
+    if (visual === undefined) return Promise.resolve(undefined);
+    const work = async (): Promise<PreparedVisual | undefined> => {
+      const step = { actionType: event.actionType, anchor: event.anchor, label: event.label, secretRef: event.secretRef };
+      const opts = { thumbnail: visual.thumbnails !== false };
+      // The page measured the target when it reported the event
+      if (event.box !== undefined) return prepareVisualAnchor(frame.page(), event.box, step, opts);
+      // A frame the page could not walk up from: look the element up
+      for (const selector of buildSelectors(event.info)) {
+        const locator = frame.locator(selector);
+        if ((await locator.count().catch(() => 0)) === 0) continue;
+        return prepareVisualAnchor(frame.page(), locator.first(), step, opts);
+      }
+      return undefined;
+    };
+    return withTimeout(work(), VISUAL_TIMEOUT_MS).catch(() => undefined);
+  }
+
+  /** Store the Visual_Anchor prepared for a step, and write its thumbnail. Never throws. */
+  private async attachVisual(index: number, prepared: PreparedVisual | undefined): Promise<void> {
+    if (prepared === undefined || this.visual === undefined) return;
+    try {
+      const anchor = prepared.visual;
+      if (prepared.png !== undefined) {
+        anchor.thumbnailPath = await writeThumbnail(prepared.png, {
+          workflowFile: this.visual.workflowFile,
+          workflowId: this.recorder.id,
+          index,
+        });
+        this.thumbnails += 1;
+      }
+      this.recorder.setVisual(index, anchor);
+    } catch {
+      // The recording goes on without the visual anchor of this step
+    }
+  }
   /** Record that the following steps happen on another page. */
   private switchTo(pageIndex: number): void {
     if (pageIndex === this.current) return;
@@ -411,6 +482,13 @@ export class LiveRecorder {
       return { ok: false, error: (err as Error).message };
     }
   }
+}
+
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    work.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
 }
 
 /** GET and HEAD read, DELETE deletes, the other methods write. */

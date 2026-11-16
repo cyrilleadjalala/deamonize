@@ -103,7 +103,13 @@ export async function executeWebStep(
 
   const plan = planLocators(step, variables);
   if (plan.length === 0) {
-    throw new StepExecutionError([], 'the step has neither an accessible anchor nor a selector');
+    throw new StepExecutionError(
+      [],
+      step.anchor?.role === 'canvas'
+        ? 'the step was recorded on a canvas, which has no accessible target: only heal mode can replay it, by coordinates'
+        : 'the step has neither an accessible anchor nor a selector',
+      true
+    );
   }
   const page = run.pages[run.current];
   if (page === undefined || page.isClosed()) {
@@ -353,12 +359,14 @@ async function locateAndAct(
     const hints = step.anchor?.frameHints;
     throw new StepExecutionError(
       lastTried,
-      `the frame ${JSON.stringify(step.anchor?.frame ?? [])}${hints !== undefined ? ' (and its name, title or source)' : ''} was not found within ${timeoutMs} ms`
+      `the frame ${JSON.stringify(step.anchor?.frame ?? [])}${hints !== undefined ? ' (and its name, title or source)' : ''} was not found within ${timeoutMs} ms`,
+      true
     );
   }
   throw new StepExecutionError(
     lastTried,
-    `no locator worked within ${timeoutMs} ms: ${lastReasons.join('; ')}`
+    `no locator worked within ${timeoutMs} ms: ${lastReasons.join('; ')}`,
+    true
   );
 }
 

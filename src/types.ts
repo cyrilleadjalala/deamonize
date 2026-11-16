@@ -135,7 +135,7 @@ export interface HttpRecipe {
 }
 
 export interface VisualAnchor {
-  thumbnailPath: string;
+  thumbnailPath?: string;               // relative to the workflow file; absent when no thumbnail was captured
   rect: { x: number; y: number; w: number; h: number };   // fractions of the viewport in [0, 1]
   intent: string;
 }

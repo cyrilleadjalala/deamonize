@@ -18,6 +18,7 @@ export interface RecordOptions {
   resultZone?: string;          // selector of the element whose content the tool returns (instead of the whole page)
   resultKind?: ExtractorKind;   // how to read it: text, table, list, fields, json, attribute (default: suggested from the element)
   captureNetwork?: boolean;     // observe fetch/XHR to record Level 1 recipes (default true)
+  visual?: boolean;             // capture Visual_Anchors: rect, intent and a thumbnail per step (default true; false = none at all)
   /**
    * Replaces the wait for the user (Enter key or closing the window).
    * The session ends when it resolves; used to drive the page from tests.
@@ -37,6 +38,8 @@ export interface RecordSummary {
   constantTypedValues: number;
   /** Per step, the replay level that can be used (empty when the network capture is off). */
   network?: NetworkStepReport[];
+  /** Thumbnails saved next to the workflow file (in `<out>.assets/`). */
+  thumbnails: number;
   /** The Result_Zone stored with the workflow, when there is one. */
   resultZone?: { selector?: string; rect?: { row: number; col: number; rows: number; cols: number }; kind: string };
 }
@@ -77,7 +80,10 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     await page.goto(options.url);
 
     recorder = new WorkflowRecorder(options.label);
-    live = new LiveRecorder(page, recorder, { captureNetwork: options.captureNetwork ?? true });
+    live = new LiveRecorder(page, recorder, {
+      captureNetwork: options.captureNetwork ?? true,
+      ...(options.visual === false ? {} : { visual: { workflowFile: options.out } }),
+    });
     await live.attach();
 
     // Popups and new tabs get the same capture; each opening is recorded as a switch_page step
@@ -91,6 +97,8 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     const session = options.drive ? options.drive(page, live) : waitForUser(page);
     await Promise.race([session, stopped]);
 
+    // Every reported event is recorded, and no thumbnail is being taken while the final screen is read
+    await live.idle();
     // The final screen is only available while the window is still open
     const finalScreen = page.isClosed() ? undefined : await captureFinalScreen(page, options.finalZone);
     // The zone given on the command line, else the one marked in the page
@@ -113,6 +121,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
       steps: workflow.steps.length,
       variables: workflow.variables.map((v) => v.name),
       totalWorkflows,
+      thumbnails: live.thumbnailCount,
       network,
       ...secretSummary(workflow),
       ...(workflow.resultZone === undefined

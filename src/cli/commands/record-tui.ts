@@ -128,6 +128,7 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
       totalWorkflows,
       secrets: [],
       constantTypedValues: recorder.constantTypedValues,
+      thumbnails: 0,
     };
     if (resultZone !== undefined) {
       summary.resultZone = { rect: resultZone.rect, kind: resultZone.extractor?.kind ?? 'text' };

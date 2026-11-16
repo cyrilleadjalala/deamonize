@@ -719,12 +719,34 @@ export const CAPTURE_SCRIPT = `
     input.select();
   }
 
+  // Position of the element in the viewport of the top page, when every frame up to it can be walked
+  function viewportBox(el) {
+    try {
+      const r = el.getBoundingClientRect();
+      let x = r.x;
+      let y = r.y;
+      let win = window;
+      while (win !== win.top) {
+        const holder = win.frameElement;
+        if (!holder) return undefined;
+        const h = holder.getBoundingClientRect();
+        x += h.x + holder.clientLeft;
+        y += h.y + holder.clientTop;
+        win = win.parent;
+      }
+      return { x, y, width: r.width, height: r.height };
+    } catch (e) {
+      return undefined;
+    }
+  }
   function emit(actionType, el, value, extra) {
     const context = parentContext(el);
     const info = infoOf(el, context);
     const { anchor, frameComplete } = anchorOf(el, info, context);
     const name = info.name || info.nameAttr || info.id || el.tagName.toLowerCase();
     const event = { actionType, info, anchor, frameComplete, label: actionType + ' ' + name };
+    const box = viewportBox(el);
+    if (box) event.box = box;
     if (context && context.rowBinding) {
       event.rowBinding = context.rowBinding;
       event.rowTexts = context.rowTexts;
@@ -751,6 +773,20 @@ export const CAPTURE_SCRIPT = `
         })
         .catch(() => {});
     }
+  }
+
+  const CANVAS_CLICK_HALF = 12;
+  function emitCanvasClick(canvas, e) {
+    const full = viewportBox(canvas);
+    if (!full) return;
+    const r = canvas.getBoundingClientRect();
+    const box = {
+      x: full.x + (e.clientX - r.x) - CANVAS_CLICK_HALF,
+      y: full.y + (e.clientY - r.y) - CANVAS_CLICK_HALF,
+      width: CANVAS_CLICK_HALF * 2,
+      height: CANVAS_CLICK_HALF * 2,
+    };
+    emit('click', canvas, undefined, { box, canvas: true });
   }
 
   function isTextField(el) {
@@ -889,6 +925,12 @@ export const CAPTURE_SCRIPT = `
       return;
     }
     if (e.detail === 0 && performance.now() - enterPressedAt < 100) return;
+    // A canvas draws its own controls: nothing inside it can be found again by role or selector, so only
+    // the point that was clicked is recorded (a small box around it, which becomes the Visual_Anchor rectangle)
+    if (e.target instanceof HTMLCanvasElement && !e.target.closest(CLICKABLE)) {
+      emitCanvasClick(e.target, e);
+      return;
+    }
     const target = clickTarget(e.target);
     if (!target) return;
     prepareClick(target);

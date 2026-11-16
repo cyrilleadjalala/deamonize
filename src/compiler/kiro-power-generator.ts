@@ -40,6 +40,9 @@ export function toKebabCase(value: string): string {
 
 const yamlString = (value: string): string => JSON.stringify(value);
 
+/** The settings of the model a heal consults: written as `${NAME}` placeholders, never as values. */
+const HEAL_MODEL_VARIABLES = ['DAEMONIZE_MODEL_PROVIDER', 'DAEMONIZE_MODEL_NAME', 'DAEMONIZE_MODEL_API_KEY', 'DAEMONIZE_MODEL_BASE_URL'];
+
 export class KiroPowerGenerator {
   /**
    * Generate the content of the Kiro Power files (no I/O).
@@ -48,8 +51,9 @@ export class KiroPowerGenerator {
    * @param toolNames - Map from workflowId to snake_case tool name
    * @param outputDir - Directory where mcp-server.js is written
    */
-  generate(set: WorkflowSet, toolNames: Map<string, string>, outputDir: string, options: { http?: 'off' | 'auto' } = {}): KiroPower {
+  generate(set: WorkflowSet, toolNames: Map<string, string>, outputDir: string, options: { http?: 'off' | 'auto'; healSupport?: boolean } = {}): KiroPower {
     const http = set.targetType === 'web' && options.http === 'auto';
+    const healSupport = set.targetType === 'web' && options.healSupport === true;
     const targetName = set.targetName || 'Generated Application';
     const name = toKebabCase(set.targetName);
     const description = `Generated MCP server for ${targetName} by Daemonize`;
@@ -82,6 +86,12 @@ export class KiroPowerGenerator {
     // Names only: Kiro substitutes ${VAR} from its own environment, so no value is ever written to a file
     const secretVariables = [...new Set(set.workflows.flatMap(secretEnvNames))].sort();
     const env: Record<string, string> = Object.fromEntries(secretVariables.map((v) => [v, '${' + v + '}']));
+    // The replay mode is an editable default: "strict" unless the user changes it to "heal"
+    env.DAEMONIZE_MODE = 'strict';
+    // Only a server compiled with --heal-support can use a model: only then are its settings named here
+    if (healSupport) {
+      for (const v of HEAL_MODEL_VARIABLES) env[v] = '${' + v + '}';
+    }
 
     const mcp: KiroMcp = {
       $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',
@@ -154,6 +164,23 @@ export class KiroPowerGenerator {
           '',
         ]
         : []),
+      '## Modes: strict and heal',
+      '',
+      'The server replays in strict mode unless told otherwise: every step runs through recorded, deterministic means only, and a step that cannot be performed fails the call with `success: false` and `drifted: true`. Nothing is guessed. Every result carries `mode` (`strict` or `heal`).',
+      '',
+      ...(healSupport
+        ? [
+          'This server was compiled with `--heal-support`, so heal mode is available. To turn it on, set `DAEMONIZE_MODE` to `heal` in the `env` of `mcp.json` (or start the server with `daemonize serve --heal`) and set the model variables of `mcp.json`:',
+          '',
+          ...HEAL_MODEL_VARIABLES.map((v) => `- \`${v}\``),
+          '',
+          'In heal mode, when every locator of a read step fails (or the page has no DOM, such as a canvas), the server looks for the element in this order: a locator cached by an earlier heal, the recorded coordinates (canvas), then a multimodal model that sees a screenshot with numbered marks, the recorded thumbnail and the intent of the step. A write or delete step is healed only when it has `allowHeal: true`. The result then has `healed: true` and `healedSteps` (step index and source: `cache`, `coordinates` or `model`). If no model is configured the call fails with `error: "heal_unavailable"`. The workflow is never modified; only `.daemonize/heal-cache.json` is written.',
+          '',
+        ]
+        : [
+          'This server was compiled without heal support. To use heal mode, recompile with `daemonize compile --heal-support`, then set `DAEMONIZE_MODE` to `heal` in the `env` of `mcp.json` (or start the server with `daemonize serve --heal`). A server in strict mode never contacts a model.',
+          '',
+        ]),
       '## Drift',
       '',
       'A result with `drifted: true` means the final screen differs from the one recorded (only the recorded zone is compared when the workflow has one), so the application probably changed. Double-check the result before relying on it. `driftChecked: false` means no final screen was recorded: `drifted` is then always `false` and says nothing.',

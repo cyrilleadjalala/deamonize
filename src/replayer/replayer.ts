@@ -11,6 +11,7 @@ import {
   type ZoneOutcome,
 } from '../replay/runtime/extract.js';
 import { resolveTimeoutMs } from '../replay/runtime/settle.js';
+import { PatternTimeoutError, patternTimeoutResult } from '../replay/runtime/pattern-wait.js';
 import {
   StepExecutionError,
   describeFailure,
@@ -31,7 +32,7 @@ import type {
 
 
 /** Creates a brand-new sandbox, already positioned on the workflow's start state. */
-export type DriverFactory = () => SandboxDriver;
+export type DriverFactory = (size?: { cols: number; rows: number }) => SandboxDriver;
 
 export class Replayer {
   private readonly hasher = new ScreenHasher();
@@ -64,7 +65,8 @@ export class Replayer {
 
     let driver: SandboxDriver;
     try {
-      driver = this.createDriver();
+      // A terminal workflow replays at the size it was recorded at (DAEMONIZE_COLS/ROWS override it)
+      driver = this.createDriver(terminalSizeFor(workflow));
       await driver.start();
     } catch {
       return { success: false, error: 'sandbox_unavailable', elapsedMs: elapsed() };
@@ -76,11 +78,20 @@ export class Replayer {
     });
 
     try {
-      const outcome = await Promise.race([this.runSteps(driver, workflow, payload), timeout]);
+      const outcome = await Promise.race([
+        this.runSteps(driver, workflow, payload, () => timeoutMs - elapsed()),
+        timeout,
+      ]);
 
       // Strict mode: the first step no locator could perform ends the replay; no later step ran
       if (outcome !== 'timeout' && 'failed' in outcome) {
-        const { stepIndex, step, tried, reason } = outcome.failed as Extract<StrictOutcome, { ok: false }>;
+        const { stepIndex, step, tried, reason, cause } = outcome.failed as Extract<StrictOutcome, { ok: false }>;
+        if (cause instanceof PatternTimeoutError) {
+          return patternTimeoutResult(
+            { stepIndex, wait: cause.wait, elapsedMs: cause.elapsedMs, screenExcerpt: cause.screenExcerpt },
+            elapsed(),
+          );
+        }
         const shot = await this.captureFailure(driver, stepIndex);
         const failure = describeFailure({ stepIndex, step, tried, reason, screenshot: shot.screenshot, thumbnail: shot.thumbnail });
         return { ...failureResult(failure, elapsed()) };
@@ -128,6 +139,16 @@ export class Replayer {
             : outcome.screen;
         result.drifted = this.hasher.computeId(compared) !== workflow.finalScreenId;
       }
+      if (outcome.screen.type === 'terminal' && driver.terminalSize !== undefined) {
+        const used = driver.terminalSize;
+        result.terminalSize = used;
+        // A screen rendered at another size than the recorded one is never judged equal
+        if (workflow.finalScreenId !== undefined && workflow.cols !== undefined && workflow.rows !== undefined
+          && (used.cols !== workflow.cols || used.rows !== workflow.rows)) {
+          result.drifted = true;
+          result.driftReason = `terminal size: recorded ${workflow.cols}x${workflow.rows}, replayed at ${used.cols}x${used.rows}`;
+        }
+      }
       return result;
     } catch (err) {
       return { success: false, error: (err as Error).message, elapsedMs: elapsed() };
@@ -143,10 +164,11 @@ export class Replayer {
     driver: SandboxDriver,
     workflow: Workflow,
     payload: Record<string, unknown>,
+    budgetMs?: () => number,
   ): Promise<{ screen: ScreenContent } | { failed: StrictOutcome }> {
     let screen = await driver.captureScreen();
     const outcome = await runStepsStrict(workflow.steps, async (step) => {
-      screen = await this.runStep(driver, step, payload);
+      screen = await this.runStep(driver, step, payload, budgetMs);
     });
     return outcome.ok ? { screen } : { failed: outcome };
   }
@@ -177,6 +199,7 @@ export class Replayer {
     driver: SandboxDriver,
     step: WorkflowStep,
     payload: Record<string, unknown>,
+    budgetMs?: () => number,
   ): Promise<ScreenContent> {
     const value = resolveValue(step, payload);
     let lastError: unknown;
@@ -188,6 +211,10 @@ export class Replayer {
       if (step.timeoutMs !== undefined) {
         action.timeoutMs = step.timeoutMs;
       }
+      if (step.waitFor !== undefined) {
+        action.waitFor = step.waitFor;
+        if (budgetMs !== undefined) action.waitBudgetMs = Math.max(1, budgetMs());
+      }
       if (selector !== undefined) {
         action.selector = selector;
       }
@@ -197,6 +224,8 @@ export class Replayer {
       try {
         return await driver.execute(action);
       } catch (err) {
+        // The pattern did not show up: strict, the replay stops here with its own diagnostic
+        if (err instanceof PatternTimeoutError) throw err;
         lastError = err;
         if ((step.risk ?? 'read') !== 'read') break;
       }
@@ -204,6 +233,20 @@ export class Replayer {
     const reason = lastError instanceof Error ? lastError.message : 'No selector matched for step';
     throw new StepExecutionError(step.selectors, reason);
   }
+}
+
+/** The size to replay a terminal workflow at: the environment, else the recorded size; undefined when neither (the driver then uses 80x24). */
+export function terminalSizeFor(workflow: Workflow): { cols: number; rows: number } | undefined {
+  const fromEnv = (name: string, min: number, max: number): number | undefined => {
+    const text = process.env[name]?.trim();
+    if (text === undefined || !/^[0-9]+$/.test(text)) return undefined;
+    const n = Number(text);
+    return n >= min && n <= max ? n : undefined;
+  };
+  const cols = fromEnv('DAEMONIZE_COLS', 20, 500) ?? workflow.cols;
+  const rows = fromEnv('DAEMONIZE_ROWS', 5, 200) ?? workflow.rows;
+  if (cols === undefined && rows === undefined) return undefined;
+  return { cols: cols ?? 80, rows: rows ?? 24 };
 }
 
 function resolveValue(step: WorkflowStep, payload: Record<string, unknown>): string | undefined {

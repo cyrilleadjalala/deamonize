@@ -3,6 +3,7 @@ import { chromium, type Page } from 'playwright';
 import { LiveRecorder, type NetworkStepReport } from '../../recorder/live-recorder.js';
 import { WorkflowRecorder } from '../../recorder/workflow-recorder.js';
 import { saveWorkflow } from './save-workflow.js';
+import type { SandboxSpec } from '../../types.js';
 import { extractWebZone } from '../../replay/runtime/web-steps.js';
 import { dataSchemaFor } from '../../schema/data-schema.js';
 import type { ExtractorKind, ResultZone, ScreenContent, Workflow } from '../../types.js';
@@ -13,6 +14,7 @@ export interface RecordOptions {
   label: string;                // label of the recorded workflow (becomes the tool name)
   out: string;                  // Workflow set file; created, or merged into when it exists
   storageState?: string;        // Playwright storage state: start the recording already logged in
+  sandbox?: SandboxSpec;        // --sandbox-* flags: stored in the sandbox block of the file
   headless?: boolean;           // default false: the user needs to see the browser
   finalZone?: string;           // CSS selector: drift is judged on this part of the final page only
   resultZone?: string;          // selector of the element whose content the tool returns (instead of the whole page)
@@ -69,7 +71,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
 
   let recorder: WorkflowRecorder | undefined;
   let live: LiveRecorder | undefined;
-  const target = { targetType: 'web' as const, name: options.name, startUrl: options.url, storageState: options.storageState };
+  const target = { targetType: 'web' as const, name: options.name, startUrl: options.url, storageState: options.storageState, sandbox: options.sandbox };
 
   try {
     const context = await browser.newContext(

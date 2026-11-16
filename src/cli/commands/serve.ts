@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
-import { assertSandboxReady } from './sandbox.js';
+import { assertSandboxReady, readSandboxImageInfo } from './sandbox.js';
 
 export interface ServeOptions {
   /** Replay every call in a throw-away Docker container instead of on this machine. */
@@ -59,6 +59,10 @@ export async function serve(dir: string, options: ServeOptions = {}): Promise<nu
     const tag = await assertSandboxReady(dir);
     console.error(`Replaying every call in a Docker container of the image "${tag}".`);
     env.DAEMONIZE_SANDBOX = 'docker';
+    // The image of the last "sandbox build" and the network the project was built for (the environment still wins)
+    const info = await readSandboxImageInfo(dir);
+    env.DAEMONIZE_SANDBOX_IMAGE ??= tag;
+    if (info.sandbox?.network !== undefined) env.DAEMONIZE_SANDBOX_NETWORK ??= info.sandbox.network;
     if (options.memoryMb !== undefined) env.DAEMONIZE_SANDBOX_MEMORY_MB = String(options.memoryMb);
     if (options.cpus !== undefined) env.DAEMONIZE_SANDBOX_CPUS = String(options.cpus);
     if (options.mounts !== undefined) env.DAEMONIZE_SANDBOX_MOUNTS = JSON.stringify(options.mounts);

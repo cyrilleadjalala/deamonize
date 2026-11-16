@@ -1,4 +1,5 @@
 import { KEY_SEQUENCES } from '../sandbox/keys.js';
+import { defaultNetwork, renderDockerfile } from '../sandbox/dockerfile.js';
 import { describeTool } from './tool-description.js';
 import { propertyToZodSource } from './zod-translator.js';
 import { pickResultZone } from '../replay/runtime/extract.js';
@@ -66,6 +67,8 @@ const REPLAY_COMMON = [
   `  visual?: any;`,
   `  secretRef?: string;`,
   `  totp?: boolean;`,
+  `  // Terminal: wait for a pattern of the rendered screen instead of a moment of silence, see pattern-wait.ts`,
+  `  waitFor?: any;`,
   `  // Level 1 (web, compiled with --http): see http-replay.ts`,
   `  http?: any;`,
   `};`,
@@ -80,7 +83,8 @@ const REPLAY_COMMON = [
   `// finalZone limits the comparison: a CSS selector (web) or a rectangle of the screen (terminal).`,
   `export type Zone = { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } };`,
   `export type ResultZone = Zone & { extractor?: ExtractorLike };`,
-  `export type Final = { finalScreenId?: string; finalZone?: Zone; resultZone?: ResultZone; workflowId?: string };`,
+  `// cols and rows: the terminal size the workflow was recorded at (terminal targets); absent in old files.`,
+  `export type Final = { finalScreenId?: string; finalZone?: Zone; resultZone?: ResultZone; workflowId?: string; cols?: number; rows?: number };`,
   ``,
   `const MAX_TEXT_LENGTH = 20000;`,
   ``,
@@ -455,8 +459,18 @@ const WEB_RUNTIME_HTTP = [
 
 // Terminal targets: a freshly started program in a pty per call; returns the text on its screen.
 const TERMINAL_RUNTIME = [
-  `const COLS = 80;`,
-  `const ROWS = 24;`,
+  `// The documented fallback of a workflow recorded without a size (old files).`,
+  `const DEFAULT_COLS = 80;`,
+  `const DEFAULT_ROWS = 24;`,
+  ``,
+  `// DAEMONIZE_COLS / DAEMONIZE_ROWS override the recorded size; anything out of range is ignored.`,
+  `function sizeFromEnv(name: string, min: number, max: number): number | undefined {`,
+  `  const text = process.env[name]?.trim();`,
+  `  if (text === undefined || !/^[0-9]+$/.test(text)) return undefined;`,
+  `  const n = Number(text);`,
+  `  return n >= min && n <= max ? n : undefined;`,
+  `}`,
+  ``,
   `const STABLE_MS = 150;`,
   `const MAX_SETTLE_MS = 3000;`,
   `const SILENT_GRACE_MS = 500;`,
@@ -467,6 +481,9 @@ const TERMINAL_RUNTIME = [
   `async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides) {`,
   `  const startedAt = Date.now();`,
   `  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });`,
+  `  // The size of the pty and of the screen renderer: the environment, else the recorded size, else 80x24`,
+  `  const COLS = sizeFromEnv("DAEMONIZE_COLS", 20, 500) ?? final.cols ?? DEFAULT_COLS;`,
+  `  const ROWS = sizeFromEnv("DAEMONIZE_ROWS", 5, 200) ?? final.rows ?? DEFAULT_ROWS;`,
   `  const screen = new Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true, scrollback: 0 });`,
   `  let lastActivityAt = Date.now();`,
   `  let touchedAt = Date.now();`,
@@ -476,10 +493,12 @@ const TERMINAL_RUNTIME = [
   ``,
   `  const [command, ...commandArgs] = overrides.command ?? START_COMMAND;`,
   `  const program = pty.spawn(command, commandArgs, { cols: COLS, rows: ROWS, name: "xterm-256color" });`,
+  `  const outputListeners = new Set<() => void>();`,
   `  program.onData((data: string) => {`,
   `    screen.write(data);`,
   `    lastActivityAt = Date.now();`,
   `    writesSinceTouch += 1;`,
+  `    for (const listener of outputListeners) listener();`,
   `  });`,
   `  program.onExit(() => {`,
   `    exited = true;`,
@@ -508,6 +527,12 @@ const TERMINAL_RUNTIME = [
   `    return lines.join("\\n");`,
   `  };`,
   ``,
+  `  // The rendered screen, once everything the program printed so far is drawn.`,
+  `  const readScreen = async () => {`,
+  `    await new Promise<void>((resolve) => screen.write("", resolve));`,
+  `    return screenText();`,
+  `  };`,
+  ``,
   `  try {`,
   `    const run = async () => {`,
   `      // A program may take a while to start and print its first screen; a terminal`,
@@ -519,8 +544,31 @@ const TERMINAL_RUNTIME = [
   `        await new Promise<void>((resolve) => setTimeout(resolve, 25));`,
   `      }`,
   `      await settle();`,
-  `      for (const step of steps) {`,
+  `      // A step with a waitFor waits for its pattern on the rendered screen (up to its timeout, and never past the`,
+  `      // time left for the call); the silence rule below is only for steps without one. A pattern that does not`,
+  `      // show up stops the replay: no later step runs.`,
+  `      const waitForStep = async (step: Step, index: number, wait: CompiledScreenPattern) => {`,
+  `        const left = Math.max(1, TIMEOUT_MS - (Date.now() - startedAt));`,
+  `        const outcome = await waitForPattern(readScreen, wait, {`,
+  `          timeoutMs: Math.min(step.waitFor.timeoutMs, left),`,
+  `          subscribe: (listener) => {`,
+  `            outputListeners.add(listener);`,
+  `            return () => outputListeners.delete(listener);`,
+  `          },`,
+  `          isClosed: () => exited`,
+  `        });`,
+  `        return outcome.matched`,
+  `          ? undefined`,
+  `          : patternTimeoutResult({ stepIndex: index, wait, elapsedMs: outcome.elapsedMs, screenExcerpt: outcome.screenExcerpt }, Date.now() - startedAt);`,
+  `      };`,
+  `      for (let index = 0; index < steps.length; index++) {`,
+  `        const step = steps[index];`,
   `        const value = resolveValue(step, args);`,
+  `        const wait = step.waitFor === undefined ? undefined : compileStepWait(step.waitFor);`,
+  `        if (wait !== undefined && step.waitFor.when === "before") {`,
+  `          const failed = await waitForStep(step, index, wait);`,
+  `          if (failed !== undefined) return failed;`,
+  `        }`,
   `        switch (step.actionType) {`,
   `          case "type":`,
   `            program.write(value ?? "");`,
@@ -539,7 +587,12 @@ const TERMINAL_RUNTIME = [
   `        }`,
   `        touchedAt = Date.now();`,
   `        writesSinceTouch = 0;`,
-  `        await settle();`,
+  `        if (wait !== undefined && step.waitFor.when !== "before") {`,
+  `          const failed = await waitForStep(step, index, wait);`,
+  `          if (failed !== undefined) return failed;`,
+  `        } else {`,
+  `          await settle();`,
+  `        }`,
   `      }`,
   `      const finalText = screenText();`,
   `      // A Result_Zone limits the result to a crop of the screen and extracts its structured data`,
@@ -556,12 +609,18 @@ const TERMINAL_RUNTIME = [
   `        const rect = final.finalZone?.rect;`,
   `        hash = screenId("terminal", rect === undefined ? finalText : cropTerminal(finalText, rect));`,
   `      }`,
+  `      // A screen rendered at another size than the recorded one is never judged equal: the hash alone cannot tell`,
+  `      const recordedSize = final.cols !== undefined && final.rows !== undefined ? final.cols + "x" + final.rows : undefined;`,
+  `      const replaySize = COLS + "x" + ROWS;`,
+  `      const sizeDrift = final.finalScreenId !== undefined && recordedSize !== undefined && recordedSize !== replaySize;`,
   `      return {`,
   `        success: true,`,
   `        screenType: "terminal",`,
   `        text: boundText(text, MAX_TEXT_LENGTH),`,
   `        ...(final.resultZone === undefined ? {} : { data }),`,
   `        ...driftFields(hash, final),`,
+  `        ...(sizeDrift ? { drifted: true, driftReason: "terminal size: recorded " + recordedSize + ", replayed at " + replaySize } : {}),`,
+  `        terminalSize: { cols: COLS, rows: ROWS },`,
   `        elapsedMs: Date.now() - startedAt`,
   `      };`,
   `    };`,
@@ -635,7 +694,7 @@ const DOCKER_RUNTIME = [
   `const MEMORY_MB = Number(process.env.DAEMONIZE_SANDBOX_MEMORY_MB ?? 512);`,
   `const CPUS = Number(process.env.DAEMONIZE_SANDBOX_CPUS ?? 1);`,
   `// JSON arrays set by the user: the only folders of the host the container can see, e.g. ["/data:/data:ro"]`,
-  `const MOUNTS: string[] = JSON.parse(process.env.DAEMONIZE_SANDBOX_MOUNTS ?? "[]");`,
+  `const MOUNTS: string[] = [...new Set([...SET_MOUNTS, ...(JSON.parse(process.env.DAEMONIZE_SANDBOX_MOUNTS ?? "[]") as string[])])];`,
   `// What to start inside the container, when it differs from what was recorded on the host.`,
   `const COMMAND: string[] | undefined = process.env.DAEMONIZE_SANDBOX_COMMAND`,
   `  ? JSON.parse(process.env.DAEMONIZE_SANDBOX_COMMAND)`,
@@ -683,6 +742,8 @@ const DOCKER_RUNTIME = [
   `    ...options.steps.filter((s) => s.secretRef !== undefined).map((s) => secretEnvName(s.secretRef as string)),`,
   `    ...HTTP_SECRET_VARIABLES(options.steps),`,
   `  ])].flatMap((variable) => ["-e", variable]);`,
+  `  // A terminal size set on the host applies in the container too (the recorded size travels in the request)`,
+  `  const sizeEnv = WEB_TARGET ? [] : ["DAEMONIZE_COLS", "DAEMONIZE_ROWS"].flatMap((variable) => /^[0-9]+$/.test(process.env[variable]?.trim() ?? "") ? ["-e", variable + "=" + process.env[variable]!.trim()] : []);`,
   `  const mode = options.mode === "heal" ? "heal" : "strict";`,
   `  // The settings of the model by name only (docker copies the value from this process), and only for a heal`,
   `  const modelEnv = mode === "heal" && HEAL_SUPPORT ? MODEL_ENV_NAMES.flatMap((variable) => ["-e", variable]) : [];`,
@@ -703,7 +764,9 @@ const DOCKER_RUNTIME = [
   `    "--memory", MEMORY_MB + "m", "--cpus", String(CPUS),`,
   `    "--pids-limit", "256", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",`,
   `    ...EXTRA_FLAGS,`,
+  `    ...(SET_WORKDIR === undefined ? [] : ["-w", SET_WORKDIR]),`,
   `    ...options.timeoutEnv,`,
+  `    ...sizeEnv,`,
   `    "-e", "DAEMONIZE_MODE=" + mode,`,
   `    ...secretEnv,`,
   `    ...modelEnv,`,
@@ -714,8 +777,16 @@ const DOCKER_RUNTIME = [
   `  ];`,
   `}`,
   ``,
+  `// A terminal program replayed with a network (git clone, psql...) is allowed, but it is not the default: say so once.`,
+  `let warnedNetwork = false;`,
+  `function warnNetworkOnce(): void {`,
+  `  if (warnedNetwork || WEB_TARGET || NETWORK === "none") return;`,
+  `  warnedNetwork = true;`,
+  `  console.error("daemonize warning: the sandbox of this terminal program runs with the network " + NETWORK + " (a terminal program has none by default). It can reach the network and the services of the host.");`,
+  `}`,
   `export async function replayInDocker(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}) {`,
   `  const startedAt = Date.now();`,
+  `  warnNetworkOnce();`,
   `  // Resolved here, so the container applies the same value; the step timeout travels as an environment variable`,
   `  const REPLAY_TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });`,
   `  const timeoutEnv = ["-e", "DAEMONIZE_TIMEOUT_MS=" + REPLAY_TIMEOUT_MS];`,
@@ -802,7 +873,7 @@ const DOCKER_RUNTIME = [
  * (`generateReplay`) and its replay in a container (`generateDockerReplay`).
  * They import only @modelcontextprotocol/sdk, zod, ajv, ajv-formats and,
  * depending on the target, playwright (web) or node-pty and @xterm/headless
- * (terminal) — no Daemonize runtime dependency.
+ * (terminal) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no Daemonize runtime dependency.
  */
 export class McpGenerator {
   /**
@@ -900,6 +971,7 @@ export class McpGenerator {
           `import xtermHeadless from "@xterm/headless";`,
           `import { screenId, cropTerminal } from "./screen-hash.js";`,
           `import { resolveTimeoutMs } from "./settle.js";`,
+          `import { compileStepWait, waitForPattern, patternTimeoutResult, type CompiledScreenPattern } from "./pattern-wait.js";`,
           `import { boundText, extractTerminalZone, zoneFailureResult, type ExtractorLike } from "./extract.js";`,
         ]),
       ``,
@@ -972,7 +1044,10 @@ export class McpGenerator {
       terminal
         ? `// A terminal program needs nothing from the network.`
         : `// A browser must reach the application; the container still has no access to the host network stack.`,
-      `const DEFAULT_NETWORK = ${JSON.stringify(terminal ? 'none' : 'bridge')};`,
+      `const DEFAULT_NETWORK = ${JSON.stringify(set.sandbox?.network ?? defaultNetwork(set.targetType))};`,
+      `// The set may ask for more: mounts (added to those of --mount) and the working directory of the program.`,
+      `const SET_MOUNTS: string[] = ${JSON.stringify(set.sandbox?.mounts ?? [])};`,
+      `const SET_WORKDIR: string | undefined = ${JSON.stringify(set.sandbox?.workdir)};`,
       terminal
         ? `// Read-only file system with a scratch /tmp; the program runs as an unprivileged user.`
         : `// Chromium needs more shared memory than a container gets by default.`,
@@ -989,7 +1064,7 @@ export class McpGenerator {
    * the Dockerfile (to build with the output directory as context) and the
    * minimal package.json of what runs inside the container.
    */
-  generateSandboxFiles(set: WorkflowSet, options: GenerateOptions = {}): { dockerfile: string; packageJson: string; dockerignore: string } {
+  generateSandboxFiles(set: WorkflowSet, options: GenerateOptions = {}): { dockerfile: string; packageJson: string; dockerignore: string; copy: string[] } {
     this.assertTarget(set);
     const http = httpEnabled(set, options);
 
@@ -998,27 +1073,16 @@ export class McpGenerator {
       ? { 'node-pty': '^1.1.0', '@xterm/headless': '^6.0.0' }
       : { playwright: PLAYWRIGHT_VERSION };
 
-    const dockerfile = [
-      '# Sandbox of the generated server: each call is replayed in a throw-away container made from this image.',
-      '# Build it from the output directory: daemonize sandbox build',
-      terminal ? 'FROM node:20' : `FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble`,
-      'WORKDIR /sandbox',
-      'ENV DAEMONIZE_IN_CONTAINER=1',
-      ...(terminal ? [] : ['ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1']),
-      'COPY sandbox/package.json ./package.json',
-      'RUN npm install --omit=dev',
-      'COPY replay.js ./replay.js',
-      'COPY screen-hash.js ./screen-hash.js',
-      'COPY settle.js ./settle.js',
-      'COPY extract.js ./extract.js',
-      ...(terminal ? [] : ['COPY row-resolver.js ./row-resolver.js', 'COPY step-plan.js ./step-plan.js', 'COPY totp.js ./totp.js', 'COPY web-steps.js ./web-steps.js', ...(http ? ['COPY http-replay.js ./http-replay.js'] : []), ...(healEnabled(set, options) ? ['# Heal modules (--heal-support). The cache and the recorded thumbnails are mounted when a call runs, never copied.', 'COPY heal ./heal'] : [])]),
-      terminal ? 'USER node' : 'USER pwuser',
-      'ENTRYPOINT ["node", "replay.js", "--container"]',
-      '',
-    ].join('\n');
-
+    const copy = [
+      'replay.js', 'screen-hash.js', 'settle.js', 'extract.js',
+      ...(terminal
+        ? ['pattern-wait.js']
+        : ['row-resolver.js', 'step-plan.js', 'totp.js', 'web-steps.js', ...(http ? ['http-replay.js'] : []), ...(healEnabled(set, options) ? ['heal'] : [])]),
+    ];
+    const dockerfile = renderDockerfile({ targetType: set.targetType, copy, sandbox: set.sandbox, playwrightVersion: PLAYWRIGHT_VERSION });
     return {
       dockerfile,
+      copy,
       packageJson: JSON.stringify({ name: 'sandbox', private: true, type: 'module', dependencies }, null, 2),
       dockerignore: [
         '# Nothing that holds a login or a secret may reach the build context, so no image layer can contain it.',
@@ -1107,13 +1171,19 @@ export class McpGenerator {
     finalZone?: Workflow['finalZone'];
     resultZone?: Omit<ResultZone, 'schema'>;
     workflowId?: string;
+    cols?: number;
+    rows?: number;
   } {
     const final: {
       finalScreenId?: string;
       finalZone?: Workflow['finalZone'];
       resultZone?: Omit<ResultZone, 'schema'>;
       workflowId?: string;
+      cols?: number;
+      rows?: number;
     } = { workflowId: workflow.id };
+    if (workflow.cols !== undefined) final.cols = workflow.cols;
+    if (workflow.rows !== undefined) final.rows = workflow.rows;
     if (workflow.finalScreenId !== undefined) final.finalScreenId = workflow.finalScreenId;
     if (workflow.finalZone !== undefined) final.finalZone = workflow.finalZone;
     // The schema of `data` is documentation (OpenAPI), not needed to extract

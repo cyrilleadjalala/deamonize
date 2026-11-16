@@ -4,7 +4,8 @@ import {
   mergeWorkflowSets,
   serializeWorkflowSet,
 } from '../../workflow/workflow-set.js';
-import type { Workflow, WorkflowSet } from '../../types.js';
+import { mergeSandboxSpec, validateSandboxSpec } from '../../sandbox/dockerfile.js';
+import type { SandboxSpec, Workflow, WorkflowSet } from '../../types.js';
 
 /** What a recording session was run against. */
 export interface RecordingTarget {
@@ -13,6 +14,8 @@ export interface RecordingTarget {
   startUrl?: string;
   startCommand?: string[];
   storageState?: string;
+  /** `--sandbox-*` flags: added to the `sandbox` block of the file. */
+  sandbox?: SandboxSpec;
 }
 
 /**
@@ -32,6 +35,10 @@ export async function saveWorkflow(out: string, target: RecordingTarget, workflo
   if (target.storageState !== undefined) recorded.storageState = target.storageState;
 
   const existing = await loadExisting(out);
+  // The sandbox block belongs to the file: a recording without flags keeps it, flags add to it
+  const sandbox = mergeSandboxSpec(existing?.sandbox, target.sandbox);
+  validateSandboxSpec(sandbox, target.targetType);
+  if (sandbox !== undefined) recorded.sandbox = sandbox;
   const set = existing ? mergeWorkflowSets(existing, recorded) : recorded;
   await writeFile(out, serializeWorkflowSet(set));
   return set.workflows.length;

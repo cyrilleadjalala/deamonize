@@ -164,6 +164,14 @@ export class KiroPowerGenerator {
           '',
         ]
         : []),
+      ...(set.targetType === 'tui' && set.sandbox?.network === 'bridge'
+        ? [
+          '## Network',
+          '',
+          'In a Docker sandbox (`daemonize serve --sandbox docker`) this program runs with network access (`sandbox.network: "bridge"` in the workflow file). A terminal program has none by default; this one needs it, so it can reach the internet and the services of the host. The server logs a warning about it.',
+          '',
+        ]
+        : []),
       '## Modes: strict and heal',
       '',
       'The server replays in strict mode unless told otherwise: every step runs through recorded, deterministic means only, and a step that cannot be performed fails the call with `success: false` and `drifted: true`. Nothing is guessed. Every result carries `mode` (`strict` or `heal`).',

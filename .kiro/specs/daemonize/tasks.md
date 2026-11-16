@@ -445,7 +445,7 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
   - [x] 17.15 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 18. Lot 2b: Visual anchors and Heal mode
+- [x] 18. Lot 2b: Visual anchors and Heal mode
   - [x] 18.1 Capture visual anchors
     - Per step, capture a thumbnail of the target zone (never of password fields), the relative rect in [0,1] and an intent description, stored in `<file>.assets/` and referenced by relative path
     - Files: `src/recorder/visual-anchor.ts`, `src/recorder/live-recorder.ts`, `src/workflow/workflow-set.ts`
@@ -480,36 +480,36 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
     - File: `tests/integration/workflow-e2e.test.ts`
     - _Requirements: 12.10, 18.4_
 
-  - [-] 18.7 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+  - [x] 18.7 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 19. Lot 3: Real CLI/TUI reliability
-  - [ ] 19.1 Record and use terminal size
+- [x] 19. Lot 3: Real CLI/TUI reliability
+  - [x] 19.1 Record and use terminal size
     - Record cols and rows in `src/cli/commands/record-tui.ts`, `src/recorder/terminal-recorder.ts` and the workflow file; `TERMINAL_RUNTIME` in `src/compiler/mcp-generator.ts` and `src/sandbox/pty-driver.ts` use them instead of 80x24
     - Tests in `tests/unit/terminal-recorder.test.ts` and `tests/integration/record-tui.test.ts`
     - _Requirements: 17.1, 17.2_
 
-  - [ ] 19.2 Record and wait for screen patterns
+  - [x] 19.2 Record and wait for screen patterns
     - Record a Screen_Pattern (CLI option in `src/cli/commands/record-tui.ts` and the `Ctrl+]` menu key in `src/recorder/terminal-recorder.ts`); `waitForPattern` in the terminal runtime polls the rendered screen with a timeout; a timeout returns `success: false`, `drifted: true` and the last terminal text
     - _Requirements: 17.3, 17.4, 17.5_
 
-  - [ ]* 19.3 Write property test for pattern waits — Property 16
+  - [x]* 19.3 Write property test for pattern waits — Property 16
     - **Property 16: waitForPattern returns as soon as the pattern appears**
     - With a fake terminal, for any screen sequence, the wait returns at the first screen matching the pattern and never later than the silence rule allows
     - File: `tests/property/wait-for-pattern.property.test.ts`
     - **Validates: Requirements 17.4, 17.5**
     - _Tag comment: `// Feature: daemonize, Property 16: waitForPattern timing`_
 
-  - [ ] 19.4 Pattern wait integration test
+  - [x] 19.4 Pattern wait integration test
     - Integration test with a slow program and a continuously refreshing one (fixtures in `tests/fixtures/`), file `tests/integration/tui-wait.test.ts`
     - _Requirements: 17.4, 17.5_
 
-  - [ ] 19.5 Configurable Dockerfile
+  - [x] 19.5 Configurable Dockerfile
     - Add `--image`, `--package`, `--install`, `--network` to `generateSandboxFiles` and `daemonize sandbox build` (`src/cli/commands/sandbox.ts`); store them in the workflow set `sandbox` block (`src/workflow/workflow-set.ts`, `src/types.ts`)
     - Unit tests on the generated Dockerfile text; integration test building an image with sqlite3, skipped with a message without Docker (`tests/integration/docker-sandbox.test.ts`)
     - _Requirements: 17.6, 17.7_
 
-  - [ ] 19.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+  - [x] 19.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 20. Lot 4: AI suggestions and Studio

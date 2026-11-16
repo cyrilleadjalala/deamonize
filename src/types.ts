@@ -1,4 +1,5 @@
 import type { StepFailure } from './replay/runtime/step-plan.js';
+import type { PatternTimeoutFailure } from './replay/runtime/pattern-wait.js';
 export type { StepFailure };
 
 // Branded type for screen identifiers (16-char hex)
@@ -19,6 +20,10 @@ export interface RecordedAction {
   value?: string;       // typed text, selected option value, key name
   label?: string;       // human-readable label derived from UI context
   timeoutMs?: number;   // step timeout (action and effect wait) when replaying; overrides the default
+  /** Terminal: wait for this pattern of the rendered screen instead of a moment of silence. */
+  waitFor?: ScreenWait;
+  /** Terminal: what is left of the whole replay in ms; a pattern wait never lasts longer. */
+  waitBudgetMs?: number;
 }
 
 // A transition edge in the State Graph
@@ -140,8 +145,16 @@ export interface VisualAnchor {
   intent: string;
 }
 
+/**
+ * Wait for the rendered terminal screen (see replay/runtime/pattern-wait.ts). Exactly one of `pattern`
+ * (JavaScript RegExp source, flags in `flags`, default `m`) and `text` (literal) is set.
+ */
 export interface ScreenWait {
-  pattern: string;                       // JavaScript RegExp source
+  pattern?: string;
+  text?: string;
+  flags?: string;
+  region?: { row: number; col: number; rows: number; cols: number };
+  mode?: 'appear' | 'disappear';         // default appear
   timeoutMs: number;
   when?: 'before' | 'after';
 }
@@ -176,6 +189,9 @@ export interface SandboxSpec {
   packages?: string[];
   install?: string[];
   network?: 'none' | 'bridge';
+  user?: string;                           // unprivileged user of the program in the container
+  workdir?: string;                        // working directory of the program in the container (absolute)
+  mounts?: string[];                       // host:container[:ro], added to those of `serve --mount`
 }
 
 // A field the user marked as variable while recording a workflow
@@ -269,9 +285,13 @@ export interface ReplayResult {
   screen?: ScreenContent;
   result?: WorkflowResult;
   drifted?: boolean;                 // final screen differs from the recorded one
+  /** Terminal replays: the size the screen was rendered at. */
+  terminalSize?: { cols: number; rows: number };
+  /** Why `drifted` is true when the screen text alone does not say (e.g. another terminal size). */
+  driftReason?: string;
   error?: 'timeout' | 'sandbox_unavailable' | 'step_failed' | string;
   /** Strict failure (error 'step_failed'): the step that no locator could perform; no later step ran. */
-  failure?: StepFailure | { zone: { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } } };
+  failure?: StepFailure | PatternTimeoutFailure | { zone: { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } } };
   /** Set with error 'result_zone_not_found' / 'result_extraction_failed': says the action itself already ran. */
   message?: string;
   elapsedMs: number;

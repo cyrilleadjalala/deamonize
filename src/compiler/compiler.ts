@@ -92,6 +92,16 @@ const RUNTIME_TOTP = join(
   'totp.ts'
 );
 
+const RUNTIME_PATTERN_WAIT = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'replay',
+  'runtime',
+  'pattern-wait.ts'
+);
+
 const RUNTIME_WEB_STEPS = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -183,6 +193,8 @@ export class Compiler {
     const rowResolverSource = await readFile(RUNTIME_ROW_RESOLVER, 'utf-8');
     const stepPlanSource = await readFile(RUNTIME_STEP_PLAN, 'utf-8');
     const totpSource = await readFile(RUNTIME_TOTP, 'utf-8');
+    // Waiting for a pattern of the rendered screen: only a terminal target replays a pty
+    const patternWaitSource = set.targetType === 'tui' ? await readFile(RUNTIME_PATTERN_WAIT, 'utf-8') : undefined;
     // Strict Level 2 execution with Playwright: only a web target replays a browser
     const webStepsSource = set.targetType === 'web' ? await readFile(RUNTIME_WEB_STEPS, 'utf-8') : undefined;
     // Level 1 (--http): the runtime that executes recorded requests, copied verbatim like the other run-time modules
@@ -234,6 +246,7 @@ export class Compiler {
       stepPlan: join(outputDir, 'step-plan.js'),
       totpSource: join(outputDir, 'totp.ts'),
       totp: join(outputDir, 'totp.js'),
+      ...(patternWaitSource === undefined ? {} : { patternWaitSource: join(outputDir, 'pattern-wait.ts'), patternWait: join(outputDir, 'pattern-wait.js') }),
       ...(webStepsSource === undefined ? {} : { webStepsSource: join(outputDir, 'web-steps.ts'), webSteps: join(outputDir, 'web-steps.js') }),
       ...(httpReplaySource === undefined ? {} : { httpReplaySource: join(outputDir, 'http-replay.ts'), httpReplay: join(outputDir, 'http-replay.js') }),
       plugin: join(outputDir, 'plugin.json'),
@@ -262,6 +275,10 @@ export class Compiler {
       writeFile(files.stepPlan, this.toJavaScript(stepPlanSource)),
       writeFile(files.totpSource, totpSource),
       writeFile(files.totp, this.toJavaScript(totpSource)),
+      ...(patternWaitSource === undefined ? [] : [
+        writeFile(join(outputDir, 'pattern-wait.ts'), patternWaitSource),
+        writeFile(join(outputDir, 'pattern-wait.js'), this.toJavaScript(patternWaitSource)),
+      ]),
       ...(webStepsSource === undefined ? [] : [
         writeFile(join(outputDir, 'web-steps.ts'), webStepsSource),
         writeFile(join(outputDir, 'web-steps.js'), this.toJavaScript(webStepsSource)),
@@ -282,7 +299,7 @@ export class Compiler {
       // What `daemonize sandbox build` needs to build the image replays run in
       writeFile(join(outputDir, 'sandbox', 'Dockerfile'), sandbox.dockerfile),
       writeFile(join(outputDir, 'sandbox', 'package.json'), sandbox.packageJson),
-      writeFile(join(outputDir, 'sandbox', 'image.json'), JSON.stringify({ tag: imageTag }, null, 2)),
+      writeFile(join(outputDir, 'sandbox', 'image.json'), JSON.stringify({ tag: imageTag, targetType: set.targetType, copy: sandbox.copy, ...(set.sandbox === undefined ? {} : { sandbox: set.sandbox }) }, null, 2)),
       writeFile(join(outputDir, '.dockerignore'), sandbox.dockerignore),
       this.writePackageJsonIfMissing(outputDir, set.targetName, set.targetType),
       this.writeVitestConfigIfMissing(outputDir),

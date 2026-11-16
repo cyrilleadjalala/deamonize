@@ -4,14 +4,41 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { record, type RecordSummary } from './commands/record.js';
 import { recordTui } from './commands/record-tui.js';
+import { parseTerminalDimension } from '../recorder/terminal-recorder.js';
 import { compile, parseHttpMode } from './commands/compile.js';
 import { merge } from './commands/merge.js';
 import { serve } from './commands/serve.js';
 import { buildSandboxImage } from './commands/sandbox.js';
+import { validateSandboxSpec } from '../sandbox/dockerfile.js';
+import type { SandboxSpec } from '../types.js';
 
 const DEFAULT_WORKFLOWS_FILE = 'daemonize.workflows.json';
 const DEFAULT_OUTPUT_DIR = 'daemonize-out';
 
+const collect = (value: string, previous: string[] = []): string[] => [...previous, value];
+
+/** The sandbox flags of record and compile, or undefined when none was given. Invalid values fail before anything runs. */
+function sandboxFlags(
+  options: { sandboxImage?: string; sandboxPackage?: string[]; sandboxInstall?: string[]; sandboxNetwork?: string },
+  targetType?: 'web' | 'tui'
+): SandboxSpec | undefined {
+  return specFromFlags({ image: options.sandboxImage, packages: options.sandboxPackage, install: options.sandboxInstall, network: options.sandboxNetwork }, targetType);
+}
+
+function specFromFlags(flags: { image?: string; packages?: string[]; install?: string[]; network?: string }, targetType?: 'web' | 'tui'): SandboxSpec | undefined {
+  const spec: SandboxSpec = {};
+  if (flags.image !== undefined) spec.image = flags.image;
+  if (flags.packages !== undefined) spec.packages = flags.packages;
+  if (flags.install !== undefined) spec.install = flags.install;
+  if (flags.network !== undefined) {
+    if (flags.network !== 'none' && flags.network !== 'bridge') throw new Error(`Unknown network "${flags.network}": use none or bridge`);
+    spec.network = flags.network;
+  }
+  if (Object.keys(spec).length === 0) return undefined;
+  // The target type is known when recording; compile and build check it again against the set
+  validateSandboxSpec(spec, targetType ?? 'tui');
+  return spec;
+}
 export function buildProgram(): Command {
   const program = new Command();
   program
@@ -39,6 +66,14 @@ export function buildProgram(): Command {
     .option('--result-rect <row,col,rows,cols>', 'tui only: part of the final screen (0-based) the tool returns as `text` and `data`')
     .option('--result-regex <regex>', 'tui only: regular expression applied to the result zone; its named groups become `data`')
     .option('--result-regex-flags <flags>', 'tui only: flags of --result-regex (default m; add g for every match as an array)')
+    .option('--cols <n>', 'tui only: terminal width to record and replay at, 20 to 500 (default: your terminal, or 80)')
+    .option('--rows <n>', 'tui only: terminal height to record and replay at, 5 to 200 (default: your terminal, or 24)')
+    .option('--wait-after <regex>', 'tui only: every step waits at replay until the rendered screen matches this regular expression (default: the prompt shown after each step is detected)')
+    .option('--wait-timeout <ms>', 'tui only: timeout of the screen waits, default 15000')
+    .option('--sandbox-image <ref>', 'Docker sandbox: base image of the replay container, stored in the workflow file')
+    .option('--sandbox-package <name>', 'Docker sandbox: package to install in the image (repeatable), stored in the workflow file', collect)
+    .option('--sandbox-install <cmd>', 'Docker sandbox: extra command to run when building the image (repeatable), stored in the workflow file', collect)
+    .option('--sandbox-network <mode>', 'Docker sandbox: none or bridge (default none for a terminal program, bridge for a web page), stored in the workflow file')
     .action(async (target: string[], options) => {
       if (options.type === 'tui') {
         if (options.finalZone !== undefined) {
@@ -52,7 +87,7 @@ export function buildProgram(): Command {
         }
         console.log(
           chalk.cyan(
-            'Recording. Use the program as usual. Ctrl+] opens a menu: v marks the last typed text as a variable, e ends the recording.'
+            'Recording. Use the program as usual. Ctrl+] opens a menu: v marks the last typed text as a variable, w waits for a screen pattern after the last step, e ends the recording.'
           )
         );
         const summary = await recordTui({
@@ -64,8 +99,15 @@ export function buildProgram(): Command {
           resultRect: options.resultRect === undefined ? undefined : parseRect(options.resultRect, '--result-rect'),
           resultRegex: options.resultRegex,
           resultRegexFlags: options.resultRegexFlags,
+          cols: options.cols === undefined ? undefined : parseTerminalDimension(options.cols, 'cols'),
+          rows: options.rows === undefined ? undefined : parseTerminalDimension(options.rows, 'rows'),
+          waitAfter: options.waitAfter,
+          waitTimeoutMs: options.waitTimeout === undefined ? undefined : parseWaitTimeout(options.waitTimeout),
+          sandbox: sandboxFlags(options, 'tui'),
         });
         console.log(`\r\n${chalk.green(describeSummary(summary))}`);
+        console.log(`Terminal size: ${summary.cols}x${summary.rows}${summary.resized ? ' (you resized the terminal; replay uses this size)' : ''}.`);
+        console.log(`Screen waits: ${summary.screenWaits} of ${summary.steps} step(s) wait for a pattern of the screen at replay.`);
         if (summary.programExitCode !== undefined) {
           console.log(chalk.yellow(`The program exited with code ${summary.programExitCode}.`));
         }
@@ -79,6 +121,12 @@ export function buildProgram(): Command {
         return;
       }
 
+      if (options.cols !== undefined || options.rows !== undefined) {
+        throw new Error('--cols and --rows are for terminal recordings (--type tui)');
+      }
+      if (options.waitAfter !== undefined || options.waitTimeout !== undefined) {
+        throw new Error('--wait-after and --wait-timeout are for terminal recordings (--type tui)');
+      }
       if (options.finalRect !== undefined) {
         throw new Error('--final-rect is for terminal recordings (--type tui); use --final-zone for a web page');
       }
@@ -115,6 +163,7 @@ export function buildProgram(): Command {
         resultKind: options.resultKind,
         captureNetwork: options.captureNetwork ?? true,
         visual: options.visual !== false,
+        sandbox: sandboxFlags(options, 'web'),
       });
       console.log(chalk.green(describeSummary(summary)));
       if (options.visual !== false) {
@@ -156,8 +205,12 @@ export function buildProgram(): Command {
       'web only: execute the recorded HTTP request of each step that has one (auto, the default when the flag is given) instead of driving the page; off disables it'
     )
     .option('--heal-support', 'web only: compile in the Heal modules and the recorded thumbnails so the server can run with --heal (default off: no model code in the output)')
+    .option('--sandbox-image <ref>', 'Docker sandbox: base image of the replay container, stored in the workflow file')
+    .option('--sandbox-package <name>', 'Docker sandbox: package to install in the image (repeatable), stored in the workflow file', collect)
+    .option('--sandbox-install <cmd>', 'Docker sandbox: extra command to run when building the image (repeatable), stored in the workflow file', collect)
+    .option('--sandbox-network <mode>', 'Docker sandbox: none or bridge (default none for a terminal program, bridge for a web page), stored in the workflow file')
     .action(async (file: string | undefined, options) => {
-      await compile(file ?? DEFAULT_WORKFLOWS_FILE, options.out, { install: options.install, http: parseHttpMode(options.http), healSupport: options.healSupport === true });
+      await compile(file ?? DEFAULT_WORKFLOWS_FILE, options.out, { install: options.install, http: parseHttpMode(options.http), healSupport: options.healSupport === true, sandbox: sandboxFlags(options) });
     });
 
   program
@@ -208,11 +261,23 @@ export function buildProgram(): Command {
     .description('Manage the Docker sandbox of a compiled project')
     .command('build [dir]')
     .description('Build the Docker image each call is replayed in (downloads its base image and packages)')
-    .action(async (dir: string | undefined) => {
-      const tag = await buildSandboxImage(dir ?? DEFAULT_OUTPUT_DIR);
-      console.log(chalk.green(`Built the sandbox image "${tag}". Use it with: daemonize serve ${dir ?? DEFAULT_OUTPUT_DIR} --sandbox docker`));
+    .option('--image <ref>', 'base image (Debian, Ubuntu or Alpine family; the runtime is added to it)')
+    .option('--package <name>', 'package to install with apt-get or apk (repeatable)', collect)
+    .option('--install <cmd>', 'extra command to run as root when building the image, one RUN each (repeatable)', collect)
+    .option('--network <mode>', 'network of the replay container: none or bridge (default none for a terminal program, bridge for a web page)')
+    .option('--tag <name>', 'name of the image (default: the one chosen at compile time; serve --sandbox docker uses the last one built)')
+    .option('--no-cache', 'build without the Docker layer cache')
+    .option('--print', 'write the Dockerfile to stdout and build nothing')
+    .action(async (dir: string | undefined, options) => {
+      const target = dir ?? DEFAULT_OUTPUT_DIR;
+      const spec = specFromFlags({ image: options.image, packages: options.package, install: options.install, network: options.network });
+      const tag = await buildSandboxImage(target, { ...spec, tag: options.tag, noCache: options.cache === false, print: options.print === true });
+      if (options.print === true) {
+        process.stdout.write(tag.endsWith('\n') ? tag : `${tag}\n`);
+        return;
+      }
+      console.log(chalk.green(`Built the sandbox image "${tag}". Use it with: daemonize serve ${target} --sandbox docker`));
     });
-
   return program;
 }
 
@@ -225,6 +290,14 @@ export function parseServeMode(options: { strict?: boolean; heal?: boolean }): '
 }
 
 const WEB_RESULT_KINDS = ['text', 'table', 'list', 'fields', 'json', 'attribute'];
+
+function parseWaitTimeout(text: string): number {
+  const n = Number(text.trim());
+  if (text.trim() === '' || !Number.isInteger(n) || n < 1 || n > 600000) {
+    throw new Error(`Invalid --wait-timeout "${text}": expected a whole number of milliseconds from 1 to 600000`);
+  }
+  return n;
+}
 
 function parseRect(text: string, option: string): { row: number; col: number; rows: number; cols: number } {
   const parts = text.split(',').map((part) => Number(part.trim()));

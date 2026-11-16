@@ -18,6 +18,9 @@ export interface SandboxDriver {
   /** Read a Result_Zone of the current page (drivers with a live DOM only; a terminal zone is read from the screen text). */
   extractZone?(zone: ZoneLike): Promise<ZoneOutcome>;
 
+  /** Terminal drivers: the size the screen is rendered at. */
+  readonly terminalSize?: { cols: number; rows: number };
+
   /** Stop the sandbox cleanly. */
   stop(): Promise<void>;
 

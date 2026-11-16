@@ -152,7 +152,7 @@ describe('McpGenerator', () => {
     const web = new McpGenerator().generateSandboxFiles(set);
     expect(web.dockerfile).toContain('FROM mcr.microsoft.com/playwright:v1.65.1-noble');
     expect(web.dockerfile).toContain('USER pwuser');
-    expect(web.dockerfile).toContain('ENTRYPOINT ["node", "replay.js", "--container"]');
+    expect(web.dockerfile).toContain('ENTRYPOINT ["node", "/sandbox/replay.js", "--container"]');
     expect(JSON.parse(web.packageJson).dependencies).toEqual({ playwright: '1.65.1' });
     expect(web.dockerignore).toContain('node_modules');
 

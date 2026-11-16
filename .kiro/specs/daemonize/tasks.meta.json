@@ -926,6 +926,97 @@
         "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
         "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
         "timestamp": 1794839244960
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794839567427
+      }
+    ],
+    "18. Lot 2b: Visual anchors and Heal mode": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794839567809
+      }
+    ],
+    "19.1 Record and use terminal size": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794839571936
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794840529858
+      }
+    ],
+    "19.2 Record and wait for screen patterns": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794840530119
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794841637133
+      }
+    ],
+    "19.3 Write property test for pattern waits — Property 16": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794841637344
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794843371923
+      }
+    ],
+    "19.4 Pattern wait integration test": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794843372055
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794844162276
+      }
+    ],
+    "19.5 Configurable Dockerfile": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794844164197
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794847402360
+      }
+    ],
+    "19.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794847402628
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794847822609
+      }
+    ],
+    "19. Lot 3: Real CLI/TUI reliability": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794847822716
       }
     ]
   }

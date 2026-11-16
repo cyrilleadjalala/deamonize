@@ -1,8 +1,9 @@
 import pty from 'node-pty';
-import { TerminalRecorder } from '../../recorder/terminal-recorder.js';
+import { TerminalRecorder, resolveTerminalSize } from '../../recorder/terminal-recorder.js';
 import { TerminalScreen } from '../../sandbox/terminal-screen.js';
 import { cropTerminal } from '../../replay/runtime/screen-hash.js';
 import { saveWorkflow } from './save-workflow.js';
+import type { SandboxSpec } from '../../types.js';
 import type { RecordSummary } from './record.js';
 import { extractTerminalZone } from '../../replay/runtime/extract.js';
 import { dataSchemaFor } from '../../schema/data-schema.js';
@@ -24,20 +25,39 @@ export interface RecordTuiOptions {
   name: string;                 // target application name
   label: string;                // label of the recorded workflow (becomes the tool name)
   out: string;                  // Workflow set file; created, or merged when it exists
-  cols?: number;                // default: the width of the output terminal, or 80
-  rows?: number;                // default: the height of the output terminal, or 24
+  cols?: number;                // 20..500; default: the width of the output terminal, or 80
+  rows?: number;                // 5..200; default: the height of the output terminal, or 24
+  waitAfter?: string;           // regular expression every step waits for on the rendered screen after it ran (replaces the automatic prompt waits)
+  sandbox?: SandboxSpec;        // `--sandbox-*` flags: stored in the `sandbox` block of the file
+  waitTimeoutMs?: number;       // timeout of the recorded screen waits, default 15000
   stabilizeMs?: number;         // silence that counts as "the screen is stable", default 150
   finalRect?: { row: number; col: number; rows: number; cols: number }; // drift is judged on this part of the final screen only
   resultRect?: { row: number; col: number; rows: number; cols: number }; // the tool returns this part of the final screen, not all of it
   resultRegex?: string;         // applied to the result zone: the named capture groups become `data` (add flags with resultRegexFlags)
   resultRegexFlags?: string;    // e.g. "gm": every match, as an array of objects
   input?: TerminalInput;        // default: process.stdin
-  output?: { write(data: string): unknown; columns?: number; rows?: number }; // default: process.stdout
+  output?: TerminalOutput;      // default: process.stdout
+}
+
+/** The part of a terminal output the recorder needs; process.stdout satisfies it. Resizes are optional. */
+export interface TerminalOutput {
+  write(data: string): unknown;
+  columns?: number;
+  rows?: number;
+  on?(event: 'resize', listener: () => void): unknown;
+  off?(event: 'resize', listener: () => void): unknown;
 }
 
 export interface RecordTuiSummary extends RecordSummary {
   /** Typed values stored as they are, not marked as variables: they end up in the file. */
   constantTypedValues: number;
+  /** The terminal size stored in the workflow, and replayed at. */
+  cols: number;
+  rows: number;
+  /** The user resized the terminal during the recording. */
+  resized: boolean;
+  /** Steps that wait for a pattern of the screen at replay. */
+  screenWaits: number;
   /** Set when the program ended by itself before the user ended the recording. */
   programExitCode?: number;
 }
@@ -51,16 +71,40 @@ export interface RecordTuiSummary extends RecordSummary {
 export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSummary> {
   const input = options.input ?? (process.stdin as unknown as TerminalInput);
   const output = options.output ?? process.stdout;
-  const cols = options.cols ?? output.columns ?? 80;
-  const rows = options.rows ?? output.rows ?? 24;
+  // The real size of the user's terminal at the start (or the override); replay uses this fixed size
+  const { cols, rows } = resolveTerminalSize({ cols: options.cols, rows: options.rows }, output);
   const stabilizeMs = options.stabilizeMs ?? 150;
 
   const screen = new TerminalScreen(cols, rows);
-  const recorder = new TerminalRecorder(options.label, () => lastLine(screen.text()));
+  const recorder = new TerminalRecorder(options.label, () => lastLine(screen.text()), { cols, rows }, {
+    regex: options.waitAfter,
+    timeoutMs: options.waitTimeoutMs,
+  });
 
   const [command, ...args] = options.command;
   const program = pty.spawn(command, args, { cols, rows, name: 'xterm-256color' });
   let exitCode: number | undefined;
+
+  // The program follows the user's window, but the workflow keeps the initial size
+  const onResize = (): void => {
+    const c = output.columns;
+    const r = output.rows;
+    if (c === undefined || r === undefined || c < 1 || r < 1) return;
+    // With an explicit --cols/--rows the program keeps that size; otherwise it follows the window
+    if (options.cols === undefined && options.rows === undefined) {
+      try {
+        program.resize(c, r);
+      } catch {
+        // The program already ended
+      }
+    }
+    if (recorder.noteResize(c, r)) {
+      output.write(
+        `\r\n[recording] the terminal was resized; the workflow keeps the initial size ${cols}x${rows} and replays at that size\r\n`
+      );
+    }
+  };
+  output.on?.('resize', onResize);
 
   program.onData((data: string) => {
     output.write(data);
@@ -116,7 +160,7 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
     const workflow = recorder.finish(finalScreen, options.finalRect ? { rect: options.finalRect } : undefined, resultZone);
     const totalWorkflows = await saveWorkflow(
       options.out,
-      { targetType: 'tui', name: options.name, startCommand: options.command },
+      { targetType: 'tui', name: options.name, startCommand: options.command, sandbox: options.sandbox },
       workflow
     );
 
@@ -129,6 +173,10 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
       secrets: [],
       constantTypedValues: recorder.constantTypedValues,
       thumbnails: 0,
+      cols,
+      rows,
+      resized: recorder.resized,
+      screenWaits: workflow.steps.filter((s) => s.waitFor !== undefined).length,
     };
     if (resultZone !== undefined) {
       summary.resultZone = { rect: resultZone.rect, kind: resultZone.extractor?.kind ?? 'text' };
@@ -138,6 +186,7 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
     }
     return summary;
   } finally {
+    output.off?.('resize', onResize);
     cleanup.forEach((fn) => fn());
     if (input.isTTY) input.setRawMode?.(false);
     input.pause();

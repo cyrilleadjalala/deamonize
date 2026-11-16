@@ -8,6 +8,7 @@ import type {
   FinalZone,
   HttpRecipe,
   ResultZone,
+  ScreenWait,
   StepActionType,
   StepRisk,
   VisualAnchor,
@@ -90,6 +91,16 @@ export class WorkflowRecorder {
       throw new Error(`No step at index ${stepIndex}`);
     }
     step.anchor = structuredClone(anchor);
+  }
+
+  /** Set (or with `undefined`, remove) the screen wait of a terminal step. */
+  setWaitFor(stepIndex: number, wait: ScreenWait | undefined): void {
+    const step = this.steps[stepIndex];
+    if (step === undefined) {
+      throw new Error(`No step at index ${stepIndex}`);
+    }
+    if (wait === undefined) delete step.waitFor;
+    else step.waitFor = structuredClone(wait);
   }
 
   /** A copy of the steps recorded so far. */

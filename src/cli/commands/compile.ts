@@ -1,11 +1,12 @@
 import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Compiler } from '../../compiler/compiler.js';
 import { PbtGenerator } from '../../pbt/pbt-generator.js';
 import { SchemaInferencer } from '../../schema/schema-inferencer.js';
-import { deserializeWorkflowSet } from '../../workflow/workflow-set.js';
-import type { CompileResult } from '../../types.js';
+import { deserializeWorkflowSet, serializeWorkflowSet } from '../../workflow/workflow-set.js';
+import { mergeSandboxSpec, validateSandboxSpec } from '../../sandbox/dockerfile.js';
+import type { CompileResult, SandboxSpec, WorkflowSet } from '../../types.js';
 
 export interface CompileOptions {
   /** Run `npm install` in the output directory once it is written. */
@@ -22,6 +23,8 @@ export interface CompileOptions {
    * with `--heal`. Off by default: the server then contains no model code at all.
    */
   healSupport?: boolean;
+  /** `--sandbox-*` flags: added to the `sandbox` block of the workflow file (which is rewritten), so the compiled project is self-describing. */
+  sandbox?: SandboxSpec;
 }
 
 /** The value of `--http`: the bare flag means auto. */
@@ -42,6 +45,7 @@ export async function compile(
   options: CompileOptions = {}
 ): Promise<CompileResult> {
   const set = deserializeWorkflowSet(await readFile(file, 'utf-8'));
+  await persistSandboxFlags(file, set, options.sandbox);
   const annotated = new SchemaInferencer().inferWorkflows(set);
   if (options.http === 'auto' && set.targetType !== 'web') {
     console.warn('--http only applies to web targets: ignored for a terminal program.');
@@ -84,4 +88,13 @@ function npmInstall(dir: string): Promise<void> {
       code === 0 ? resolve() : reject(new Error(`npm install failed in ${dir} (exit code ${code})`))
     );
   });
+}
+
+/** Add the sandbox flags to the set and to its file. Fails before anything is written when a value is not valid. */
+async function persistSandboxFlags(file: string, set: WorkflowSet, flags: SandboxSpec | undefined): Promise<void> {
+  if (flags === undefined || Object.values(flags).every((v) => v === undefined)) return;
+  const merged = mergeSandboxSpec(set.sandbox, flags);
+  validateSandboxSpec(merged, set.targetType);
+  if (merged !== undefined) set.sandbox = merged;
+  await writeFile(file, serializeWorkflowSet(set));
 }

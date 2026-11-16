@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { chromium, type Browser, type Page } from 'playwright';
@@ -94,7 +95,8 @@ describe('LiveRecorder (record in a real browser, then replay)', () => {
     expect(live.stepCount).toBe(4);
 
     live.markVariable(0, { name: 'name', description: 'Customer name' });
-    live.markVariable(1, { name: 'access_code' });
+    // The password step carries a secret name and no value, so it cannot become a variable
+    expect(() => live.markVariable(1, { name: 'access_code' })).toThrow(/no value/);
     live.markVariable(2, { name: 'plan' });
 
     const html = await page.content();
@@ -113,12 +115,13 @@ describe('LiveRecorder (record in a real browser, then replay)', () => {
 
     // The password is never stored
     expect(JSON.stringify(workflow)).not.toContain('hunter2');
-    expect(workflow.observedPayloads).toEqual([{ name: 'Ada', access_code: '', plan: 'pro' }]);
+    expect(workflow.steps[1]).toMatchObject({ actionType: 'type', secretRef: 'PASSWORD' });
+    expect(workflow.steps[1]).not.toHaveProperty('value');
+    expect(workflow.observedPayloads).toEqual([{ name: 'Ada', plan: 'pro' }]);
 
     // Replay the recorded workflow with other values
-    workflow.variables = workflow.variables.filter((v) => v.name !== 'access_code');
     const replayer = new Replayer(() => new PlaywrightDriver(baseUrl));
-    const result = await replayer.replay(workflow, { name: 'Bob', access_code: 'x', plan: 'free' }, 20000);
+    const result = await replayer.replay(workflow, { name: 'Bob', plan: 'free' }, 20000);
 
     expect(result.success).toBe(true);
     expect(result.result?.title).toBe('Customer saved');

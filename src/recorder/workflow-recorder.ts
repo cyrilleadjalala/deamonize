@@ -1,19 +1,26 @@
 import { randomUUID } from 'node:crypto';
 import { ScreenHasher } from '../state/screen-hasher.js';
 import type {
-  RecordedAction,
+  Anchor,
+  RowBinding,
   ScreenContent,
   FinalZone,
+  StepActionType,
+  StepRisk,
   Workflow,
   WorkflowStep,
   WorkflowVariable,
 } from '../types.js';
 
 export interface RecordedStep {
-  actionType: RecordedAction['actionType'];
+  actionType: StepActionType;
   selectors: string[];
   value?: string;
   label?: string;
+  anchor?: Anchor;
+  rowBinding?: RowBinding;
+  risk?: StepRisk;
+  secretRef?: string;   // the value is a secret: only its name is recorded
 }
 
 /**
@@ -40,8 +47,69 @@ export class WorkflowRecorder {
     if (step.label !== undefined) {
       recorded.label = step.label;
     }
+    if (step.anchor !== undefined) {
+      recorded.anchor = structuredClone(step.anchor);
+    }
+    if (step.rowBinding !== undefined) {
+      recorded.rowBinding = structuredClone(step.rowBinding);
+    }
+    if (step.risk !== undefined) {
+      recorded.risk = step.risk;
+    }
+    if (step.secretRef !== undefined) {
+      // A secret step never carries a value
+      recorded.secretRef = step.secretRef;
+      delete recorded.value;
+    }
     this.steps.push(recorded);
     return this.steps.length - 1;
+  }
+
+  /** Replace the anchor of a recorded step (the page title is only known after the page loaded). */
+  setAnchor(stepIndex: number, anchor: Anchor): void {
+    const step = this.steps[stepIndex];
+    if (step === undefined) {
+      throw new Error(`No step at index ${stepIndex}`);
+    }
+    step.anchor = structuredClone(anchor);
+  }
+
+  /** Values of the variables defined so far, as strings (to recognise them in a row). */
+  variableValues(): Map<string, string> {
+    return new Map(Object.entries(this.payload).map(([name, value]) => [name, String(value)]));
+  }
+
+  /** Define a variable from a text that is not the value of a step (a text selected in a row). */
+  defineVariable(variable: WorkflowVariable, value: string): void {
+    if (this.variables.has(variable.name)) {
+      throw new Error(`Variable "${variable.name}" is already defined`);
+    }
+    this.variables.set(variable.name, variable);
+    this.payload[variable.name] = coerce(value, variable.type);
+  }
+
+  /** Bind the row of a step to a variable that is already defined. */
+  bindRow(stepIndex: number, variableName: string, keyText?: string): void {
+    const step = this.steps[stepIndex];
+    if (step === undefined) {
+      throw new Error(`No step at index ${stepIndex}`);
+    }
+    if (step.rowBinding === undefined) {
+      throw new Error(`Step ${stepIndex} is not inside a row, a card or a list item`);
+    }
+    if (!this.variables.has(variableName)) {
+      throw new Error(`Variable "${variableName}" is not defined`);
+    }
+    step.rowBinding.variable = variableName;
+    if (keyText !== undefined) {
+      // The recorded column only describes the recorded key text
+      const column = step.rowBinding.key?.text === keyText ? step.rowBinding.key.column : undefined;
+      step.rowBinding.key = column === undefined ? { text: keyText } : { text: keyText, column };
+    }
+    // The recorded text of the parent would bake the recorded row into the step
+    if (step.anchor?.parent !== undefined && step.anchor.parent.kind === 'region') {
+      delete step.anchor.parent;
+    }
   }
 
   /**
@@ -80,7 +148,7 @@ export class WorkflowRecorder {
     const workflow: Workflow = {
       id: randomUUID(),
       label: this.label,
-      steps: this.steps.map((s) => ({ ...s, selectors: [...s.selectors] })),
+      steps: this.steps.map((s) => structuredClone(s)),
       variables: [...this.variables.values()],
       observedPayloads: Object.keys(this.payload).length > 0 ? [{ ...this.payload }] : [],
     };

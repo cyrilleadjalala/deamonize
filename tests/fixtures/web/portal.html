@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><title>Portal</title></head>
+<body>
+<div id="root">
+  <form aria-label="Customer" onsubmit="return false">
+    <span id="plan-label">Plan</span>
+    <button type="button" id="plan-trigger" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="plan-label">Choose a plan</button>
+    <button type="submit">Save</button>
+  </form>
+  <button id="open-dialog" type="button">Edit customer</button>
+</div>
+<script>
+  const trigger = document.getElementById('plan-trigger');
+  trigger.addEventListener('click', () => {
+    if (document.querySelector('[role=listbox]')) return;
+    // Rendered at the end of the body, outside #root, like Radix, MUI and HeadlessUI do
+    const list = document.createElement('div');
+    list.setAttribute('role', 'listbox');
+    list.setAttribute('aria-label', 'Plan options');
+    for (const text of ['Free', 'Pro']) {
+      const option = document.createElement('div');
+      option.setAttribute('role', 'option');
+      option.textContent = text;
+      option.addEventListener('click', () => { trigger.textContent = text; list.remove(); });
+      list.appendChild(option);
+    }
+    document.body.appendChild(list);
+  });
+  document.getElementById('open-dialog').addEventListener('click', () => {
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-label', 'Edit customer details');
+    dialog.innerHTML = '<h2>Edit customer details</h2><button type="button" id="dialog-save">Save</button><button type="button" id="dialog-cancel">Cancel</button>';
+    document.body.appendChild(dialog);
+  });
+</script>
+</body></html>

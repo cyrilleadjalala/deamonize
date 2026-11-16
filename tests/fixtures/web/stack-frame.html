@@ -1,0 +1,14 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Host</title></head>
+<body>
+<h1>Host</h1>
+<button type="button" class="start">Start</button>
+{{@@<iframe name="ads" title="Ads" src="/stack-frame-other.html"></iframe>@@}}
+<iframe name="child" title="Search frame" src="/stack-frame-inner.html"></iframe>
+<button type="button" class="finish">Done</button>
+<script>
+  const log = (message) => navigator.sendBeacon('/log', message);
+  document.querySelector('.start').addEventListener('click', () => log('start'));
+  document.querySelector('.finish').addEventListener('click', () => log('done'));
+</script>
+</body></html>

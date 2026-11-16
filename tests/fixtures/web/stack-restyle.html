@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Newsletter</title></head>
+<body>
+{{@@<div class="_root_3fa9c"><div class="_row_9d2e1">@@<div class="_root_3fa9c">}}
+<form class="{{signup@@_form_x7q2@@_form_x7q2}}" onsubmit="return false">
+  {{@@<span class="_wrap_k2m9"><span class="_wrap_p0o1">@@<span class="_wrap_k2m9">}}<label class="{{field@@_l_7f3a@@_l_7f3a}}">Email <input type="email" class="{{input@@_i_a91c@@_i_a91c}}"></label>{{@@</span></span>@@</span>}}
+  {{@@<div class="_actions_8b3d">@@<div class="_actions_8b3d">}}<button type="submit" class="{{btn primary@@_b_5e2f _bp_c4a8@@_b_5e2f}}">{{Subscribe@@Subscribe@@Join}}</button>{{@@</div>@@</div>}}
+</form>
+<button type="button" class="{{btn@@_b_5e2f@@_b_5e2f}}">Close</button>
+{{@@</div></div>@@</div>}}
+<script>
+  // The same page restyled: hashed class names (Tailwind / CSS modules) and extra wrapper elements
+  const log = (message) => navigator.sendBeacon('/log', message);
+  document.querySelector('[type=submit]').addEventListener('click', () => log('subscribe:' + document.querySelector('input').value));
+  document.querySelector('form + button').addEventListener('click', () => log('close'));
+</script>
+</body></html>

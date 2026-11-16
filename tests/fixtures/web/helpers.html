@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><title>Helpers</title></head>
+<body>
+<form aria-label="Customer" onsubmit="return false">
+  <label for="a">Full name</label><input id="a">
+  <label>Email <input id="b" type="email"></label>
+  <input id="c" aria-label="Search box" placeholder="ignored">
+  <input id="d" placeholder="Only placeholder">
+  <span id="lbl">Labelled by span</span><input id="e" aria-labelledby="lbl">
+  <button id="f" type="button"><span>Save</span> <b>now</b></button>
+  <img id="g" alt="Logo" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+  <button id="h" type="button" title="Close"></button>
+  <input id="i" type="submit" value="Send">
+  <div id="j" role="combobox" aria-label="Plan"></div>
+  <div id="k" contenteditable="true" aria-label="Notes"></div>
+  <input id="pw" type="password" name="pw">
+  <input id="otp" autocomplete="one-time-code">
+  <input id="tok" name="api_token">
+  <a id="l" href="/x">Docs</a>
+  <button id="m" type="button"><span style="display:none">hidden</span>Visible</button>
+  <button id="n" type="button" aria-labelledby="lbl f">ignored</button>
+  <div id="o" role="switch" aria-checked="false">Notifications</div>
+  <div id="p" role="tab">Overview</div>
+  <label>Wrapped <select id="q"><option>One</option><option selected>Two</option></select></label>
+</form>
+<div role="dialog" aria-label="Edit customer"><button id="ds" type="button">Save</button></div>
+<table><tr><td>Ada Lovelace</td><td>ada@example.com</td><td><button id="del" type="button">Delete</button></td></tr></table>
+<section><h2>Billing</h2><button id="bs" type="button">Pay</button></section>
+<fieldset><legend>Shipping</legend><button id="fs" type="button">Ship</button></fieldset>
+<div><label>Coupon</label><input id="coupon"></div>
+<iframe id="fr" name="child" title="Child form" src="/frame-inner.html"></iframe>
+</body></html>

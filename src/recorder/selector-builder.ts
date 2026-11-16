@@ -6,18 +6,27 @@ export interface ElementInfo {
   nameAttr?: string;   // name="" attribute of a form control
   text?: string;       // visible text, for clickable elements that have no role
   css?: string;        // last-resort CSS path
+  parentSelector?: string;  // selector of the enclosing dialog or listbox that tells identical controls apart (rows use rowBinding)
 }
 
 /**
  * Build the ordered list of candidate selectors for one element: the
- * accessibility role and name first (stable across layout changes), then
- * stable attributes, then the CSS path as the last resort.
+ * accessibility role and name first, scoped to the parent context when there
+ * is one (stable across layout changes), then stable attributes, then the CSS
+ * path as the last resort. A CSS path that relies on `:nth-of-type` is dropped
+ * whenever something better exists.
  */
 export function buildSelectors(element: ElementInfo): string[] {
   const selectors: string[] = [];
 
   if (element.role && element.name) {
-    selectors.push(`role=${element.role}[name="${escapeQuotes(element.name)}"]`);
+    const own = `role=${element.role}[name="${escapeQuotes(element.name)}"]`;
+    // A row selector that embeds the recorded text would replay the recorded
+    // row whatever the Variable says: rows are found through `rowBinding`
+    if (element.parentSelector && !element.parentSelector.includes(':has-text(')) {
+      selectors.push(`${element.parentSelector} >> ${own}`);
+    }
+    selectors.push(own);
   }
   if (element.testId) {
     selectors.push(`[data-testid="${escapeQuotes(element.testId)}"]`);
@@ -31,7 +40,7 @@ export function buildSelectors(element: ElementInfo): string[] {
   if (element.text) {
     selectors.push(`text="${escapeQuotes(element.text)}"`);
   }
-  if (element.css) {
+  if (element.css && !(selectors.length > 0 && element.css.includes(':nth-of-type'))) {
     selectors.push(element.css);
   }
 

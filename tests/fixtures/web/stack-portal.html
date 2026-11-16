@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Order</title></head>
+<body>
+{{@@<div class="css-1q2w3e"><div class="MuiBox-root css-9z8y7">@@<div class="css-1q2w3e">}}
+<main>
+  <form aria-label="Order" onsubmit="return false">
+    <span id="plan-label">Plan</span>
+    <button type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="plan-label" class="{{trigger@@css-trigger-7f3a2@@trigger}}">Choose a plan</button>
+    {{@@<span class="css-wrap-2b1c">@@<span class="css-wrap-2b1c">}}<button type="submit">{{Save order@@Save order@@Store order}}</button>{{@@</span>@@</span>}}
+  </form>
+  <button type="button">Done</button>
+</main>
+{{@@</div></div>@@</div>}}
+<script>
+  // A Radix/MUI-like select: the options are rendered in a portal at the end of the body
+  const log = (message) => navigator.sendBeacon('/log', message);
+  let chosen = '';
+  const trigger = document.querySelector('[role=combobox]');
+  trigger.addEventListener('click', () => {
+    if (document.querySelector('[role=listbox]')) return;
+    log('open');
+    const list = document.createElement('div');
+    list.setAttribute('role', 'listbox');
+    list.setAttribute('aria-label', 'Plan options');
+    for (const text of ['Free', 'Pro']) {
+      const option = document.createElement('div');
+      option.setAttribute('role', 'option');
+      option.textContent = text;
+      option.addEventListener('click', () => { chosen = text; trigger.textContent = text; log('plan:' + text); list.remove(); });
+      list.appendChild(option);
+    }
+    document.body.appendChild(list);
+  });
+  document.querySelector('[type=submit]').addEventListener('click', () => log('order:' + chosen));
+  document.querySelector('main > button').addEventListener('click', () => log('done'));
+</script>
+</body></html>

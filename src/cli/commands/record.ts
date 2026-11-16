@@ -67,6 +67,14 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     live = new LiveRecorder(page, recorder);
     await live.attach();
 
+    // Popups and new tabs get the same capture; each opening is recorded as a switch_page step
+    context.on('page', (opened) => {
+      if (opened === page) return;
+      live!.attachPopup(opened).catch((err) => {
+        console.error(`[record] could not record the new page: ${(err as Error).message}`);
+      });
+    });
+
     const session = options.drive ? options.drive(page, live) : waitForUser(page);
     await Promise.race([session, stopped]);
 

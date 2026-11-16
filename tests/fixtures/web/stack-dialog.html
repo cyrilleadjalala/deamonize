@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Customer</title></head>
+<body>
+<main>
+  <form aria-label="Customer" onsubmit="return false"><button type="submit">Save</button></form>
+  <button type="button" class="open">Edit customer</button>
+  <button type="button" class="finish">Done</button>
+</main>
+<script>
+  // Two "Save" buttons: the one of the page and the one of the dialog
+  const log = (message) => navigator.sendBeacon('/log', message);
+  document.querySelector('form button').addEventListener('click', () => log('page-save'));
+  document.querySelector('.finish').addEventListener('click', () => log('done'));
+  document.querySelector('.open').addEventListener('click', () => {
+    log('dialog-open');
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-label', '{{Edit customer details@@Edit customer details@@Customer editor}}');
+    dialog.innerHTML = '<h2>Details</h2><button type="button" class="dialog-save">Save</button><button type="button">Cancel</button>';
+    dialog.querySelector('.dialog-save').addEventListener('click', () => { log('dialog-save'); dialog.remove(); });
+    document.body.appendChild(dialog);
+  });
+</script>
+</body></html>

@@ -1,0 +1,71 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>People</title></head>
+<body>
+<h1>People</h1>
+<label>Customer <input id="search" type="text"></label>
+<button type="button" id="shuffle">Shuffle</button>
+<table id="people">
+  <thead><tr><th>Name</th><th>Manager</th><th></th></tr></thead>
+  <tbody></tbody>
+</table>
+<div id="cards"></div>
+<script>
+  // Rows are rendered by script, in an order chosen by ?order=asc|desc|rot, and again (in another order) by the Shuffle button.
+  // ?dup=1 adds a second "Bob" row, ?cardsdup=1 a second "Bob" card.
+  const params = new URLSearchParams(location.search);
+  const people = [
+    ['Ada', 'Grace'], ['Bob', 'Ada'], ['Grace', 'Bob'], ['José', 'Ada'],
+    ['O\'Brien "Q"', 'Ada'], ['A+B (x) [y]', 'Bob'], ['Zoë  Müller', 'Bob'],
+  ];
+  if (params.get('dup') === '1') people.push(['Bob', 'Zed']);
+  const cards = people.slice(0, 4).map(([name]) => [name, name.toLowerCase().replace(/[^a-z]/g, '') + '@example.com']);
+  if (params.get('cardsdup') === '1') cards.push(['Bob', 'other@example.com']);
+  window.deleted = [];
+
+  function order(list, how) {
+    const copy = list.slice();
+    if (how === 'desc') return copy.reverse();
+    if (how === 'rot') return copy.slice(2).concat(copy.slice(0, 2));
+    return copy;
+  }
+  function render(how) {
+    const body = document.querySelector('#people tbody');
+    body.textContent = '';
+    for (const [name, manager] of order(people, how)) {
+      const tr = document.createElement('tr');
+      for (const text of [name, manager]) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+      }
+      const action = document.createElement('td');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Delete';
+      button.addEventListener('click', () => { window.deleted.push(name); tr.remove(); });
+      action.appendChild(button);
+      tr.appendChild(action);
+      body.appendChild(tr);
+    }
+    const holder = document.getElementById('cards');
+    holder.textContent = '';
+    for (const [name, email] of order(cards, how)) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      const h3 = document.createElement('h3');
+      h3.textContent = name;
+      const p = document.createElement('p');
+      p.textContent = email;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Delete';
+      button.addEventListener('click', () => { window.deleted.push('card:' + name); card.remove(); });
+      card.append(h3, p, button);
+      holder.appendChild(card);
+    }
+  }
+  render(params.get('order') || 'asc');
+  let turn = 0;
+  document.getElementById('shuffle').addEventListener('click', () => render(['desc', 'rot', 'asc'][turn++ % 3]));
+</script>
+</body></html>

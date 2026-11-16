@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Customers</title></head>
+<body>
+<h1>Customers</h1>
+<label>Customer <input type="text"></label>
+<table>
+  <thead><tr><th>Name</th><th>Manager</th><th></th></tr></thead>
+  <tbody></tbody>
+</table>
+<button type="button" class="refresh">Refresh</button>
+<script>
+  // The rows are rendered in another order at replay; a second "Grace" row makes the Variable ambiguous
+  const log = (message) => navigator.sendBeacon('/log', message);
+  const people = [['Ada', 'Grace'], ['Bob', 'Ada'], ['Grace', 'Bob'], ['Hopper', 'Ada']];
+  if ('{{no@@no@@no@@dup}}' === 'dup') people.push(['Grace', 'Zed']);
+  if ('{{asc@@desc@@desc@@desc}}' === 'desc') people.reverse();
+  const body = document.querySelector('tbody');
+  for (const [name, manager] of people) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td></td><td></td><td>{{@@@@<span>}}<button type="button">{{Delete@@Delete@@Remove}}</button>{{@@@@</span>}}</td>';
+    tr.children[0].textContent = name;
+    tr.children[1].textContent = manager;
+    tr.querySelector('button').addEventListener('click', () => { log('delete:' + name); tr.remove(); });
+    body.appendChild(tr);
+  }
+  document.querySelector('.refresh').addEventListener('click', () => log('refresh'));
+</script>
+</body></html>

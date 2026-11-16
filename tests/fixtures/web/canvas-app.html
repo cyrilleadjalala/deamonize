@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <title>Canvas app</title>
+  <style>
+    html, body { margin: 0; padding: 0; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <canvas id="stage" width="400" height="300"></canvas>
+  <script>
+    // The only control of this page is drawn on the canvas: there is no element, role or accessible name to find.
+    const BUTTON = { x: 150, y: 120, w: 100, h: 40 };
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+    function draw(pressed) {
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(0, 0, 400, 300);
+      ctx.fillStyle = pressed ? '#16a34a' : '#2563eb';
+      ctx.fillRect(BUTTON.x, BUTTON.y, BUTTON.w, BUTTON.h);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '16px sans-serif';
+      ctx.fillText(pressed ? 'Done' : 'Go', BUTTON.x + 32, BUTTON.y + 25);
+    }
+    draw(false);
+    canvas.addEventListener('click', (e) => {
+      const r = canvas.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      if (x >= BUTTON.x && x <= BUTTON.x + BUTTON.w && y >= BUTTON.y && y <= BUTTON.y + BUTTON.h) {
+        draw(true);
+        document.title = 'Canvas done';
+      }
+    });
+  </script>
+</body>
+</html>

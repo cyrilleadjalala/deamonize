@@ -324,12 +324,12 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
 
 - [ ] 16. Lot 1: Run-time drift and complete Zod translation
   - Rules for tasks 16-21: never import `src/` from generated files (`mcp-server.ts`/`.js`, `replay.ts`, generated tests); shared pure logic lives in `src/replay/runtime/` and the compiler copies it verbatim into the output. PBT tests carry `// Feature: daemonize, Property N: ...` tags. Tests that need Docker or a real tool skip with a clear message.
-  - [-] 16.1 Create the shared run-time screen hash
+  - [x] 16.1 Create the shared run-time screen hash
     - Create `src/replay/runtime/screen-hash.ts`: dependency-free port of `ScreenHasher` (DOM and terminal normalisation, SHA-256 truncated to 16 hex characters, optional zone restriction: selector for web, row/column rectangle for terminal)
     - Update `src/compiler/compiler.ts` and `src/compiler/mcp-generator.ts` to copy the file into the output and import it from the generated `replay.ts` in `WEB_RUNTIME` and `TERMINAL_RUNTIME`
     - _Requirements: 11.2, 11.3, 11.4_
 
-  - [ ]* 16.2 Write property test for run-time hash equivalence — Property 9
+  - [x]* 16.2 Write property test for run-time hash equivalence — Property 9
     - **Property 9: Run-time hash equals ScreenHasher**
     - For any generated DOM string or terminal text, the hash of the copied `screen-hash.ts` equals the hash of `src/state/screen-hasher.ts`
     - Add a test that no generated file (`mcp-server.ts`, `mcp-server.js`, `replay.ts`, generated tests) imports from `src/`
@@ -337,25 +337,25 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
     - **Validates: Requirements 11.3, 11.5**
     - _Tag comment: `// Feature: daemonize, Property 9: run-time hash equivalence`_
 
-  - [ ] 16.3 Embed the final screen and return `drifted`
+  - [x] 16.3 Embed the final screen and return `drifted`
     - Embed `finalScreenId` and `finalZone` in the generated runtime; both runtimes return `drifted: boolean`
     - Update the output schema, `src/compiler/openapi-generator.ts` and the `SKILL.md` text in `src/compiler/kiro-power-generator.ts`
     - Tests in `tests/unit/replayer.test.ts` and `tests/integration/workflow-e2e.test.ts`: a page whose final screen changes returns `drifted: true`; a real-time clock excluded by the zone returns `drifted: false`
     - _Requirements: 11.1, 11.2, 11.4_
 
-  - [ ] 16.4 Complete the JSON Schema to Zod translation
+  - [x] 16.4 Complete the JSON Schema to Zod translation
     - Extend `jsonSchemaToZod` in `src/compiler/mcp-generator.ts`: `enum`, `items`, `minItems`, `maxItems`, `properties`, `required`, `additionalProperties`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `anyOf`, `oneOf`, type lists; no `z.unknown()` for these keywords
     - Keywords Zod cannot express stay with AJV as authority, with a code comment saying so
     - _Requirements: 11.6, 11.7_
 
-  - [ ]* 16.5 Write property test for Zod and AJV equivalence — Property 10
+  - [x]* 16.5 Write property test for Zod and AJV equivalence — Property 10
     - **Property 10: Zod accepts exactly what AJV accepts**
     - For any schema in the supported subset and any payload (valid or violating), the generated Zod schema accepts iff AJV accepts
     - Unit tests per keyword in `tests/unit/compiler-outputs.test.ts`; property test in `tests/property/zod-ajv.property.test.ts`
     - **Validates: Requirements 11.6, 11.8**
     - _Tag comment: `// Feature: daemonize, Property 10: Zod and AJV equivalence`_
 
-  - [ ] 16.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+  - [-] 16.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 17. Lot 2a: Stack-independent web engine, levels 2 and 1

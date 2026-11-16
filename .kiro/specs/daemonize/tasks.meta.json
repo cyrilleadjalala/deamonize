@@ -574,6 +574,73 @@
         "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
         "timestamp": 1794810231411
       }
+    ],
+    "16.1 Create the shared run-time screen hash": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794815004250
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794815225076
+      }
+    ],
+    "16.2 Write property test for run-time hash equivalence — Property 9": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794815225403
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794815348423
+      }
+    ],
+    "16.3 Embed the final screen and return `drifted`": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794815348517
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794816005937
+      }
+    ],
+    "16.4 Complete the JSON Schema to Zod translation": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794816006080
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794816478569
+      }
+    ],
+    "16.5 Write property test for Zod and AJV equivalence — Property 10": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794816478787
+      },
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794817210716
+      }
+    ],
+    "16.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)": [
+      {
+        "executionId": "5033a063-3808-4a2a-99c6-403e24431e15",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794817210944
+      }
     ]
   }
 }

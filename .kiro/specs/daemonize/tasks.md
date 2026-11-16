@@ -322,7 +322,7 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
   - [x] 15.4 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 16. Lot 1: Run-time drift and complete Zod translation
+- [x] 16. Lot 1: Run-time drift and complete Zod translation
   - Rules for tasks 16-21: never import `src/` from generated files (`mcp-server.ts`/`.js`, `replay.ts`, generated tests); shared pure logic lives in `src/replay/runtime/` and the compiler copies it verbatim into the output. PBT tests carry `// Feature: daemonize, Property N: ...` tags. Tests that need Docker or a real tool skip with a clear message.
   - [x] 16.1 Create the shared run-time screen hash
     - Create `src/replay/runtime/screen-hash.ts`: dependency-free port of `ScreenHasher` (DOM and terminal normalisation, SHA-256 truncated to 16 hex characters, optional zone restriction: selector for web, row/column rectangle for terminal)
@@ -355,46 +355,46 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
     - **Validates: Requirements 11.6, 11.8**
     - _Tag comment: `// Feature: daemonize, Property 10: Zod and AJV equivalence`_
 
-  - [-] 16.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+  - [x] 16.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 17. Lot 2a: Stack-independent web engine, levels 2 and 1
-  - [ ] 17.1 Extend the workflow model
+  - [x] 17.1 Extend the workflow model
     - Add to `src/types.ts`, the WorkflowSet JSON schema and `src/workflow/workflow-set.ts` the step and workflow fields from the design: `anchor`, `rowBinding`, `http`, `visual`, `risk`, `resultZone`, `timeoutMs`, `secretRef`, `totp`, `allowHeal`, workflow `finalZone`, `secrets`
     - Backward compatible: existing workflow files still load and round-trip
     - Unit tests in `tests/unit/workflow-recorder.test.ts`
     - _Requirements: 12.4, 13.2, 14.1, 14.5, 14.9, 15.1, 16.2, 16.8_
 
-  - [ ] 17.2 Record accessible anchors, frames, popups and custom components
+  - [x] 17.2 Record accessible anchors, frames, popups and custom components
     - Update `src/recorder/capture-script.ts`, `src/recorder/selector-builder.ts`, `src/recorder/live-recorder.ts`, `src/recorder/workflow-recorder.ts`
     - Record role, accessible name, parent context, frame path, popup openings (context `page`), custom components (combobox, listbox, Radix/MUI/HeadlessUI portals, contenteditable) and preparatory hover/scroll
     - Keep the previous selectors only as last-resort fallback
     - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-  - [ ] 17.3 Relational locators for dynamic lists and tables
+  - [x] 17.3 Relational locators for dynamic lists and tables
     - Record the row or card containing a value plus the action inside it, bound to a Variable through `rowBinding`; no `.first()` and no `:nth-of-type`
     - Files: `src/recorder/selector-builder.ts`, `src/recorder/live-recorder.ts`, `src/recorder/capture-script.ts`, `src/replay/runtime/locators.ts` (copied by the compiler)
     - _Requirements: 14.5, 14.6, 14.7_
 
-  - [ ]* 17.4 Write property test for row resolution — Property 13
+  - [x]* 17.4 Write property test for row resolution — Property 13
     - **Property 13: Row resolution is independent of row order**
     - Model-based test on generated DOM tables (real Chromium or an equivalent DOM): any permutation of rows resolves the same row for the same bound value; skip with a message when no browser is available
     - File: `tests/property/relational-locator.property.test.ts`
     - **Validates: Requirements 14.5, 14.6, 14.7**
     - _Tag comment: `// Feature: daemonize, Property 13: row resolution order independence`_
 
-  - [ ] 17.5 Effect-based waits and configurable timeouts
+  - [x] 17.5 Effect-based waits and configurable timeouts
     - Replace `networkidle` with timeout by waits on the observable effect of each action; configurable `TIMEOUT_MS` per workflow and `timeoutMs` per step
     - Files: `src/sandbox/playwright-driver.ts`, `src/replay/runtime/waits.ts` (copied by the compiler), `src/compiler/mcp-generator.ts`
     - Integration test on a local page with a WebSocket, SSE or polling loop: same steps in the same order as on a quiet page (`tests/integration/web-waits.test.ts`)
     - _Requirements: 14.8, 14.9, 14.10_
 
-  - [ ] 17.6 Standalone strict web runtime
+  - [x] 17.6 Standalone strict web runtime
     - Update `WEB_RUNTIME` in `src/compiler/mcp-generator.ts` to execute level 2 with anchors, frames, popups and custom components in strict mode
     - A failing step returns `{ success: false, drifted: true, failure: { step, tried, screenshot } }` and no later step runs
     - _Requirements: 12.3, 12.5, 12.6, 12.10_
 
-  - [ ]* 17.7 Write property test for strict failure — Property 14
+  - [-]* 17.7 Write property test for strict failure — Property 14
     - **Property 14: A strict failure never executes later steps**
     - For any workflow and any failing step index, a fake driver records no action after the failing step and the result has `success: false` and `drifted: true`
     - File: `tests/property/strict-replay.property.test.ts`

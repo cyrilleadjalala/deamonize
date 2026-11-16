@@ -1,0 +1,30 @@
+# Real software, not written by us: Adminer (PHP database UI) on top of PostgreSQL.
+# Local demo only. The default password below is a public demo value, never reuse it.
+name: daemonize-adminer-example
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:-demo-password-change-me}
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d demo"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  adminer:
+    image: adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy

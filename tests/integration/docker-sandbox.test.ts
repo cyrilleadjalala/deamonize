@@ -23,6 +23,21 @@ import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import type { WorkflowSet } from '../../src/types.js';
 import { removeDir } from '../helpers/cleanup.js';
 
+// Other Docker test files run at the same time and start short-lived containers (--rm) with the same
+// name prefix. A container that belongs to one of them is not a leak of this file, so wait until the
+// list is empty. A real leak never disappears: the wait then times out and the assertion fails.
+async function expectNoDaemonizeContainers(): Promise<void> {
+  const list = (): string =>
+    spawnSync('docker', ['ps', '-a', '--filter', 'name=daemonize-', '--format', '{{.Names}}'], { encoding: 'utf-8' }).stdout.trim();
+  const deadline = Date.now() + 45_000;
+  let left = list();
+  while (left !== '' && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 500));
+    left = list();
+  }
+  expect(left).toBe('');
+}
+
 const enabled = process.env.DAEMONIZE_DOCKER_TESTS === '1';
 // Unique value of the saved login (the session cookie): it must never reach an image layer or a command line
 const SESSION = `marker-${randomUUID()}`;
@@ -120,11 +135,7 @@ describe.skipIf(!enabled)('Replay in a Docker container', () => {
   }, 120000);
 
   it('leaves no container behind', async () => {
-    const left = spawnSync('docker', ['ps', '-a', '--filter', 'name=daemonize-', '--format', '{{.Names}}'], {
-      encoding: 'utf-8',
-    });
-
-    expect(left.stdout.trim()).toBe('');
+    await expectNoDaemonizeContainers();
   });
 
   it('runs the program as an unprivileged user on Linux, with the limits, a read-only file system and no network', async () => {
@@ -545,11 +556,7 @@ describe.skipIf(!enabled)('Replay of a web target in a Docker container', () => 
     }, 120000);
   });
 
-  it('leaves no container behind', () => {
-    const left = spawnSync('docker', ['ps', '-a', '--filter', 'name=daemonize-', '--format', '{{.Names}}'], {
-      encoding: 'utf-8',
-    });
-
-    expect(left.stdout.trim()).toBe('');
+  it('leaves no container behind', async () => {
+    await expectNoDaemonizeContainers();
   });
 });

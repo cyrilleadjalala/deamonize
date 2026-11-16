@@ -1,0 +1,1021 @@
+{
+  "version": "1",
+  "targetType": "web",
+  "targetName": "adminer",
+  "workflows": [
+    {
+      "id": "288b1012-bc95-4f98-8ce4-f58eed3a2652",
+      "label": "list_customers",
+      "steps": [
+        {
+          "actionType": "select",
+          "selectors": [
+            "[name=\"auth[driver]\"]"
+          ],
+          "value": "pgsql",
+          "label": "select auth[driver]",
+          "anchor": {
+            "role": "combobox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.1735,
+              "w": 0.1016,
+              "h": 0.0264
+            },
+            "intent": "Select an option in the combobox (select auth[driver])",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-288b1012-bc95-4f98-8ce4-f58eed3a2652-0.png"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "#username",
+            "[name=\"auth[username]\"]"
+          ],
+          "value": "demo",
+          "label": "type auth[username]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.2461,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[username])"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"auth[password]\"]"
+          ],
+          "label": "type auth[password]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "secretRef": "PASSWORD",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.2838,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[password])"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"auth[db]\"]"
+          ],
+          "value": "demo",
+          "label": "type auth[db]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.3215,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[db])"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=button[name=\"Login\"]",
+            "#content > form > p > input"
+          ],
+          "label": "click Login",
+          "anchor": {
+            "role": "button",
+            "name": "Login",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.2362,
+              "y": 0.3717,
+              "w": 0.038,
+              "h": 0.0292
+            },
+            "intent": "Click the button 'Login'",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-288b1012-bc95-4f98-8ce4-f58eed3a2652-4.png"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=link[name=\"select\"]"
+          ],
+          "label": "click select",
+          "anchor": {
+            "role": "link",
+            "name": "select",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.0112,
+              "y": 0.3278,
+              "w": 0.0327,
+              "h": 0.0236
+            },
+            "intent": "Click the link 'select'"
+          }
+        }
+      ],
+      "variables": [],
+      "observedPayloads": [],
+      "secrets": [
+        {
+          "name": "PASSWORD",
+          "kind": "password"
+        }
+      ],
+      "resultZone": {
+        "selector": "#table",
+        "extractor": {
+          "kind": "table"
+        },
+        "schema": {
+          "type": "array",
+          "description": "Rows of the table in the result zone, each an object keyed by the column headers",
+          "items": {
+            "type": "object",
+            "description": "One row",
+            "properties": {
+              "column_1": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "finalScreenId": "6900d9c9ed68895b",
+      "finalZone": {
+        "selector": "table#table > thead"
+      }
+    },
+    {
+      "id": "0235187a-5182-4a85-bc03-9955248633d9",
+      "label": "find_customers",
+      "steps": [
+        {
+          "actionType": "select",
+          "selectors": [
+            "[name=\"auth[driver]\"]"
+          ],
+          "value": "pgsql",
+          "label": "select auth[driver]",
+          "anchor": {
+            "role": "combobox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.1735,
+              "w": 0.1016,
+              "h": 0.0264
+            },
+            "intent": "Select an option in the combobox (select auth[driver])",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-0235187a-5182-4a85-bc03-9955248633d9-0.png"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "#username",
+            "[name=\"auth[username]\"]"
+          ],
+          "value": "demo",
+          "label": "type auth[username]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.2461,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[username])"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"auth[password]\"]"
+          ],
+          "label": "type auth[password]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "secretRef": "PASSWORD",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.2838,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[password])"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"auth[db]\"]"
+          ],
+          "value": "demo",
+          "label": "type auth[db]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.3215,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[db])"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=button[name=\"Login\"]",
+            "#content > form > p > input"
+          ],
+          "label": "click Login",
+          "anchor": {
+            "role": "button",
+            "name": "Login",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.2362,
+              "y": 0.3717,
+              "w": 0.038,
+              "h": 0.0292
+            },
+            "intent": "Click the button 'Login'",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-0235187a-5182-4a85-bc03-9955248633d9-4.png"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=link[name=\"select\"]"
+          ],
+          "label": "click select",
+          "anchor": {
+            "role": "link",
+            "name": "select",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.0112,
+              "y": 0.3278,
+              "w": 0.0327,
+              "h": 0.0236
+            },
+            "intent": "Click the link 'select'"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=link[name=\"Search\"]"
+          ],
+          "label": "click Search",
+          "anchor": {
+            "role": "link",
+            "name": "Search",
+            "frame": [],
+            "parent": {
+              "kind": "heading",
+              "name": "Search"
+            }
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3143,
+              "y": 0.2095,
+              "w": 0.0389,
+              "h": 0.0236
+            },
+            "intent": "Click the link 'Search' in the heading 'Search'",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-0235187a-5182-4a85-bc03-9955248633d9-6.png"
+          }
+        },
+        {
+          "actionType": "select",
+          "selectors": [
+            "[name=\"where[0][op]\"]"
+          ],
+          "value": "LIKE",
+          "label": "select where[0][op]",
+          "anchor": {
+            "role": "combobox",
+            "name": "",
+            "frame": [],
+            "parent": {
+              "kind": "heading",
+              "name": "Search"
+            }
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3823,
+              "y": 0.2459,
+              "w": 0.082,
+              "h": 0.0264
+            },
+            "intent": "Select an option in the combobox in the heading 'Search'",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-0235187a-5182-4a85-bc03-9955248633d9-7.png"
+          },
+          "variable": "operator"
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"where[0][val]\"]"
+          ],
+          "value": "Fran%",
+          "label": "type where[0][val]",
+          "anchor": {
+            "role": "searchbox",
+            "name": "",
+            "frame": [],
+            "parent": {
+              "kind": "heading",
+              "name": "Search"
+            }
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.4643,
+              "y": 0.2445,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field in the heading 'Search'",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-0235187a-5182-4a85-bc03-9955248633d9-8.png"
+          },
+          "variable": "search_text"
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=button[name=\"Select\"]"
+          ],
+          "label": "click Select",
+          "anchor": {
+            "role": "button",
+            "name": "Select",
+            "frame": [],
+            "parent": {
+              "kind": "heading",
+              "name": "Action"
+            }
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.8499,
+              "y": 0.2445,
+              "w": 0.0415,
+              "h": 0.0292
+            },
+            "intent": "Click the button 'Select' in the heading 'Action'"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "name": "operator",
+          "enum": [
+            "=",
+            "LIKE"
+          ],
+          "description": "Comparison used by the filter"
+        },
+        {
+          "name": "search_text",
+          "description": "Value to look for in any column; with LIKE, % matches any text"
+        }
+      ],
+      "observedPayloads": [
+        {
+          "operator": "LIKE",
+          "search_text": "Fran%"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "PASSWORD",
+          "kind": "password"
+        }
+      ],
+      "resultZone": {
+        "selector": "#table",
+        "extractor": {
+          "kind": "table"
+        },
+        "schema": {
+          "type": "array",
+          "description": "Rows of the table in the result zone, each an object keyed by the column headers",
+          "items": {
+            "type": "object",
+            "description": "One row",
+            "properties": {
+              "column_1": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "finalScreenId": "d41e23c28b2a7dc9",
+      "finalZone": {
+        "selector": "h2"
+      }
+    },
+    {
+      "id": "ce17643b-a3c9-46a8-9024-d440632be459",
+      "label": "open_customer_for_edit",
+      "steps": [
+        {
+          "actionType": "select",
+          "selectors": [
+            "[name=\"auth[driver]\"]"
+          ],
+          "value": "pgsql",
+          "label": "select auth[driver]",
+          "anchor": {
+            "role": "combobox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.1735,
+              "w": 0.1016,
+              "h": 0.0264
+            },
+            "intent": "Select an option in the combobox (select auth[driver])",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-ce17643b-a3c9-46a8-9024-d440632be459-0.png"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "#username",
+            "[name=\"auth[username]\"]"
+          ],
+          "value": "demo",
+          "label": "type auth[username]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.2461,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[username])"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"auth[password]\"]"
+          ],
+          "label": "type auth[password]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "secretRef": "PASSWORD",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.2838,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[password])"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"auth[db]\"]"
+          ],
+          "value": "demo",
+          "label": "type auth[db]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.3215,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[db])"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=button[name=\"Login\"]",
+            "#content > form > p > input"
+          ],
+          "label": "click Login",
+          "anchor": {
+            "role": "button",
+            "name": "Login",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.2362,
+              "y": 0.3717,
+              "w": 0.038,
+              "h": 0.0292
+            },
+            "intent": "Click the button 'Login'",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-ce17643b-a3c9-46a8-9024-d440632be459-4.png"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=link[name=\"select\"]"
+          ],
+          "label": "click select",
+          "anchor": {
+            "role": "link",
+            "name": "select",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.0112,
+              "y": 0.3278,
+              "w": 0.0327,
+              "h": 0.0236
+            },
+            "intent": "Click the link 'select'"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=link[name=\"edit\"]"
+          ],
+          "label": "click edit",
+          "anchor": {
+            "role": "link",
+            "name": "edit",
+            "frame": []
+          },
+          "rowBinding": {
+            "container": {
+              "kind": "row"
+            },
+            "key": {
+              "text": "Chiara Rossi"
+            },
+            "variable": "customer_name"
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.2393,
+              "y": 0.4484,
+              "w": 0.0191,
+              "h": 0.0222
+            },
+            "intent": "Click the link 'edit' in the region '3 Chiara Rossi Italy inactive'"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "name": "customer_name",
+          "description": "Exact name of the customer, as shown in the name column of the table"
+        }
+      ],
+      "observedPayloads": [
+        {
+          "customer_name": "Chiara Rossi"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "PASSWORD",
+          "kind": "password"
+        }
+      ],
+      "resultZone": {
+        "selector": "#form > table",
+        "extractor": {
+          "kind": "fields"
+        },
+        "schema": {
+          "type": "object",
+          "description": "Label and value pairs of the result zone",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "country": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "finalScreenId": "a037bf82d858a4de",
+      "finalZone": {
+        "selector": "h2"
+      }
+    },
+    {
+      "id": "abea22b3-46a3-4851-9063-07dbdd03b93a",
+      "label": "rename_customer",
+      "steps": [
+        {
+          "actionType": "select",
+          "selectors": [
+            "[name=\"auth[driver]\"]"
+          ],
+          "value": "pgsql",
+          "label": "select auth[driver]",
+          "anchor": {
+            "role": "combobox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.1735,
+              "w": 0.1016,
+              "h": 0.0264
+            },
+            "intent": "Select an option in the combobox (select auth[driver])",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-abea22b3-46a3-4851-9063-07dbdd03b93a-0.png"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "#username",
+            "[name=\"auth[username]\"]"
+          ],
+          "value": "demo",
+          "label": "type auth[username]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.2461,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[username])"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"auth[password]\"]"
+          ],
+          "label": "type auth[password]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "secretRef": "PASSWORD",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.2838,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[password])"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"auth[db]\"]"
+          ],
+          "value": "demo",
+          "label": "type auth[db]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3043,
+              "y": 0.3215,
+              "w": 0.1383,
+              "h": 0.0292
+            },
+            "intent": "Type into the field (type auth[db])"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=button[name=\"Login\"]",
+            "#content > form > p > input"
+          ],
+          "label": "click Login",
+          "anchor": {
+            "role": "button",
+            "name": "Login",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.2362,
+              "y": 0.3717,
+              "w": 0.038,
+              "h": 0.0292
+            },
+            "intent": "Click the button 'Login'",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-abea22b3-46a3-4851-9063-07dbdd03b93a-4.png"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=link[name=\"select\"]"
+          ],
+          "label": "click select",
+          "anchor": {
+            "role": "link",
+            "name": "select",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.0112,
+              "y": 0.3278,
+              "w": 0.0327,
+              "h": 0.0236
+            },
+            "intent": "Click the link 'select'"
+          }
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=link[name=\"edit\"]"
+          ],
+          "label": "click edit",
+          "anchor": {
+            "role": "link",
+            "name": "edit",
+            "frame": []
+          },
+          "rowBinding": {
+            "container": {
+              "kind": "row"
+            },
+            "key": {
+              "text": "Chiara Rossi"
+            },
+            "variable": "customer_name"
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.2393,
+              "y": 0.4484,
+              "w": 0.0191,
+              "h": 0.0222
+            },
+            "intent": "Click the link 'edit' in the region '3 Chiara Rossi Italy inactive'"
+          }
+        },
+        {
+          "actionType": "type",
+          "selectors": [
+            "[name=\"fields[status]\"]"
+          ],
+          "value": "pending",
+          "label": "type fields[status]",
+          "anchor": {
+            "role": "textbox",
+            "name": "",
+            "frame": []
+          },
+          "risk": "read",
+          "visual": {
+            "rect": {
+              "x": 0.3391,
+              "y": 0.6316,
+              "w": 0.3289,
+              "h": 0.2859
+            },
+            "intent": "Type into the field (type fields[status])",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-abea22b3-46a3-4851-9063-07dbdd03b93a-7.png"
+          },
+          "variable": "status"
+        },
+        {
+          "actionType": "click",
+          "selectors": [
+            "role=button[name=\"Save\"]"
+          ],
+          "label": "click Save",
+          "anchor": {
+            "role": "button",
+            "name": "Save",
+            "frame": []
+          },
+          "risk": "write",
+          "visual": {
+            "rect": {
+              "x": 0.2362,
+              "y": 0.9429,
+              "w": 0.0362,
+              "h": 0.0292
+            },
+            "intent": "Click the button 'Save'",
+            "thumbnailPath": "daemonize.workflows.json.assets/step-abea22b3-46a3-4851-9063-07dbdd03b93a-8.png"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "name": "customer_name",
+          "description": "Exact name of the customer, as shown in the name column of the table"
+        },
+        {
+          "name": "status",
+          "enum": [
+            "active",
+            "inactive",
+            "pending"
+          ],
+          "description": "New status of the customer"
+        }
+      ],
+      "observedPayloads": [
+        {
+          "customer_name": "Chiara Rossi",
+          "status": "pending"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "PASSWORD",
+          "kind": "password"
+        }
+      ],
+      "resultZone": {
+        "selector": "div.message",
+        "extractor": {
+          "kind": "text"
+        },
+        "schema": {
+          "type": "string",
+          "description": "Text of the result zone"
+        }
+      },
+      "finalScreenId": "d41e23c28b2a7dc9",
+      "finalZone": {
+        "selector": "h2"
+      }
+    }
+  ],
+  "startUrl": "http://127.0.0.1:8080/"
+}

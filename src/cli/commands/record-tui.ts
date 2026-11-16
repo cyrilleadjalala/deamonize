@@ -22,6 +22,8 @@ export interface TerminalInput {
 
 export interface RecordTuiOptions {
   command: string[];            // the program and its arguments
+  startCommand?: string[];      // what the file stores as the program to start, when command is a wrapper of it (e.g. docker run -it ... sqlite3 notes.db)
+  cwd?: string;                 // working directory of the program (default: the one of this process)
   name: string;                 // target application name
   label: string;                // label of the recorded workflow (becomes the tool name)
   out: string;                  // Workflow set file; created, or merged when it exists
@@ -82,7 +84,7 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
   });
 
   const [command, ...args] = options.command;
-  const program = pty.spawn(command, args, { cols, rows, name: 'xterm-256color' });
+  const program = pty.spawn(command, args, { cols, rows, name: 'xterm-256color', cwd: options.cwd });
   let exitCode: number | undefined;
 
   // The program follows the user's window, but the workflow keeps the initial size
@@ -152,15 +154,15 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
 
     // Let the program finish drawing before keeping the screen it ended on
     await screen.settle(stabilizeMs, 2000);
-    const fullText = screen.text();
+    // A program that redraws all the time never settles: the capture can fall just after it cleared the
+    // screen. Read again, within a bounded window, until the asked result zone can be read on it.
+    const { fullText, resultZone } = await readFinalScreen(() => screen.text(), options);
     const text = options.finalRect ? cropTerminal(fullText, options.finalRect) : fullText;
     const finalScreen: ScreenContent = { type: 'terminal', raw: text, normalized: text, capturedAt: Date.now() };
-
-    const resultZone = readResultZone(fullText, options);
     const workflow = recorder.finish(finalScreen, options.finalRect ? { rect: options.finalRect } : undefined, resultZone);
     const totalWorkflows = await saveWorkflow(
       options.out,
-      { targetType: 'tui', name: options.name, startCommand: options.command, sandbox: options.sandbox },
+      { targetType: 'tui', name: options.name, startCommand: options.startCommand ?? options.command, sandbox: options.sandbox },
       workflow
     );
 
@@ -201,8 +203,37 @@ export async function recordTui(options: RecordTuiOptions): Promise<RecordTuiSum
   }
 }
 
+/** How long the final screen is read again when the result zone cannot be read on it yet. */
+const FINAL_SCREEN_RETRY_MS = 3000;
+const FINAL_SCREEN_POLL_MS = 50;
+
+/**
+ * The final screen and the result zone read on it. A redrawing program can be caught mid-redraw, so the
+ * screen is read again every few milliseconds until the zone reads, for at most FINAL_SCREEN_RETRY_MS;
+ * after that the last error is reported. Without a result zone the first capture is kept.
+ */
+export async function readFinalScreen(
+  read: () => string,
+  options: Pick<RecordTuiOptions, 'resultRect' | 'resultRegex' | 'resultRegexFlags'>,
+  retryMs = FINAL_SCREEN_RETRY_MS
+): Promise<{ fullText: string; resultZone: ResultZone | undefined }> {
+  const deadline = Date.now() + retryMs;
+  for (;;) {
+    const fullText = read();
+    try {
+      return { fullText, resultZone: readResultZone(fullText, options) };
+    } catch (err) {
+      if (Date.now() >= deadline) throw err;
+    }
+    await new Promise((r) => setTimeout(r, FINAL_SCREEN_POLL_MS));
+  }
+}
+
 /** The Result_Zone asked for on the command line, checked against the final screen; undefined when none was asked for. */
-function readResultZone(screenText: string, options: RecordTuiOptions): ResultZone | undefined {
+function readResultZone(
+  screenText: string,
+  options: Pick<RecordTuiOptions, 'resultRect' | 'resultRegex' | 'resultRegexFlags'>
+): ResultZone | undefined {
   if (options.resultRect === undefined && options.resultRegex === undefined) return undefined;
   const zone: ResultZone = {
     ...(options.resultRect === undefined ? {} : { rect: options.resultRect }),

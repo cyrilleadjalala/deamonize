@@ -1,0 +1,347 @@
+{
+  "version": "1",
+  "targetType": "tui",
+  "targetName": "sqlite",
+  "workflows": [
+    {
+      "id": "40ba7e23-6194-4e75-bb0e-94639a6cdcf3",
+      "label": "add_note",
+      "steps": [
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": "create table if not exists notes(id integer primary key, title text, body text);",
+          "label": "Type \"create table if not exists notes(id integer primary key, title text, body text);\"",
+          "risk": "write"
+        },
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "Enter",
+          "label": "Press Enter",
+          "waitFor": {
+            "pattern": "^sqlite>$",
+            "flags": "m",
+            "mode": "appear",
+            "timeoutMs": 15000
+          },
+          "risk": "write"
+        },
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": "insert into notes(title, body) values ('",
+          "label": "Type \"insert into notes(title, body) values ('\"",
+          "risk": "write"
+        },
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": "Sample title",
+          "label": "Type title",
+          "variable": "title",
+          "risk": "write"
+        },
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": "', '",
+          "label": "Type \"', '\"",
+          "risk": "write"
+        },
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": "Sample body",
+          "label": "Type body",
+          "variable": "body",
+          "risk": "write"
+        },
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": "');",
+          "label": "Type \"');\"",
+          "risk": "write"
+        },
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "Enter",
+          "label": "Press Enter",
+          "waitFor": {
+            "pattern": "^sqlite>$",
+            "flags": "m",
+            "mode": "appear",
+            "timeoutMs": 15000
+          },
+          "risk": "write"
+        },
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": ".mode json",
+          "label": "Type \".mode json\"",
+          "risk": "read"
+        },
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "Enter",
+          "label": "Press Enter",
+          "waitFor": {
+            "pattern": "^sqlite>$",
+            "flags": "m",
+            "mode": "appear",
+            "timeoutMs": 15000
+          },
+          "risk": "read"
+        },
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": "select last_insert_rowid() as id;",
+          "label": "Type \"select last_insert_rowid() as id;\"",
+          "risk": "read"
+        },
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "Enter",
+          "label": "Press Enter",
+          "waitFor": {
+            "pattern": "^sqlite>$",
+            "flags": "m",
+            "mode": "appear",
+            "timeoutMs": 15000
+          },
+          "risk": "read"
+        }
+      ],
+      "variables": [
+        {
+          "name": "title",
+          "description": "Title of the note: letters, digits, spaces and . , _ - only (1 to 80 characters)",
+          "pattern": "^[A-Za-z0-9 .,_-]{1,80}$",
+          "maxLength": 80
+        },
+        {
+          "name": "body",
+          "description": "Text of the note: letters, digits, spaces and . , _ - only (1 to 80 characters)",
+          "pattern": "^[A-Za-z0-9 .,_-]{1,80}$",
+          "maxLength": 80
+        }
+      ],
+      "observedPayloads": [
+        {
+          "title": "Sample title",
+          "body": "Sample body"
+        }
+      ],
+      "resultZone": {
+        "extractor": {
+          "kind": "regex",
+          "pattern": "\"id\":(?<id>\\d+)"
+        },
+        "schema": {
+          "type": "object",
+          "description": "Named groups captured by the pattern",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "finalScreenId": "87aa61307dd36777",
+      "finalZone": {
+        "rect": {
+          "row": 7,
+          "col": 0,
+          "rows": 1,
+          "cols": 40
+        }
+      },
+      "cols": 300,
+      "rows": 40
+    },
+    {
+      "id": "f65c9cac-d85c-4c05-b5e2-2575a5e4f5e5",
+      "label": "list_notes",
+      "steps": [
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": ".mode json",
+          "label": "Type \".mode json\"",
+          "risk": "read"
+        },
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "Enter",
+          "label": "Press Enter",
+          "waitFor": {
+            "pattern": "^sqlite>$",
+            "flags": "m",
+            "mode": "appear",
+            "timeoutMs": 15000
+          },
+          "risk": "read"
+        },
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": "select id, title, body from notes order by id desc limit 5;",
+          "label": "Type \"select id, title, body from notes order by id desc limit 5;\"",
+          "risk": "read"
+        },
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "Enter",
+          "label": "Press Enter",
+          "waitFor": {
+            "pattern": "^sqlite>$",
+            "flags": "m",
+            "mode": "appear",
+            "timeoutMs": 15000
+          },
+          "risk": "read"
+        }
+      ],
+      "variables": [],
+      "observedPayloads": [],
+      "resultZone": {
+        "extractor": {
+          "kind": "regex",
+          "pattern": "\\{\"id\":(?<id>\\d+),\"title\":\"(?<title>[^\"]*)\",\"body\":\"(?<body>[^\"]*)\"\\}",
+          "flags": "gm"
+        },
+        "schema": {
+          "type": "array",
+          "description": "One object per match of the pattern",
+          "items": {
+            "type": "object",
+            "description": "Named groups captured by the pattern",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "finalScreenId": "bb1bf31d0956ec4a",
+      "finalZone": {
+        "rect": {
+          "row": 0,
+          "col": 0,
+          "rows": 4,
+          "cols": 120
+        }
+      },
+      "cols": 300,
+      "rows": 40
+    },
+    {
+      "id": "f63f3f98-caa7-441a-ad0d-9563eb8e51eb",
+      "label": "count_notes",
+      "steps": [
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": ".mode json",
+          "label": "Type \".mode json\"",
+          "risk": "read"
+        },
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "Enter",
+          "label": "Press Enter",
+          "waitFor": {
+            "pattern": "^sqlite>$",
+            "flags": "m",
+            "mode": "appear",
+            "timeoutMs": 15000
+          },
+          "risk": "read"
+        },
+        {
+          "actionType": "type",
+          "selectors": [],
+          "value": "select count(*) as notes from notes;",
+          "label": "Type \"select count(*) as notes from notes;\"",
+          "risk": "read"
+        },
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "Enter",
+          "label": "Press Enter",
+          "waitFor": {
+            "pattern": "^sqlite>$",
+            "flags": "m",
+            "mode": "appear",
+            "timeoutMs": 15000
+          },
+          "risk": "read"
+        }
+      ],
+      "variables": [],
+      "observedPayloads": [],
+      "resultZone": {
+        "extractor": {
+          "kind": "regex",
+          "pattern": "\"notes\":(?<notes>\\d+)"
+        },
+        "schema": {
+          "type": "object",
+          "description": "Named groups captured by the pattern",
+          "properties": {
+            "notes": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "finalScreenId": "f2a1ededaf720b4c",
+      "finalZone": {
+        "rect": {
+          "row": 0,
+          "col": 0,
+          "rows": 4,
+          "cols": 120
+        }
+      },
+      "cols": 300,
+      "rows": 40
+    }
+  ],
+  "startCommand": [
+    "sqlite3",
+    "notes.db"
+  ],
+  "sandbox": {
+    "packages": [
+      "sqlite3"
+    ],
+    "workdir": "/data"
+  }
+}

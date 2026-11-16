@@ -64,9 +64,10 @@ export function cropTerminal(text: string, rect: NonNullable<HashZone['rect']>):
  * 3. Removing whitespace-only text nodes.
  */
 export function normalizeDom(html: string): string {
+  // Nodes injected by the recorder (marked data-daemonize-ui) are not part of the page
   // Work on the raw HTML string using regex/string manipulation.
   // Step 1 & 2: Process each opening tag.
-  let result = html.replace(/<([a-zA-Z][a-zA-Z0-9:-]*)(\s[^>]*)?(\/?)>/g, (
+  let result = stripRecorderUi(html).replace(/<([a-zA-Z][a-zA-Z0-9:-]*)(\s[^>]*)?(\/?)>/g, (
     _match,
     tagName: string,
     attrsStr: string | undefined,
@@ -99,6 +100,10 @@ export function normalizeDom(html: string): string {
       }
       // Strip nonce attributes
       if (name === 'nonce') {
+        return false;
+      }
+      // Strip the markers of the recorder and of the replayer (data-daemonize-row, ...)
+      if (name.startsWith('data-daemonize-')) {
         return false;
       }
       // Strip data-reactid attributes
@@ -135,6 +140,42 @@ export function normalizeDom(html: string): string {
   result = result.replace(/>(\s+)</g, '><');
 
   return result;
+}
+
+const VOID_TAGS = new Set([
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr',
+]);
+const UI_OPEN_TAG = /<([a-zA-Z][a-zA-Z0-9:-]*)(\s[^>]*?)?\sdata-daemonize-ui(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*))?(\s[^>]*)?>/i;
+
+/** Remove every element carrying the data-daemonize-ui attribute, with its content. */
+function stripRecorderUi(html: string): string {
+  let out = html;
+  for (; ;) {
+    const open = UI_OPEN_TAG.exec(out);
+    if (open === null) return out;
+    const tag = open[1].toLowerCase();
+    const start = open.index;
+    let end = start + open[0].length;
+    if (!VOID_TAGS.has(tag) && !/\/\s*>$/.test(open[0])) {
+      // Walk the tags that follow, counting the same tag name, until this element closes
+      const tags = new RegExp(`<(/?)${tag}(?=[\\s/>])[^>]*?(/?)>`, 'gi');
+      tags.lastIndex = end;
+      let depth = 1;
+      let m: RegExpExecArray | null;
+      let closed = false;
+      while ((m = tags.exec(out)) !== null) {
+        if (m[1] === '/') depth--;
+        else if (m[2] !== '/') depth++;
+        if (depth === 0) {
+          end = m.index + m[0].length;
+          closed = true;
+          break;
+        }
+      }
+      if (!closed) end = out.length;
+    }
+    out = out.slice(0, start) + out.slice(end);
+  }
 }
 
 interface ParsedAttr {

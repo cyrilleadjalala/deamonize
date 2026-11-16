@@ -2,6 +2,15 @@ import type { SandboxDriver } from '../sandbox/driver.js';
 import { ScreenHasher } from '../state/screen-hasher.js';
 import { cropTerminal } from '../replay/runtime/screen-hash.js';
 import { extractResult } from './result-extractor.js';
+import { resolveTimeoutMs } from '../replay/runtime/settle.js';
+import {
+  StepExecutionError,
+  describeFailure,
+  failureResult,
+  runStepsStrict,
+  type StrictOutcome,
+} from '../replay/runtime/step-plan.js';
+import { saveFailureScreenshot, type FailureShot } from '../replay/runtime/web-steps.js';
 import type {
   Workflow,
   WorkflowStep,
@@ -10,7 +19,7 @@ import type {
   ReplayResult,
 } from '../types.js';
 
-const DEFAULT_TIMEOUT_MS = 10000;
+
 
 /** Creates a brand-new sandbox, already positioned on the workflow's start state. */
 export type DriverFactory = () => SandboxDriver;
@@ -18,7 +27,11 @@ export type DriverFactory = () => SandboxDriver;
 export class Replayer {
   private readonly hasher = new ScreenHasher();
 
-  constructor(private readonly createDriver: DriverFactory) { }
+  /** setTimeoutMs is the WorkflowSet.timeoutMs, the last source of the whole-replay timeout. */
+  constructor(
+    private readonly createDriver: DriverFactory,
+    private readonly options: { setTimeoutMs?: number } = {},
+  ) { }
 
   /**
    * Replay a workflow from scratch: every call gets a fresh sandbox, so no
@@ -28,8 +41,15 @@ export class Replayer {
   async replay(
     workflow: Workflow,
     payload: Record<string, unknown>,
-    timeoutMs: number = DEFAULT_TIMEOUT_MS,
+    callTimeoutMs?: number,
   ): Promise<ReplayResult> {
+    // Order: the call, DAEMONIZE_TIMEOUT_MS, the workflow, the set, 30 s
+    const timeoutMs = resolveTimeoutMs({
+      call: callTimeoutMs,
+      env: process.env.DAEMONIZE_TIMEOUT_MS,
+      workflow: workflow.timeoutMs,
+      set: this.options.setTimeoutMs,
+    });
     const startedAt = Date.now();
     const elapsed = (): number => Date.now() - startedAt;
 
@@ -49,6 +69,14 @@ export class Replayer {
     try {
       const outcome = await Promise.race([this.runSteps(driver, workflow, payload), timeout]);
 
+      // Strict mode: the first step no locator could perform ends the replay; no later step ran
+      if (outcome !== 'timeout' && 'failed' in outcome) {
+        const { stepIndex, step, tried, reason } = outcome.failed as Extract<StrictOutcome, { ok: false }>;
+        const shot = await this.captureFailure(driver, stepIndex);
+        const failure = describeFailure({ stepIndex, step, tried, reason, screenshot: shot.screenshot, thumbnail: shot.thumbnail });
+        return { ...failureResult(failure, elapsed()) };
+      }
+
       if (outcome === 'timeout') {
         console.warn(
           `[Replayer] timeout: ${JSON.stringify({
@@ -62,8 +90,8 @@ export class Replayer {
 
       const result: ReplayResult = {
         success: true,
-        screen: outcome,
-        result: extractResult(outcome),
+        screen: outcome.screen,
+        result: extractResult(outcome.screen),
         elapsedMs: elapsed(),
       };
       if (workflow.finalScreenId !== undefined) {
@@ -71,9 +99,9 @@ export class Replayer {
         // and is only judged by the generated server.
         const rect = workflow.finalZone?.rect;
         const compared: ScreenContent =
-          outcome.type === 'terminal' && rect !== undefined
-            ? { ...outcome, raw: cropTerminal(outcome.raw, rect) }
-            : outcome;
+          outcome.screen.type === 'terminal' && rect !== undefined
+            ? { ...outcome.screen, raw: cropTerminal(outcome.screen.raw, rect) }
+            : outcome.screen;
         result.drifted = this.hasher.computeId(compared) !== workflow.finalScreenId;
       }
       return result;
@@ -91,15 +119,28 @@ export class Replayer {
     driver: SandboxDriver,
     workflow: Workflow,
     payload: Record<string, unknown>,
-  ): Promise<ScreenContent> {
+  ): Promise<{ screen: ScreenContent } | { failed: StrictOutcome }> {
     let screen = await driver.captureScreen();
-    for (const step of workflow.steps) {
+    const outcome = await runStepsStrict(workflow.steps, async (step) => {
       screen = await this.runStep(driver, step, payload);
-    }
-    return screen;
+    });
+    return outcome.ok ? { screen } : { failed: outcome };
   }
 
-  /** Try each candidate selector in order; the first one that works wins. */
+  /** The picture of the sandbox at the time of a failure, when the driver can take one. */
+  private async captureFailure(driver: SandboxDriver, stepIndex: number): Promise<FailureShot> {
+    if (driver.screenshot === undefined) return {};
+    try {
+      return saveFailureScreenshot(await driver.screenshot(), stepIndex);
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Try each candidate selector in order; the first one that works wins. A write or
+   * delete step is never retried with another selector: the first action may have started.
+   */
   private async runStep(
     driver: SandboxDriver,
     step: WorkflowStep,
@@ -110,7 +151,11 @@ export class Replayer {
 
     const candidates = step.selectors.length > 0 ? step.selectors : [undefined];
     for (const selector of candidates) {
-      const action: RecordedAction = { actionType: step.actionType };
+      // hover, scrollIntoView and switch_page are replayed by the generated web runtime (17.6); this driver rejects them
+      const action: RecordedAction = { actionType: step.actionType as RecordedAction['actionType'] };
+      if (step.timeoutMs !== undefined) {
+        action.timeoutMs = step.timeoutMs;
+      }
       if (selector !== undefined) {
         action.selector = selector;
       }
@@ -121,9 +166,11 @@ export class Replayer {
         return await driver.execute(action);
       } catch (err) {
         lastError = err;
+        if ((step.risk ?? 'read') !== 'read') break;
       }
     }
-    throw lastError instanceof Error ? lastError : new Error('No selector matched for step');
+    const reason = lastError instanceof Error ? lastError.message : 'No selector matched for step';
+    throw new StepExecutionError(step.selectors, reason);
   }
 }
 

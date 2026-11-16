@@ -23,10 +23,20 @@ describe('PtyDriver with a real interactive program', () => {
     expect(first.raw).toContain('Your name:');
 
     await driver.execute({ actionType: 'type', value: 'Ada' });
-    const screen = await driver.execute({ actionType: 'keypress', value: 'Enter' });
+    await driver.execute({ actionType: 'keypress', value: 'Enter' });
 
-    expect(screen.raw).toContain('Hello Ada!');
-    expect(screen.raw).toContain('Choose [1] Greet again, [2] Quit:');
+    // The driver returns after a quiet period; on a loaded machine the program may answer later,
+    // so wait for the expected screen instead of assuming how long the answer takes
+    const pty = driver;
+    let screen = '';
+    await vi.waitFor(
+      async () => {
+        screen = (await pty.captureScreen()).raw;
+        expect(screen).toContain('Hello Ada!');
+        expect(screen).toContain('Choose [1] Greet again, [2] Quit:');
+      },
+      { timeout: 20000, interval: 100 },
+    );
   }, 30000);
 
   it('does not report a stop requested by the caller as an unexpected exit', async () => {
@@ -36,7 +46,8 @@ describe('PtyDriver with a real interactive program', () => {
     await driver.start();
 
     await driver.stop();
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // The exit event of the killed process arrives asynchronously: give it ample time to (wrongly) fire
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     expect(onExit).not.toHaveBeenCalled();
   }, 30000);

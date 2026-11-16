@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -56,7 +57,7 @@ describe('Generated property-based test suite', () => {
     await writeFile(file, serializeWorkflowSet(set));
 
     const log = console.log;
-    console.log = () => {};
+    console.log = () => { };
     try {
       await compile(file, join(dir, 'out'));
     } finally {

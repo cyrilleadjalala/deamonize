@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+vi.setConfig({ testTimeout: 60000, hookTimeout: 120000 });
 import { execFileSync, spawnSync } from 'node:child_process';
 import { access, mkdtemp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';

@@ -11,6 +11,9 @@ export interface SandboxDriver {
   /** Execute an interaction and return the resulting screen. */
   execute(action: RecordedAction): Promise<ScreenContent>;
 
+  /** PNG of what the sandbox shows, for the diagnostic of a failed step (drivers with a display only). */
+  screenshot?(): Promise<Buffer>;
+
   /** Stop the sandbox cleanly. */
   stop(): Promise<void>;
 

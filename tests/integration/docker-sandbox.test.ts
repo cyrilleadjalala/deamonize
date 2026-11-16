@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -233,6 +234,7 @@ describe.skipIf(!enabled)('Replay of a web target in a Docker container', () => 
   let httpServer: Server;
   let port: number;
   const userAgents = new Set<string>();
+  let renamed = false; // the Save button is renamed: no locator of the step matches
   let dir: string;
   let tag: string;
 
@@ -281,7 +283,8 @@ describe.skipIf(!enabled)('Replay of a web target in a Docker container', () => 
       res.end(
         url.pathname === '/result'
           ? `<html><head><title>Saved</title></head><body>Customer ${url.searchParams.get('name')} created</body></html>`
-          : '<html><head><title>New</title></head><body><form action="/result"><label for="n">Customer name</label><input id="n" name="name"><button type="submit">Save</button></form></body></html>'
+          : `<html><head><title>New</title></head><body><form action="/result"><label for="n">Customer name</label><input id="n" name="name">${renamed ? '<button type="button">Store</button>' : '<button type="submit">Save</button>'
+          }</form></body></html>`
       );
     });
     await new Promise<void>((done) => httpServer.listen(0, '127.0.0.1', done));
@@ -325,6 +328,24 @@ describe.skipIf(!enabled)('Replay of a web target in a Docker container', () => 
         expect(userAgent).not.toContain('Windows');
       }
     } finally {
+      await client.close();
+    }
+  }, 180000);
+
+  it('returns the strict failure of a step, with the screenshot kept on the host', async () => {
+    renamed = true;
+    const client = await connectServer({ DAEMONIZE_SANDBOX_URL: `http://host.docker.internal:${port}/`, DAEMONIZE_STEP_TIMEOUT_MS: '2000' });
+    try {
+      const result = await call(client, { name: 'Ada' });
+
+      expect(result, JSON.stringify(result)).toMatchObject({ success: false, drifted: true, error: 'step_failed' });
+      expect(result.failure).toMatchObject({ stepIndex: 1, action: 'click' });
+      expect(result.failure.tried.length).toBeGreaterThan(0);
+      // The picture is a file of this machine, not a path inside the container
+      expect(existsSync(result.failure.screenshot)).toBe(true);
+      expect(result.failure).not.toHaveProperty('screenshotData');
+    } finally {
+      renamed = false;
       await client.close();
     }
   }, 180000);

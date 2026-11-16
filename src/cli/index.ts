@@ -120,6 +120,8 @@ export function buildProgram(): Command {
     )
     .option('--sandbox-command <json>', 'sandbox only: command to start in the container, as a JSON array, e.g. \'["node","/app/x.mjs"]\'')
     .option('--sandbox-url <url>', 'sandbox only: address the browser opens in the container')
+    .option('--timeout <ms>', 'timeout of a whole call, in ms (DAEMONIZE_TIMEOUT_MS; default 30000)', Number)
+    .option('--step-timeout <ms>', 'timeout of a step, in ms (DAEMONIZE_STEP_TIMEOUT_MS; default 8000)', Number)
     .action(async (dir: string | undefined, options) => {
       if (options.sandbox !== undefined && options.sandbox !== 'docker') {
         throw new Error(`Unknown sandbox "${options.sandbox}": use docker`);
@@ -131,6 +133,8 @@ export function buildProgram(): Command {
         mounts: options.mount,
         command: options.sandboxCommand === undefined ? undefined : JSON.parse(options.sandboxCommand),
         url: options.sandboxUrl,
+        timeoutMs: options.timeout,
+        stepTimeoutMs: options.stepTimeout,
       });
     });
 

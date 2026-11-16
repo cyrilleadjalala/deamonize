@@ -76,6 +76,28 @@ describe('Property 9: runtime screen hash equals ScreenHasher', () => {
     );
   });
 
+  describe('nodes and markers injected by the recorder or the replayer', () => {
+    const ui =
+      '<div data-daemonize-ui="" style="position:fixed"><button data-daemonize-action="make-variable">Make variable</button>' +
+      '<div><input data-daemonize-ui></div><span>x</span></div>';
+
+    it('are ignored by ScreenHasher and the runtime module alike', () => {
+      fc.assert(
+        fc.property(domArb, domArb, fc.boolean(), (a, b, rowMarked) => {
+          const clean = `<body>${a}<table><tr><td>Ada</td></tr></table>${b}</body>`;
+          const row = rowMarked ? ' data-daemonize-row="r1"' : '';
+          const dirty = `<body>${a}<table><tr${row}><td>Ada</td></tr></table>${ui}${b}</body><div data-daemonize-ui>late</div>`;
+          const screen = (raw: string): ScreenContent => ({ type: 'dom', raw, normalized: '', capturedAt: 0 });
+          expect(rt.screenId('dom', dirty)).toBe(rt.screenId('dom', clean));
+          expect(hasher.computeId(screen(dirty))).toBe(hasher.computeId(screen(clean)));
+          expect(hasher.computeId(screen(dirty))).toBe(rt.screenId('dom', dirty));
+        }),
+        { numRuns: 100 },
+      );
+      expect(rt.normalizeDom('<p data-daemonize-ui><p>in</p></p><i>k</i>')).toBe('<i>k</i>');
+    });
+  });
+
   describe('compiled copy in the output directory', () => {
     let dir: string;
     let copy: typeof rt;

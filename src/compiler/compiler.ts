@@ -41,6 +41,46 @@ const RUNTIME_SCREEN_HASH = join(
   'screen-hash.ts'
 );
 
+const RUNTIME_SETTLE = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'replay',
+  'runtime',
+  'settle.ts'
+);
+
+const RUNTIME_ROW_RESOLVER = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'replay',
+  'runtime',
+  'row-resolver.ts'
+);
+
+const RUNTIME_STEP_PLAN = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'replay',
+  'runtime',
+  'step-plan.ts'
+);
+
+const RUNTIME_WEB_STEPS = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'replay',
+  'runtime',
+  'web-steps.ts'
+);
+
 export class Compiler {
   private toolNameDeriver = new ToolNameDeriver();
   private openApiGenerator = new OpenApiGenerator();
@@ -68,6 +108,11 @@ export class Compiler {
     const dockerReplaySource = this.mcpGenerator.generateDockerReplay(set, imageTag);
     const sandbox = this.mcpGenerator.generateSandboxFiles(set);
     const screenHashSource = await readFile(RUNTIME_SCREEN_HASH, 'utf-8');
+    const settleSource = await readFile(RUNTIME_SETTLE, 'utf-8');
+    const rowResolverSource = await readFile(RUNTIME_ROW_RESOLVER, 'utf-8');
+    const stepPlanSource = await readFile(RUNTIME_STEP_PLAN, 'utf-8');
+    // Strict Level 2 execution with Playwright: only a web target replays a browser
+    const webStepsSource = set.targetType === 'web' ? await readFile(RUNTIME_WEB_STEPS, 'utf-8') : undefined;
     const kiroPower = this.kiroPowerGenerator.generate(set, toolNames, outputDir);
     const powerName = kiroPower.plugin.name;
 
@@ -91,6 +136,13 @@ export class Compiler {
       dockerReplay: join(outputDir, 'docker-replay.js'),
       screenHashSource: join(outputDir, 'screen-hash.ts'),
       screenHash: join(outputDir, 'screen-hash.js'),
+      settleSource: join(outputDir, 'settle.ts'),
+      settle: join(outputDir, 'settle.js'),
+      rowResolverSource: join(outputDir, 'row-resolver.ts'),
+      rowResolver: join(outputDir, 'row-resolver.js'),
+      stepPlanSource: join(outputDir, 'step-plan.ts'),
+      stepPlan: join(outputDir, 'step-plan.js'),
+      ...(webStepsSource === undefined ? {} : { webStepsSource: join(outputDir, 'web-steps.ts'), webSteps: join(outputDir, 'web-steps.js') }),
       plugin: join(outputDir, 'plugin.json'),
       mcp: join(outputDir, 'mcp.json'),
       skill: join(outputDir, 'skills', powerName, 'SKILL.md'),
@@ -107,6 +159,16 @@ export class Compiler {
       writeFile(files.dockerReplay, this.toJavaScript(dockerReplaySource)),
       writeFile(files.screenHashSource, screenHashSource),
       writeFile(files.screenHash, this.toJavaScript(screenHashSource)),
+      writeFile(files.settleSource, settleSource),
+      writeFile(files.settle, this.toJavaScript(settleSource)),
+      writeFile(files.rowResolverSource, rowResolverSource),
+      writeFile(files.rowResolver, this.toJavaScript(rowResolverSource)),
+      writeFile(files.stepPlanSource, stepPlanSource),
+      writeFile(files.stepPlan, this.toJavaScript(stepPlanSource)),
+      ...(webStepsSource === undefined ? [] : [
+        writeFile(join(outputDir, 'web-steps.ts'), webStepsSource),
+        writeFile(join(outputDir, 'web-steps.js'), this.toJavaScript(webStepsSource)),
+      ]),
       writeFile(files.plugin, JSON.stringify(kiroPower.plugin, null, 2)),
       writeFile(files.mcp, JSON.stringify(kiroPower.mcp, null, 2)),
       writeFile(files.skill, kiroPower.skill),

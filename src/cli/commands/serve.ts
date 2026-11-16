@@ -14,6 +14,10 @@ export interface ServeOptions {
   command?: string[];
   /** Where the browser starts in the container when the recorded address is not reachable from it. */
   url?: string;
+  /** Timeout of a whole call (DAEMONIZE_TIMEOUT_MS). */
+  timeoutMs?: number;
+  /** Timeout of a step (DAEMONIZE_STEP_TIMEOUT_MS). */
+  stepTimeoutMs?: number;
 }
 
 /**
@@ -35,7 +39,10 @@ export async function serve(dir: string, options: ServeOptions = {}): Promise<nu
     console.error(`No node_modules in ${dir}. If the server fails to start, run "npm install" there first.`);
   }
 
+  // The timeouts reach the server (and, in Docker mode, the container) through the environment
   const env: NodeJS.ProcessEnv = { ...process.env };
+  if (options.timeoutMs !== undefined) env.DAEMONIZE_TIMEOUT_MS = String(options.timeoutMs);
+  if (options.stepTimeoutMs !== undefined) env.DAEMONIZE_STEP_TIMEOUT_MS = String(options.stepTimeoutMs);
   if (options.sandbox === 'docker') {
     const tag = await assertSandboxReady(dir);
     console.error(`Replaying every call in a Docker container of the image "${tag}".`);

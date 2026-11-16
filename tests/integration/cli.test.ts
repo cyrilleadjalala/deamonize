@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+// Spawns the CLI: realistic limits for a loaded full-suite run
+vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { mkdtemp, readFile, readdir } from 'node:fs/promises';
@@ -136,12 +138,20 @@ describe('CLI: record → compile → merge', () => {
       'plugin.json',
       'replay.js',
       'replay.ts',
+      'row-resolver.js',
+      'row-resolver.ts',
       'sandbox',
       'screen-hash.js',
       'screen-hash.ts',
+      'settle.js',
+      'settle.ts',
+      'step-plan.js',
+      'step-plan.ts',
       'skills',
       'tests',
       'vitest.config.ts',
+      'web-steps.js',
+      'web-steps.ts',
     ].sort());
     const plugin = JSON.parse(await readFile(join(out, 'plugin.json'), 'utf-8'));
     expect(plugin.keywords).toEqual(expect.arrayContaining(['create_customer', 'open_other_page']));

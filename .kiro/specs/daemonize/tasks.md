@@ -322,6 +322,253 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
   - [x] 15.4 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass
     - Ensure all tests pass, ask the user if questions arise.
 
+- [ ] 16. Lot 1: Run-time drift and complete Zod translation
+  - Rules for tasks 16-21: never import `src/` from generated files (`mcp-server.ts`/`.js`, `replay.ts`, generated tests); shared pure logic lives in `src/replay/runtime/` and the compiler copies it verbatim into the output. PBT tests carry `// Feature: daemonize, Property N: ...` tags. Tests that need Docker or a real tool skip with a clear message.
+  - [-] 16.1 Create the shared run-time screen hash
+    - Create `src/replay/runtime/screen-hash.ts`: dependency-free port of `ScreenHasher` (DOM and terminal normalisation, SHA-256 truncated to 16 hex characters, optional zone restriction: selector for web, row/column rectangle for terminal)
+    - Update `src/compiler/compiler.ts` and `src/compiler/mcp-generator.ts` to copy the file into the output and import it from the generated `replay.ts` in `WEB_RUNTIME` and `TERMINAL_RUNTIME`
+    - _Requirements: 11.2, 11.3, 11.4_
+
+  - [ ]* 16.2 Write property test for run-time hash equivalence — Property 9
+    - **Property 9: Run-time hash equals ScreenHasher**
+    - For any generated DOM string or terminal text, the hash of the copied `screen-hash.ts` equals the hash of `src/state/screen-hasher.ts`
+    - Add a test that no generated file (`mcp-server.ts`, `mcp-server.js`, `replay.ts`, generated tests) imports from `src/`
+    - Files: `tests/property/screen-hash-runtime.property.test.ts`, `tests/unit/compiler-outputs.test.ts`
+    - **Validates: Requirements 11.3, 11.5**
+    - _Tag comment: `// Feature: daemonize, Property 9: run-time hash equivalence`_
+
+  - [ ] 16.3 Embed the final screen and return `drifted`
+    - Embed `finalScreenId` and `finalZone` in the generated runtime; both runtimes return `drifted: boolean`
+    - Update the output schema, `src/compiler/openapi-generator.ts` and the `SKILL.md` text in `src/compiler/kiro-power-generator.ts`
+    - Tests in `tests/unit/replayer.test.ts` and `tests/integration/workflow-e2e.test.ts`: a page whose final screen changes returns `drifted: true`; a real-time clock excluded by the zone returns `drifted: false`
+    - _Requirements: 11.1, 11.2, 11.4_
+
+  - [ ] 16.4 Complete the JSON Schema to Zod translation
+    - Extend `jsonSchemaToZod` in `src/compiler/mcp-generator.ts`: `enum`, `items`, `minItems`, `maxItems`, `properties`, `required`, `additionalProperties`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `anyOf`, `oneOf`, type lists; no `z.unknown()` for these keywords
+    - Keywords Zod cannot express stay with AJV as authority, with a code comment saying so
+    - _Requirements: 11.6, 11.7_
+
+  - [ ]* 16.5 Write property test for Zod and AJV equivalence — Property 10
+    - **Property 10: Zod accepts exactly what AJV accepts**
+    - For any schema in the supported subset and any payload (valid or violating), the generated Zod schema accepts iff AJV accepts
+    - Unit tests per keyword in `tests/unit/compiler-outputs.test.ts`; property test in `tests/property/zod-ajv.property.test.ts`
+    - **Validates: Requirements 11.6, 11.8**
+    - _Tag comment: `// Feature: daemonize, Property 10: Zod and AJV equivalence`_
+
+  - [ ] 16.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+    - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 17. Lot 2a: Stack-independent web engine, levels 2 and 1
+  - [ ] 17.1 Extend the workflow model
+    - Add to `src/types.ts`, the WorkflowSet JSON schema and `src/workflow/workflow-set.ts` the step and workflow fields from the design: `anchor`, `rowBinding`, `http`, `visual`, `risk`, `resultZone`, `timeoutMs`, `secretRef`, `totp`, `allowHeal`, workflow `finalZone`, `secrets`
+    - Backward compatible: existing workflow files still load and round-trip
+    - Unit tests in `tests/unit/workflow-recorder.test.ts`
+    - _Requirements: 12.4, 13.2, 14.1, 14.5, 14.9, 15.1, 16.2, 16.8_
+
+  - [ ] 17.2 Record accessible anchors, frames, popups and custom components
+    - Update `src/recorder/capture-script.ts`, `src/recorder/selector-builder.ts`, `src/recorder/live-recorder.ts`, `src/recorder/workflow-recorder.ts`
+    - Record role, accessible name, parent context, frame path, popup openings (context `page`), custom components (combobox, listbox, Radix/MUI/HeadlessUI portals, contenteditable) and preparatory hover/scroll
+    - Keep the previous selectors only as last-resort fallback
+    - _Requirements: 14.1, 14.2, 14.3, 14.4_
+
+  - [ ] 17.3 Relational locators for dynamic lists and tables
+    - Record the row or card containing a value plus the action inside it, bound to a Variable through `rowBinding`; no `.first()` and no `:nth-of-type`
+    - Files: `src/recorder/selector-builder.ts`, `src/recorder/live-recorder.ts`, `src/recorder/capture-script.ts`, `src/replay/runtime/locators.ts` (copied by the compiler)
+    - _Requirements: 14.5, 14.6, 14.7_
+
+  - [ ]* 17.4 Write property test for row resolution — Property 13
+    - **Property 13: Row resolution is independent of row order**
+    - Model-based test on generated DOM tables (real Chromium or an equivalent DOM): any permutation of rows resolves the same row for the same bound value; skip with a message when no browser is available
+    - File: `tests/property/relational-locator.property.test.ts`
+    - **Validates: Requirements 14.5, 14.6, 14.7**
+    - _Tag comment: `// Feature: daemonize, Property 13: row resolution order independence`_
+
+  - [ ] 17.5 Effect-based waits and configurable timeouts
+    - Replace `networkidle` with timeout by waits on the observable effect of each action; configurable `TIMEOUT_MS` per workflow and `timeoutMs` per step
+    - Files: `src/sandbox/playwright-driver.ts`, `src/replay/runtime/waits.ts` (copied by the compiler), `src/compiler/mcp-generator.ts`
+    - Integration test on a local page with a WebSocket, SSE or polling loop: same steps in the same order as on a quiet page (`tests/integration/web-waits.test.ts`)
+    - _Requirements: 14.8, 14.9, 14.10_
+
+  - [ ] 17.6 Standalone strict web runtime
+    - Update `WEB_RUNTIME` in `src/compiler/mcp-generator.ts` to execute level 2 with anchors, frames, popups and custom components in strict mode
+    - A failing step returns `{ success: false, drifted: true, failure: { step, tried, screenshot } }` and no later step runs
+    - _Requirements: 12.3, 12.5, 12.6, 12.10_
+
+  - [ ]* 17.7 Write property test for strict failure — Property 14
+    - **Property 14: A strict failure never executes later steps**
+    - For any workflow and any failing step index, a fake driver records no action after the failing step and the result has `success: false` and `drifted: true`
+    - File: `tests/property/strict-replay.property.test.ts`
+    - **Validates: Requirements 12.5, 12.6**
+    - _Tag comment: `// Feature: daemonize, Property 14: strict failure stops replay`_
+
+  - [ ] 17.8 TOTP, secret resolution and redaction
+    - Create `src/replay/runtime/totp.ts` (RFC 6238, no dependencies) and secret resolution of `DAEMONIZE_SECRET_<NAME>` in the runtime (`src/compiler/mcp-generator.ts`); a missing secret returns an error naming it before any step runs
+    - Create `src/recorder/redactor.ts` for password fields, Authorization, Cookie, Set-Cookie and token-like values; the CLI warns when a typed value is not a Variable or Secret_Reference (`src/cli/commands/record.ts`)
+    - Unit test of TOTP against the RFC 6238 vectors (`tests/unit/totp.test.ts`)
+    - _Requirements: 13.5, 13.6, 16.1, 16.2, 16.3, 16.4, 16.5_
+
+  - [ ]* 17.9 Write property test for redaction — Property 11
+    - **Property 11: Redaction removes the redacted values**
+    - For any recorded request or step containing secret-like values, the serialized output contains none of the values it was redacted from
+    - File: `tests/property/redactor.property.test.ts`
+    - **Validates: Requirements 13.7, 16.1**
+    - _Tag comment: `// Feature: daemonize, Property 11: redaction`_
+
+  - [ ]* 17.10 Write property test for the no-leak guarantee — Property 12
+    - **Property 12: No env secret value appears in any compiled artifact**
+    - For any workflow and any random `DAEMONIZE_SECRET_*` values, compile and search every output file (workflow, OpenAPI, Kiro Power files, generated server, generated tests) for those values
+    - File: `tests/property/no-leak.property.test.ts`
+    - **Validates: Requirements 16.1, 16.9**
+    - _Tag comment: `// Feature: daemonize, Property 12: no secret leak`_
+
+  - [ ] 17.11 Docker authentication handling
+    - In `generateSandboxFiles` (`src/cli/commands/sandbox.ts`) and the docker replay, mount storageState read-only by path, never copy it into image layers (write `.dockerignore`), pass secrets as `-e NAME` without values
+    - Integration test with real Docker, skipped with a message when Docker is unavailable (`tests/integration/docker-sandbox.test.ts`)
+    - _Requirements: 16.6, 16.7_
+
+  - [ ] 17.12 Result_Zone and JSON extractor
+    - Record or mark the zone (CLI option in `src/cli/commands/record.ts`), add `data` to the output schema (`src/compiler/openapi-generator.ts`, `src/compiler/mcp-generator.ts`), extract structured data at run time instead of `document.body.innerText`
+    - Tests in `tests/unit/replayer.test.ts` and `tests/integration/workflow-e2e.test.ts`
+    - _Requirements: 16.8_
+
+  - [ ] 17.13 Network capture and recipes (level 1)
+    - Record fetch/XHR after each action, correlate Variables with query, body and path parameters, produce `http` recipes with redaction, classify risk (GET read; POST, PUT, PATCH write; DELETE delete)
+    - Files: `src/recorder/network-capture.ts`, `src/recorder/live-recorder.ts`, `src/recorder/workflow-recorder.ts`
+    - _Requirements: 13.1, 13.2, 13.5, 12.4_
+
+  - [ ] 17.14 Direct HTTP replay and `--http` compile option
+    - Add `--http` to `src/cli/commands/compile.ts`; the runtime (`src/replay/runtime/http-replay.ts`, copied by the compiler) executes the recipe with storageState cookies and headers or environment secrets
+    - Fall back to level 2 only for `read` steps, and for SSR forms, opaque Server Actions or pure DOM state
+    - Integration test against a local JSON API plus SPA (`tests/integration/http-replay.test.ts`)
+    - _Requirements: 12.1, 13.3, 13.4, 13.6_
+
+  - [ ] 17.15 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+    - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 18. Lot 2b: Visual anchors and Heal mode
+  - [ ] 18.1 Capture visual anchors
+    - Per step, capture a thumbnail of the target zone (never of password fields), the relative rect in [0,1] and an intent description, stored in `<file>.assets/` and referenced by relative path
+    - Files: `src/recorder/visual-anchor.ts`, `src/recorder/live-recorder.ts`, `src/workflow/workflow-set.ts`
+    - Test that compiled artifacts contain no inline thumbnail (`tests/unit/compiler-outputs.test.ts`)
+    - _Requirements: 15.1, 15.2, 15.3, 15.4_
+
+  - [ ]* 18.2 Write property test for visual anchor rects — Property 17
+    - **Property 17: Relative coordinates lie within [0,1]**
+    - For any viewport and element box, the computed relative rect has every coordinate between 0 and 1 inclusive
+    - File: `tests/property/visual-anchor.property.test.ts`
+    - **Validates: Requirements 15.5**
+    - _Tag comment: `// Feature: daemonize, Property 17: visual anchor rect invariant`_
+
+  - [ ] 18.3 Healer interface, providers and cache
+    - Create `src/heal/healer.ts` (interface, providers selected by `DAEMONIZE_MODEL_*` env, set-of-mark screenshot builder, fake provider for tests) and `src/heal/cache.ts` (`.daemonize/heal-cache.json`, separate from the workflow file)
+    - _Requirements: 12.7, 12.9, 12.11_
+
+  - [ ] 18.4 `--strict` and `--heal` modes
+    - Add `--strict` (default) and `--heal` to `src/cli/commands/serve.ts` and to the generated server (`src/compiler/mcp-generator.ts`); return `healed: true` for level 3 actions; write and delete steps require `allowHeal`; report heal unavailable when no model or key is configured
+    - Unit tests with the fake provider, including a Canvas page where only coordinates work and cache reuse on the second call (`tests/unit/heal.test.ts`)
+    - _Requirements: 12.2, 12.3, 12.4, 12.7, 12.8, 12.9, 12.11_
+
+  - [ ]* 18.5 Write property test for workflow immutability — Property 15
+    - **Property 15: Workflow file is byte-identical after heal**
+    - For any workflow and any healing sequence with the fake provider, the workflow file bytes are unchanged and only the cache file changes
+    - File: `tests/property/heal-immutability.property.test.ts`
+    - **Validates: Requirements 12.9, 12.12**
+    - _Tag comment: `// Feature: daemonize, Property 15: heal never modifies the workflow`_
+
+  - [ ] 18.6 Verify no model call without `--heal`
+    - Test that the generated server makes no model call (fake provider counts calls) in strict mode, including after a failure
+    - File: `tests/integration/workflow-e2e.test.ts`
+    - _Requirements: 12.10, 18.4_
+
+  - [ ] 18.7 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+    - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 19. Lot 3: Real CLI/TUI reliability
+  - [ ] 19.1 Record and use terminal size
+    - Record cols and rows in `src/cli/commands/record-tui.ts`, `src/recorder/terminal-recorder.ts` and the workflow file; `TERMINAL_RUNTIME` in `src/compiler/mcp-generator.ts` and `src/sandbox/pty-driver.ts` use them instead of 80x24
+    - Tests in `tests/unit/terminal-recorder.test.ts` and `tests/integration/record-tui.test.ts`
+    - _Requirements: 17.1, 17.2_
+
+  - [ ] 19.2 Record and wait for screen patterns
+    - Record a Screen_Pattern (CLI option in `src/cli/commands/record-tui.ts` and the `Ctrl+]` menu key in `src/recorder/terminal-recorder.ts`); `waitForPattern` in the terminal runtime polls the rendered screen with a timeout; a timeout returns `success: false`, `drifted: true` and the last terminal text
+    - _Requirements: 17.3, 17.4, 17.5_
+
+  - [ ]* 19.3 Write property test for pattern waits — Property 16
+    - **Property 16: waitForPattern returns as soon as the pattern appears**
+    - With a fake terminal, for any screen sequence, the wait returns at the first screen matching the pattern and never later than the silence rule allows
+    - File: `tests/property/wait-for-pattern.property.test.ts`
+    - **Validates: Requirements 17.4, 17.5**
+    - _Tag comment: `// Feature: daemonize, Property 16: waitForPattern timing`_
+
+  - [ ] 19.4 Pattern wait integration test
+    - Integration test with a slow program and a continuously refreshing one (fixtures in `tests/fixtures/`), file `tests/integration/tui-wait.test.ts`
+    - _Requirements: 17.4, 17.5_
+
+  - [ ] 19.5 Configurable Dockerfile
+    - Add `--image`, `--package`, `--install`, `--network` to `generateSandboxFiles` and `daemonize sandbox build` (`src/cli/commands/sandbox.ts`); store them in the workflow set `sandbox` block (`src/workflow/workflow-set.ts`, `src/types.ts`)
+    - Unit tests on the generated Dockerfile text; integration test building an image with sqlite3, skipped with a message without Docker (`tests/integration/docker-sandbox.test.ts`)
+    - _Requirements: 17.6, 17.7_
+
+  - [ ] 19.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+    - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 20. Lot 4: AI suggestions and Studio
+  - [ ] 20.1 Compile-time suggester
+    - Create `src/suggest/suggester.ts` (`Suggester` interface), `src/suggest/deterministic.ts`, `src/suggest/ai-suggester.ts` (via `DAEMONIZE_MODEL_*`); add `compile --suggest` in `src/cli/commands/compile.ts`, writing an editable suggestions file the user can change before artifacts are written; report when the deterministic fallback was used
+    - Tests with a fake model and without a key (`tests/unit/suggest.test.ts`)
+    - _Requirements: 18.1, 18.2, 18.3_
+
+  - [ ] 20.2 Studio server
+    - Create `src/studio/server.ts` (local HTTP; serves the WorkflowSet, StateGraph, schemas, PBT results and replay levels; never exposes secrets) and `src/cli/commands/studio.ts`, registered in `src/cli/index.ts`
+    - Unit test that no secret value appears in any response (`tests/unit/studio.test.ts`)
+    - _Requirements: 18.5, 18.6, 18.8_
+
+  - [ ] 20.3 Studio UI
+    - Static single-page UI in `src/studio/ui/` (graph view of WorkflowSet and StateGraph, level badge per step, schemas, PBT results), polished, with a sample-data mode for static demo deployment
+    - _Requirements: 18.5, 18.6_
+
+  - [ ] 20.4 MCP playground
+    - Local bridge in `src/studio/playground.ts` that spawns the compiled server over stdio, lists tools, calls them and returns `drifted`, `healed` and a screen preview; wire it into `src/studio/server.ts` and the UI
+    - Integration test (`tests/integration/studio-playground.test.ts`)
+    - _Requirements: 18.7_
+
+  - [ ] 20.5 Static demo build
+    - Add `npm run studio:build` (`package.json`, `scripts/studio-build.mjs`) producing a deployable folder with sample data
+    - _Requirements: 18.5_
+
+  - [ ] 20.6 Checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1` for docker-sandbox when Docker is up)
+    - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 21. Lot 5: Proof on real software
+  - [ ] 21.1 Example web application
+    - Create `examples/web-app/`: small modern app (Next.js, or Vite and React with Radix UI) with login, a dynamic table with row actions and a custom non-native select, a Dockerfile and compose file, and a README
+    - _Requirements: 19.1_
+
+  - [ ] 21.2 Record and compile the web example
+    - Script `examples/web-app/record.ts` drives the recorder with Playwright; commit `examples/web-app/daemonize.workflows.json` without secrets (secrets through environment); compile it
+    - Integration test `tests/integration/example-web-app.test.ts` calls the tools through MCP in strict mode (login, select a row by a Variable, custom select) and, if the app has a JSON API, once through level 1; skipped with a message naming the missing dependency when Docker or the app cannot start
+    - _Requirements: 19.3, 19.4_
+
+  - [ ] 21.3 SQLite CLI example
+    - Create `examples/cli-sqlite/` with workflows (create table, insert with a Variable, query) recorded and compiled
+    - Integration test `tests/integration/example-cli-sqlite.test.ts` through MCP on the host and, when Docker is up, in a container with sqlite3 installed through the configurable Dockerfile; skipped with a message naming the missing dependency otherwise
+    - _Requirements: 19.2, 19.3, 19.4_
+
+  - [ ]* 21.4 Git CLI example
+    - Create `examples/cli-git/` with a small workflow set and a test `tests/integration/example-cli-git.test.ts`, skipped when `git` is missing
+    - _Requirements: 19.2, 19.3, 19.4_
+
+  - [ ] 21.5 Leak test on examples
+    - Test that no password, cookie or secret appears in any workflow file or compiled artifact of the examples (`tests/integration/examples-leak.test.ts`)
+    - _Requirements: 19.5, 16.9_
+
+  - [ ] 21.6 Documentation
+    - Update `README.md`: modes `--strict` and `--heal`, replay levels, secrets, Studio, examples; update steering notes under `.kiro/steering/` if present
+    - _Requirements: 12.2, 16.2, 18.5, 19.1_
+
+  - [ ] 21.7 Final checkpoint — `npx tsc --noEmit` and `npx vitest run` pass (and `DAEMONIZE_DOCKER_TESTS=1 npx vitest run tests/integration/docker-sandbox.test.ts` when Docker is up)
+    - Ensure all tests pass, ask the user if questions arise.
+
 ## Notes
 
 - Verified outside the workspace: a web project and a terminal project were generated, installed with `daemonize compile --install`, their generated property tests were run, `npm audit` reported no vulnerability, and their generated servers were called over stdio with a valid payload (replayed) and an invalid one (refused).
@@ -356,7 +603,34 @@ Build a TypeScript/Node.js CLI tool that wraps legacy and API-less software into
     { "id": 14, "tasks": ["9.3", "9.4", "9.5", "11.6"] },
     { "id": 15, "tasks": ["4.5"] },
     { "id": 16, "tasks": ["15.1"] },
-    { "id": 17, "tasks": ["15.2", "15.3"] }
+    { "id": 17, "tasks": ["15.2", "15.3"] },
+    { "id": 18, "tasks": ["16.1"] },
+    { "id": 19, "tasks": ["16.2", "16.3"] },
+    { "id": 20, "tasks": ["16.4"] },
+    { "id": 21, "tasks": ["16.5"] },
+    { "id": 22, "tasks": ["17.1"] },
+    { "id": 23, "tasks": ["17.2"] },
+    { "id": 24, "tasks": ["17.3"] },
+    { "id": 25, "tasks": ["17.4", "17.5"] },
+    { "id": 26, "tasks": ["17.6"] },
+    { "id": 27, "tasks": ["17.7", "17.8"] },
+    { "id": 28, "tasks": ["17.9", "17.12"] },
+    { "id": 29, "tasks": ["17.10", "17.11"] },
+    { "id": 30, "tasks": ["17.13"] },
+    { "id": 31, "tasks": ["17.14"] },
+    { "id": 32, "tasks": ["18.1", "18.3"] },
+    { "id": 33, "tasks": ["18.2", "18.4"] },
+    { "id": 34, "tasks": ["18.5", "18.6", "19.1"] },
+    { "id": 35, "tasks": ["19.2", "19.5"] },
+    { "id": 36, "tasks": ["19.3", "19.4"] },
+    { "id": 37, "tasks": ["20.1", "20.2"] },
+    { "id": 38, "tasks": ["20.3"] },
+    { "id": 39, "tasks": ["20.4"] },
+    { "id": 40, "tasks": ["20.5"] },
+    { "id": 41, "tasks": ["21.1", "21.3", "21.4"] },
+    { "id": 42, "tasks": ["21.2"] },
+    { "id": 43, "tasks": ["21.5"] },
+    { "id": 44, "tasks": ["21.6"] }
   ]
 }
 ```

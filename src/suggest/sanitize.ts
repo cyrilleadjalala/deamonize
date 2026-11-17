@@ -13,7 +13,7 @@ export const VARIABLE_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 /** Control characters, and the invisible or direction-changing characters that hide text from a reader. */
 // eslint-disable-next-line no-control-regex
 const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]/g;
-const MARKUP = /[<>`]|!?\[[^\]]*\]\(|\*\*|__|^\s*#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|&[a-z#0-9]+;/i;
+const MARKUP = /[<>`]|\]\(|\*\*|__|^\s*#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|&[a-z#0-9]+;/i;
 const LINK = /\b(?:https?|ftp|file|data|javascript|mailto):|\/\/|\bwww\.|\b[a-z0-9-]+\.(?:com|org|net|io|dev|ai|app|co|info|biz|xyz|ru|cn)\b/i;
 const INJECTION =
   /\b(?:ignore|disregard|forget|override|bypass)\b[^.]{0,40}\b(?:previous|prior|above|earlier|preceding|all|any|your|the|these|those|system)\b[^.]{0,30}\b(?:instruction|prompt|rule|direction|message|context|guideline)s?\b|\b(?:system|developer)\s+(?:prompt|message)\b|\bnew\s+instructions?\b|\bignore\s+(?:all\s+|the\s+|any\s+)?(?:previous|prior|above|earlier)\b|\byou\s+(?:are|must|should|will)\s+(?:now\s+)?(?:an?\s+)?(?:ai|assistant|agent|admin|root)\b|\bas\s+an\s+ai\b|\bjailbreak\b|\bdo\s+not\s+(?:follow|obey)\b|\bcall\s+(?:the\s+)?tool\b|\bexfiltrat/i;

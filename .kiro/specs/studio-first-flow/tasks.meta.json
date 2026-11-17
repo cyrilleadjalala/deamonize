@@ -1,11 +1,826 @@
 {
-  "pbtResults": {},
+  "pbtResults": {
+    "7.12 Write property test for the UI validator mirror": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916129962
+    },
+    "7.14 Write property test for plain-language copy": {
+      "status": "failed",
+      "failingExample": "[\"Compile first: there is no built tool to connect yet.\"] (src/studio/messages/compile.ts POWER_NOT_COMPILED, owned by G4, contains the banned word \"Compile\")",
+      "lastRunTimestamp": 1794916632808
+    },
+    "7.13 Write property test for announcements": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916143043
+    },
+    "4.13 Write property test for the otpauth round trip": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916296132
+    },
+    "4.14 Write property test for invalid TOTP values": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916296348
+    },
+    "4.15 Write property test for the secrets list": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916296560
+    },
+    "4.16 Write property test for the configured status": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916297134
+    },
+    "4.17 Write property test for the vault round trip and opacity": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916297452
+    },
+    "4.18 Write property test for the Redactor": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916298109
+    },
+    "4.19 Write property test for no leak of a stored value": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916298898
+    },
+    "4.20 Write property test for the Child_Server environment": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916299470
+    },
+    "4.21 Write property test for plain-name fields of the secrets routes": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916300002
+    },
+    "4.12 Write property test for Base32 normalization": {
+      "status": "passed",
+      "lastRunTimestamp": 1794916305690
+    }
+  },
   "executionHistory": {
     "1.1 Write `src/studio/contracts.ts` and `src/studio/routes/types.ts`": [
       {
         "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
         "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
         "timestamp": 1794913387198
+      },
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914581499
+      }
+    ],
+    "1.14 Write integration test for guard rules on every registered route": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914568501
+      }
+    ],
+    "1.13 Write integration test for the empty start": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914569764
+      }
+    ],
+    "1.12 Write property test for load error messages": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914571215
+      }
+    ],
+    "1.11 Write property test for the App_Data_Dir exclusion rule": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914572460
+      }
+    ],
+    "1.10 Write property test for action input validation": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914573486
+      }
+    ],
+    "1.9 Write unit tests for the dispatcher with fake routes": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914574323
+      }
+    ],
+    "1.8 Write unit tests for `app-data` and `validate-action`": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914574725
+      }
+    ],
+    "1.7 Update the existing `tests/integration/studio-server.test.ts` (R13.11)": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914575585
+      }
+    ],
+    "1.6 Create the UI seam `src/studio/ui/js/features.js`": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914576490
+      }
+    ],
+    "1.5 Edit `server.ts` (the seam) and add option types to `playground.ts`": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914577917
+      }
+    ],
+    "1.4 Create inert stubs, `services.ts` and `routes/index.ts`": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914579132
+      }
+    ],
+    "1.3 Update `.gitignore` and the Secret_Scan fixture list": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914579880
+      }
+    ],
+    "1.2 Implement `app-data.ts`, `validate-action.ts` and the common messages": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914580841
+      }
+    ],
+    "1. G0 Foundation (serial, first)": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914581610
+      }
+    ],
+    "2. Checkpoint - G0 merged": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914582018
+      }
+    ],
+    "3.1 Implement `src/recorder/browser-launcher.ts`": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914606089
+      },
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922036591
+      }
+    ],
+    "4.1 Implement `totp-secret.ts` and `required-secrets.ts`": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914607515
+      },
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922054950
+      }
+    ],
+    "5.1 Implement `session-store.ts` and `messages/record.ts`": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914609701
+      },
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794915415612
+      }
+    ],
+    "6.1 Add `onPhase` to `compile()` and `Compiler`": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914609983
+      },
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922127257
+      }
+    ],
+    "7.1 Create the UI helper modules": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794914610394
+      },
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922190833
+      }
+    ],
+    "5.13 Write integration test for recording with a real browser (depends on G1 and G4)": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794916892088
+      },
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922124328
+      }
+    ],
+    "7.15 Write integration test for the first flow in a real browser (depends on G1, G2, G3 and G4)": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794916893001
+      },
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922226183
+      }
+    ],
+    "3.2 Add the `record()` options and use the launcher in the `record` command": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922037149
+      }
+    ],
+    "3.3 Implement the default launch and the shared interrupt helper": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922037587
+      }
+    ],
+    "3.4 Update the existing `tests/integration/cli.test.ts` (R13.11)": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922046767
+      }
+    ],
+    "3. G1 CLI and recording engine": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922046926
+      }
+    ],
+    "3.5 Write unit tests for the default launch": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922047535
+      }
+    ],
+    "3.6 Write unit tests for the Browser_Launcher": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922049355
+      }
+    ],
+    "3.7 Write unit tests for the `record()` options": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922050582
+      }
+    ],
+    "3.8 Write property test for the Browser_Launcher attempt order": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922051720
+      }
+    ],
+    "3.9 Write integration test for the recording hooks with a real browser": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922052868
+      }
+    ],
+    "3.10 Write integration test for bare `daemonize` as a child process": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922053794
+      }
+    ],
+    "4.2 Implement `key-providers.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922056071
+      }
+    ],
+    "4.3 Implement `secret-vault.ts` and `messages/secrets.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922057069
+      }
+    ],
+    "4.4 Implement the vault behavior in `playground.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922058136
+      }
+    ],
+    "4.5 Implement `routes/secrets.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922059422
+      }
+    ],
+    "4.6 Update the existing `tests/unit/playground.test.ts` (R13.11)": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922060452
+      }
+    ],
+    "4. G2 Secrets": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922060600
+      }
+    ],
+    "4.7 Write unit tests for TOTP input and required secrets": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922061565
+      }
+    ],
+    "4.8 Write unit tests for the key providers": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922062430
+      }
+    ],
+    "4.9 Write unit tests for the vault": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922063591
+      }
+    ],
+    "4.10 Write unit tests for the playground vault environment": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922065785
+      }
+    ],
+    "4.11 Write unit tests for the secrets routes": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922067825
+      }
+    ],
+    "4.12 Write property test for Base32 normalization": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922068993
+      }
+    ],
+    "4.13 Write property test for the otpauth round trip": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922070026
+      }
+    ],
+    "4.14 Write property test for invalid TOTP values": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922071229
+      }
+    ],
+    "4.15 Write property test for the secrets list": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922091383
+      }
+    ],
+    "4.16 Write property test for the configured status": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922092898
+      }
+    ],
+    "4.17 Write property test for the vault round trip and opacity": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922094462
+      }
+    ],
+    "4.18 Write property test for the Redactor": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922097229
+      }
+    ],
+    "4.19 Write property test for no leak of a stored value": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922098901
+      }
+    ],
+    "4.20 Write property test for the Child_Server environment": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922100527
+      }
+    ],
+    "4.21 Write property test for plain-name fields of the secrets routes": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922101741
+      }
+    ],
+    "4.22 Write integration test for the secrets flow": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922103366
+      }
+    ],
+    "5.2 Implement `recording-manager.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922104895
+      }
+    ],
+    "5.3 Implement `routes/sessions.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922107979
+      }
+    ],
+    "5.4 Implement `routes/record.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922109601
+      }
+    ],
+    "5. G3 Recording and sessions": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922109767
+      }
+    ],
+    "5.5 Write unit tests for the Session_Store": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922111043
+      }
+    ],
+    "5.6 Write unit tests for the Recording_Manager": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922112644
+      }
+    ],
+    "5.7 Write unit tests for the record and sessions routes": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922114378
+      }
+    ],
+    "5.8 Write property test for the Application_Key and session file name": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922116018
+      }
+    ],
+    "5.9 Write property test for at most one recording under concurrency": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922117585
+      }
+    ],
+    "5.10 Write property test for the state machine edges": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922119161
+      }
+    ],
+    "5.11 Write property test for the status content": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922121022
+      }
+    ],
+    "5.12 Write property test for plain-name fields of the sessions routes": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922122789
+      }
+    ],
+    "6.2 Implement `compile-runner.ts` and `messages/compile.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922129082
+      }
+    ],
+    "6.3 Implement `routes/compile.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922130856
+      }
+    ],
+    "6.4 Implement `mcp-snippet.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922132537
+      }
+    ],
+    "6.5 Implement `power-installer.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922134384
+      }
+    ],
+    "6.6 Implement `routes/power.ts`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922136232
+      }
+    ],
+    "6. G4 Compile and Power": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922136398
+      }
+    ],
+    "6.7 Write unit tests for `onPhase`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922162670
+      }
+    ],
+    "6.8 Write unit tests for the Compile_Runner": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922164444
+      }
+    ],
+    "6.9 Write unit tests for the Power_Installer and the snippet": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922168267
+      }
+    ],
+    "6.10 Write unit tests for the compile and power routes": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922170443
+      }
+    ],
+    "6.11 Write property test for the compile status": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922172524
+      }
+    ],
+    "6.12 Write property test for compile error messages": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922174385
+      }
+    ],
+    "6.13 Write property test for the install confirmation": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922178233
+      }
+    ],
+    "6.14 Write property test for workspace validation and confinement": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922180011
+      }
+    ],
+    "6.15 Write property test for merging": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922181920
+      }
+    ],
+    "6.16 Write property test for placeholders only": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922184144
+      }
+    ],
+    "6.17 Write integration test for the Power flow": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922187406
+      }
+    ],
+    "7.2 Extend `js/api.js`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922193028
+      }
+    ],
+    "7.3 Implement the welcome panel, the new-action form and the Overview changes": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922198011
+      }
+    ],
+    "7.4 Implement the credentials view": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922201645
+      }
+    ],
+    "7.5 Implement the connect card and dialog": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922203860
+      }
+    ],
+    "7.6 Implement the recording status view": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922206088
+      }
+    ],
+    "7.7 Wire the features and finish the shared UI files": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922207867
+      }
+    ],
+    "7.8 Update the existing UI tests (R13.11)": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922210183
+      }
+    ],
+    "7.9 Write the docs (README, `docs/studio.md`, CLI help text)": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922212398
+      }
+    ],
+    "7. G5 UI and docs": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922212541
+      }
+    ],
+    "7.10 Write unit tests for the copy lint": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922214981
+      }
+    ],
+    "7.11 Write unit tests for the UI validators": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922217234
+      }
+    ],
+    "7.12 Write property test for the UI validator mirror": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922219254
+      }
+    ],
+    "7.13 Write property test for announcements": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922221754
+      }
+    ],
+    "7.14 Write property test for plain-language copy": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922223973
+      }
+    ],
+    "8. Checkpoint - Groups G1 to G5 merged": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922294231
+      }
+    ],
+    "9.1 Run `npm run build`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922297453
+      }
+    ],
+    "9.2 Run `npm run studio:build`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922300239
+      }
+    ],
+    "9.3 Run `npm run check:secrets`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922303300
+      }
+    ],
+    "9.4 Run `npm test`": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922307101
+      }
+    ],
+    "9. Final checkpoint": [
+      {
+        "executionId": "89c044ae-842e-4674-970a-48b55d79d5af",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794922307321
       }
     ]
   }

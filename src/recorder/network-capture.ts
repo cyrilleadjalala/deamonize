@@ -41,9 +41,29 @@ interface Entry {
   postData?: string;
 }
 
+/** Framework dev servers: HMR updates, dev bundles, stack-frame endpoints. Never part of the application. */
+const DEV_INTERNAL_PATH = [
+  /\.hot-update\.(json|js)$/i,
+  /(^|\/)_next\/(static|webpack-hmr)(\/|$)/,
+  /(^|\/)__nextjs/,
+  /(^|\/)__webpack_hmr(\/|$)/,
+  /(^|\/)webpack-hmr(\/|$)/,
+  /^\/(@vite|@react-refresh|@fs|__vite_ping)(\/|$)/,
+  /^\/sockjs-node(\/|$)/,
+];
+
+export function isDevInternalUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return DEV_INTERNAL_PATH.some((pattern) => pattern.test(pathname));
+  } catch {
+    return false;
+  }
+}
+
 export function isStaticUrl(url: string): boolean {
   try {
-    return STATIC_PATH.test(new URL(url).pathname);
+    return STATIC_PATH.test(new URL(url).pathname) || isDevInternalUrl(url);
   } catch {
     return true;
   }

@@ -5,6 +5,8 @@ import { LiveRecorder } from '../../src/recorder/live-recorder.js';
 import { WorkflowRecorder } from '../../src/recorder/workflow-recorder.js';
 import { deserializeWorkflowSet, serializeWorkflowSet } from '../../src/workflow/workflow-set.js';
 import type { Workflow, WorkflowSet } from '../../src/types.js';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { BEARER, COOKIE_VALUE, startCustomersApp, type CustomersApp } from '../helpers/customers-app.js';
 
 describe('network capture and Level 1 recipes (record in a real browser)', () => {
@@ -125,5 +127,62 @@ describe('network capture and Level 1 recipes (record in a real browser)', () =>
     expect(file).not.toContain(BEARER);
     expect(file).not.toMatch(/cookie/i);
     expect(deserializeWorkflowSet(file).workflows[0].steps[1].http?.method).toBe('GET');
+  });
+  it('keeps the login POST over a later dashboard GET and ignores an HMR fetch (Next-like page)', async () => {
+    const page_html = `<!doctype html><title>Login</title>
+<form id="f"><label for="code">Code</label><input id="code" name="code" />
+<button type="submit">Verify</button></form>
+<script>
+document.getElementById('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await fetch('/api/auth/login/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ok: true }) });
+  setTimeout(() => fetch('/api/settings/system').then((r) => r.json()), 300);
+  setTimeout(() => fetch('/_next/static/webpack/abc123.webpack.hot-update.json').catch(() => {}), 400);
+});
+</script>`;
+    const json = (res: import('node:http').ServerResponse, body: unknown): void => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(body));
+    };
+    const server = createServer((req, res) => {
+      const path = (req.url ?? '/').split('?')[0];
+      if (path === '/') {
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end(page_html);
+      } else if (path === '/api/auth/login/verify') json(res, { user: 'u' });
+      else if (path === '/api/settings/system') json(res, { theme: 'dark' });
+      else if (path.endsWith('.hot-update.json')) json(res, { c: [] });
+      else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.goto(`${url}/`);
+      const recorder = new WorkflowRecorder('Login');
+      const live = new LiveRecorder(page, recorder, { captureNetwork: true });
+      await live.attach();
+      await page.locator('#code').click();
+      await page.keyboard.type('123456');
+      await page.getByRole('button', { name: 'Verify' }).click();
+      await page.waitForTimeout(1200);
+      await live.idle();
+      const report = await live.finalizeNetwork();
+      const workflow = recorder.finish();
+      await context.close();
+      const click = workflow.steps.find((s) => s.actionType === 'click');
+      expect(click?.http).toMatchObject({ method: 'POST', url: `${url}/api/auth/login/verify` });
+      expect(click?.risk).toBe('write');
+      const recipes = workflow.steps.filter((s) => s.http !== undefined);
+      expect(recipes).toHaveLength(1);
+      expect(JSON.stringify(workflow)).not.toMatch(/hot-update|settings\/system/);
+      expect(report.filter((r) => r.level === 'http')).toHaveLength(1);
+    } finally {
+      server.close();
+    }
   });
 });

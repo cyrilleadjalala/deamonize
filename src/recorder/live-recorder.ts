@@ -4,6 +4,7 @@ import { buildSelectors, buildZoneSelector, type ElementInfo } from './selector-
 import type { WorkflowRecorder } from './workflow-recorder.js';
 import { NetworkCapture } from './network-capture.js';
 import { buildHttpRecipe } from './http-correlate.js';
+import { followUpReads, selectRecipe } from './select-recipe.js';
 import { prepareVisualAnchor, writeThumbnail, type PreparedVisual } from './visual-anchor.js';
 import type { Anchor, ExtractorKind, ResultZone, RowBinding, StepActionType, StepRisk, WorkflowVariable } from '../types.js';
 
@@ -176,15 +177,28 @@ export class LiveRecorder {
 
       const attempts = requests.map((request) => ({ request, ...buildHttpRecipe(values, request) }));
       const rank = (a: (typeof attempts)[number]): number => a.bound.length;
-      const qualifying = attempts
-        .filter((a) => a.recipe !== undefined && used.every((name) => a.bound.includes(name)))
-        .reduce<(typeof attempts)[number] | undefined>((best, a) => (best === undefined || rank(a) >= rank(best) ? a : best), undefined);
+      // A submit step is a write or delete in the UI (classifyRisk): a follow-up GET is not its recipe
+      const submit = (step.risk ?? 'read') !== 'read';
+      const qualifying = selectRecipe(attempts, { submit, used });
 
-      const risk = requests.map((r) => riskOfMethod(r.method)).reduce(maxRisk, 'read' as StepRisk);
+      // The recipe carries the risk of its own method; without a recipe, a write seen anywhere must not be replayed twice
+      const risk =
+        qualifying?.recipe === undefined
+          ? requests.map((r) => riskOfMethod(r.method)).reduce(maxRisk, 'read' as StepRisk)
+          : riskOfMethod(qualifying.recipe.method);
       this.recorder.setHttp(index, qualifying?.recipe, risk);
 
       if (qualifying?.recipe !== undefined) {
         reports.push({ ...base, level: 'http', request: `${qualifying.recipe.method} ${qualifying.recipe.url}` });
+        return;
+      }
+      const followUp = followUpReads(attempts, { submit, used })[0];
+      if (followUp !== undefined) {
+        reports.push({
+          ...base,
+          level: 'accessibility',
+          reason: `${followUp.request.method} ${pathOf(followUp.request.url)}: follow-up read of a submit step, not used`,
+        });
         return;
       }
       const closest = attempts.reduce((best, a) => (rank(a) > rank(best) ? a : best));

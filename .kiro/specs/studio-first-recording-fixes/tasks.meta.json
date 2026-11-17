@@ -1,0 +1,60 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "14. Land `src/recorder/navigation-rule.ts` FIRST (wave 0, unblocks G2 Task 12.5)": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794905571386
+      },
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794905697087
+      }
+    ],
+    "1. Write bug condition exploration test for phantom HTTP secrets (runtime and listings)": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794905698023
+      },
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794907646058
+      }
+    ],
+    "9. Write bug condition exploration test for the recording panel, live flush and finish binding": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794905699264
+      },
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794907646974
+      }
+    ],
+    "15. Write bug condition exploration test for navigation clicks": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794905699897
+      },
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794907648032
+      }
+    ],
+    "19.2 Hook in the write-step list (DEPENDS ON G1 Tasks 7.2 and 7.3)": [
+      {
+        "executionId": "d2eba412-97b8-469e-bf46-f274548bc55b",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794907649076
+      }
+    ]
+  }
+}

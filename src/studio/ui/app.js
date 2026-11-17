@@ -12,6 +12,7 @@ import { renderGraph } from './js/views/graph.js';
 import { renderSchemas } from './js/views/schemas.js';
 import { renderTests } from './js/views/tests.js';
 import { renderPlayground } from './js/views/playground.js';
+import { FEATURE_VIEWS } from './js/features.js';
 
 const VIEWS = {
   overview: { title: 'Overview', render: renderOverview },
@@ -20,6 +21,7 @@ const VIEWS = {
   schemas: { title: 'Schemas', render: renderSchemas },
   tests: { title: 'Tests', render: renderTests },
   playground: { title: 'Playground', render: renderPlayground },
+  ...FEATURE_VIEWS,
 };
 
 const main = /** @type {HTMLElement} */ (document.getElementById('main'));

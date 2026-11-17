@@ -46,3 +46,10 @@ dist-demo/
 
 # Output of 'daemonize compile examples/<name>/daemonize.workflows.json' (regenerate it, do not commit)
 examples/*/out/
+
+# Studio first flow: stray copies of the vault, its key and half-written session files
+secrets.vault.json
+secrets.vault.json.tmp-*
+vault.key
+vault.key.test
+*.storage-state.json.tmp-*

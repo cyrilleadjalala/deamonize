@@ -20,6 +20,7 @@ import { basename, join, resolve, sep } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { Validator } from '../validator/validator.js';
+import type { SecretVault } from './contracts.js';
 import { clipText } from './pbt-result.js';
 import { collectEnvSecretValues, makeScrubber, redactForStudio, REDACTED } from './redact.js';
 
@@ -546,6 +547,10 @@ export interface PlaygroundOptions {
   healSupport?: boolean;
   /** Extra secret values to scrub (the Studio's own). */
   secretValues?: () => readonly string[];
+  /** The Secret_Vault: its values reach the child only (behavior: studio-first-flow group G2). */
+  vault?: Pick<SecretVault, 'snapshot' | 'names' | 'values'>;
+  /** Names of the secrets the workflows require (behavior: studio-first-flow group G2). */
+  requiredSecretNames?: () => Promise<readonly string[]>;
   /** The real environment (default process.env), for the system variables of the child. */
   processEnv?: Record<string, string | undefined>;
 }

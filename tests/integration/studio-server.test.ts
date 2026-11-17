@@ -229,6 +229,8 @@ describe('Studio server', () => {
       expect(r.status).toBe(200);
       const body = JSON.parse(r.text);
       expect(body).toMatchObject({ sample: false, targetType: 'web', targetName: 'Legacy CRM' });
+      // The first-flow fields: the file exists, the output is compiled, nothing is recording
+      expect(body).toMatchObject({ workflowFileExists: true, outputCompiled: true, recordingActive: false });
       expect(body.targets[0]).toMatchObject({
         workflows: 1,
         steps: 3,
@@ -281,15 +283,36 @@ describe('Studio server', () => {
       }
     });
 
-    it('answers a clear error when the workflow file is missing, without its path', async () => {
-      const broken = await startStudio({ workflowFile: join(dir, 'missing-file.json'), outDir: out, staticDir: studioDir });
+    it('answers 200 with zero actions when the workflow file is missing (empty start)', async () => {
+      const empty = await startStudio({ workflowFile: join(dir, 'missing-file.json'), outDir: join(dir, 'no-such-out'), staticDir: studioDir });
+      try {
+        const r = await call('/api/overview', { h: empty });
+        expect(r.status).toBe(200);
+        expect(JSON.parse(r.text)).toMatchObject({ targets: [], workflowFileExists: false, outputCompiled: false, recordingActive: false });
+        expect(r.text).not.toContain(dir);
+        expect(JSON.parse((await call('/api/workflows', { h: empty })).text).workflows).toEqual([]);
+      } finally {
+        await empty.close();
+      }
+    });
+
+    it('answers one of three fixed errors for an unusable workflow file, without its path or content', async () => {
+      const bad = join(dir, 'not-a-set.json');
+      await writeFile(bad, '{"secret-looking": "NOT-A-WORKFLOW-SET"}');
+      const broken = await startStudio({ workflowFile: bad, outDir: out, staticDir: studioDir });
+      const folder = await startStudio({ workflowFile: dir, outDir: out, staticDir: studioDir });
       try {
         const r = await call('/api/overview', { h: broken });
         expect(r.status).toBe(500);
-        expect(JSON.parse(r.text).error).toBe('workflow file not found: missing-file.json');
+        expect(JSON.parse(r.text)).toEqual({ error: 'workflow file is not a valid workflow set' });
+        expect(r.text).not.toContain('NOT-A-WORKFLOW-SET');
         expect(r.text).not.toContain(dir);
+        const unreadable = await call('/api/workflows', { h: folder });
+        expect(unreadable.status).toBe(500);
+        expect(JSON.parse(unreadable.text)).toEqual({ error: 'workflow file is unreadable' });
       } finally {
         await broken.close();
+        await folder.close();
       }
     });
   });

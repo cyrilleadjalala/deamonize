@@ -5,7 +5,8 @@
  * @typedef {{ name: string, parts: string[], query: URLSearchParams, raw: string }} Route
  */
 
-const KNOWN = ['overview', 'workflows', 'graph', 'schemas', 'tests', 'playground'];
+import { FEATURE_ROUTES } from './features.js';
+const BUILT_IN = ['overview', 'workflows', 'graph', 'schemas', 'tests', 'playground'];
 
 /** @param {string} [hash] */
 export function parseRoute(hash = window.location.hash) {
@@ -20,7 +21,7 @@ export function parseRoute(hash = window.location.hash) {
   });
   const first = segments[0] ?? 'overview';
   return /** @type {Route} */ ({
-    name: KNOWN.includes(first) ? first : 'not-found',
+    name: BUILT_IN.includes(first) || FEATURE_ROUTES.includes(first) ? first : 'not-found',
     parts: segments.slice(1),
     query: new URLSearchParams(queryPart),
     raw,

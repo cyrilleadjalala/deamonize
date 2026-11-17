@@ -44,6 +44,22 @@ export const SYNTHETIC_FIXTURE_FILES = Object.freeze([
   'tests/unit/studio-redact.test.ts',
   'tests/unit/suggest.test.ts',
   'tests/unit/totp.test.ts',
+  // studio-first-flow: tests that plant fake credentials on purpose
+  'tests/unit/totp-secret.test.ts',
+  'tests/unit/secret-vault.test.ts',
+  'tests/unit/key-providers.test.ts',
+  'tests/unit/playground-vault-env.test.ts',
+  'tests/unit/secrets-routes.test.ts',
+  'tests/unit/session-store.test.ts',
+  'tests/unit/power-installer.test.ts',
+  'tests/unit/mcp-snippet.test.ts',
+  'tests/property/studio-secrets.property.test.ts',
+  'tests/property/studio-recording.property.test.ts',
+  'tests/property/studio-compile-power.property.test.ts',
+  'tests/integration/studio-secrets.test.ts',
+  'tests/integration/studio-record.test.ts',
+  'tests/integration/studio-power.test.ts',
+  'tests/integration/studio-ui-first-flow.test.ts',
 ]);
 
 /** Words that make a value a placeholder, not a credential. */

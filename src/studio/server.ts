@@ -30,12 +30,19 @@ import {
   type StudioOutputs,
   type StudioTarget,
 } from './model.js';
-import { redactForStudio, storageStateValues } from './redact.js';
+import type { WorkflowSet } from '../types.js';
+import { collectEnvSecretValues, makeScrubber, redactForStudio, storageStateValues } from './redact.js';
 import { readPbtResult, runPbtSuite, DEFAULT_PBT_TIMEOUT_MS } from './pbt-run.js';
 import { SAMPLE_PNG, sampleStudioData } from './sample-data.js';
 import type { PbtRunResult } from './pbt-result.js';
 import { MAX_TIMEOUT_MS, PlaygroundSession, SHOT_ID, type CallRequest, type ToolMeta } from './playground.js';
 import { sampleConnect, sampleLaunch } from './sample-playground.js';
+import type { StudioServices } from './contracts.js';
+import { createServices } from './services.js';
+import { requiredSecrets } from './required-secrets.js';
+import { DEFAULT_ROUTES } from './routes/index.js';
+import type { RouteContext, RouteDef, RouteFactory, RouteMethod } from './routes/types.js';
+import { BODY_NOT_JSON, BODY_NOT_OBJECT, BODY_TOO_LARGE, LOAD_INVALID, LOAD_TOO_LARGE, LOAD_UNREADABLE, METHOD_NOT_ALLOWED, REMOTE_REFUSED, SAMPLE_MODE } from './messages/common.js';
 
 export interface StudioOptions {
   /** The workflow file to show (default `daemonize.workflows.json`). */
@@ -65,6 +72,10 @@ export interface StudioOptions {
   playgroundIdleMs?: number;
   /** Timeout of a playground call that gives none (default 60 s). */
   playgroundCallTimeoutMs?: number;
+  /** Test seam: replace any of the services (no CLI flag or environment variable reaches it). */
+  services?: Partial<StudioServices>;
+  /** Test seam: replace the default route registry. */
+  routes?: RouteFactory[];
 }
 
 export interface StudioHandle {
@@ -137,6 +148,8 @@ interface Loaded {
   assetNames: Set<string>;
   assetsDir?: string;
   pbt?: PbtRunResult;
+  outputs: StudioOutputs;
+  workflowFileExists: boolean;
 }
 
 class LoadError extends Error { }
@@ -208,15 +221,27 @@ async function readOutputs(outDir: string): Promise<StudioOutputs> {
 
 async function loadLive(options: Required<Pick<StudioOptions, 'workflowFile' | 'outDir'>> & { graphFile?: string }): Promise<Loaded> {
   const file = resolve(options.workflowFile);
-  let set;
+  // A missing Workflow_File is the empty start, not an error. Every other failure has one of three fixed messages
+  let text: string | undefined;
   try {
-    set = deserializeWorkflowSet(await readFile(file, 'utf-8'));
+    const info = await stat(file);
+    if (info.size > MAX_JSON_FILE) throw new LoadError(LOAD_TOO_LARGE);
+    if (!info.isFile()) throw new LoadError(LOAD_UNREADABLE);
+    text = await readFile(file, 'utf-8');
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') throw new LoadError(`workflow file not found: ${basename(file)}`);
-    throw new LoadError(`workflow file is not valid: ${(err as Error).message}`);
+    if (err instanceof LoadError) throw err;
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw new LoadError(LOAD_UNREADABLE);
   }
   const outputs = await readOutputs(resolve(options.outDir));
+  if (text === undefined) {
+    return { targets: [], secretValues: [], assetNames: new Set(), outputs, workflowFileExists: false };
+  }
+  let set: WorkflowSet;
+  try {
+    set = deserializeWorkflowSet(text);
+  } catch {
+    throw new LoadError(LOAD_INVALID);
+  }
   const secretValues: string[] = [];
   // The storage state is read only to know which values to hide; none of it is ever returned
   if (set.storageState !== undefined) {
@@ -250,6 +275,8 @@ async function loadLive(options: Required<Pick<StudioOptions, 'workflowFile' | '
     assetNames,
     assetsDir: join(dirname(file), `${basename(file)}.assets`),
     pbt: await readPbtResult(resolve(options.outDir)),
+    outputs,
+    workflowFileExists: true,
   };
 }
 
@@ -262,7 +289,15 @@ function loadSample(): Loaded {
       if (name !== undefined && ASSET_NAME.test(name) && !isSecretStep(s)) assetNames.add(name);
     }
   }
-  return { targets: data.targets, stateGraph: data.stateGraph, secretValues: [], assetNames, pbt: data.pbt };
+  return {
+    targets: data.targets,
+    stateGraph: data.stateGraph,
+    secretValues: [],
+    assetNames,
+    pbt: data.pbt,
+    outputs: data.targets[0]?.outputs ?? { flags: { compiled: true, healSupport: false, http: false, pbtGenerated: false } },
+    workflowFileExists: true,
+  };
 }
 
 /** A path inside `root` for a URL path, or undefined when it leaves it (`..`, encoded or not, absolute paths, NUL, backslashes). */
@@ -299,10 +334,28 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
 
   // The secret values found by the last load (a storage state): the playground scrubs them from its answers too
   let knownSecretValues: string[] = [];
+  let playground: PlaygroundSession | undefined;
+  const services = createServices(options.services, {
+    workflowFile: resolve(workflowFile),
+    outDir: resolve(outDir),
+    cwd: process.cwd(),
+    sample,
+    env,
+    playground: () => playground,
+    loadedSecretValues: () => knownSecretValues,
+  });
+  const loopbackListener = isLoopbackHost(host);
+  /** Every value the Redactor must remove from a response, besides the environment ones. */
+  const knownValues = (extra: readonly string[] = []): string[] => [...extra, ...knownSecretValues, ...services.vault.values(), ...services.sessions.knownValues()];
   const load = async (): Promise<Loaded> => {
     const data = sample ? loadSample() : await loadLive({ workflowFile, outDir, graphFile: options.graphFile });
     knownSecretValues = data.secretValues;
+    if (!sample) await services.sessions.refresh().catch(() => undefined);
     return data;
+  };
+  const loadSet = async (): Promise<{ set: WorkflowSet | undefined; outputs: StudioOutputs }> => {
+    const data = await load();
+    return { set: data.targets[0]?.set, outputs: data.outputs };
   };
 
   /** What the playground needs to know about a tool: its risk and which arguments hold a typed secret. */
@@ -320,7 +373,7 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     };
   };
 
-  const playground =
+  playground =
     options.playground === false
       ? undefined
       : new PlaygroundSession({
@@ -329,7 +382,9 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
         idleMs: options.playgroundIdleMs,
         callTimeoutMs: options.playgroundCallTimeoutMs,
         toolMeta,
-        secretValues: () => knownSecretValues,
+        secretValues: () => knownValues(),
+        vault: services.vault,
+        requiredSecretNames: async () => requiredSecrets((await loadSet()).set).map((s) => s.name),
         ...(sample ? { connect: sampleConnect, launch: sampleLaunch, healSupport: true } : {}),
       });
 
@@ -338,13 +393,37 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     if (sample) return undefined;
     if (playground !== undefined) return { configured: await playground.configuredSecretVariables() };
     return {
-      configured: new Set(
-        Object.entries(env)
+      configured: new Set([
+        ...Object.entries(env)
           .filter(([name, value]) => typeof value === 'string' && value !== '' && /^DAEMONIZE_SECRET_/i.test(name))
-          .map(([name]) => name.toUpperCase())
-      ),
+          .map(([name]) => name.toUpperCase()),
+        ...[...(await services.vault.names())].map((name) => `DAEMONIZE_SECRET_${name.toUpperCase()}`),
+      ]),
     };
   };
+  const configuredSecretVariables = async (): Promise<ReadonlySet<string>> => (await secretStatus())?.configured ?? new Set<string>();
+
+  // The route registry: every module's routes by exact path. A duplicate path is a programming error.
+  const routeContext: RouteContext = {
+    services,
+    playground,
+    workflowFile: resolve(workflowFile),
+    outDir: resolve(outDir),
+    sample,
+    loadSet,
+    configuredSecretVariables,
+    studioEnv: env,
+  };
+  const routeMap = new Map<string, RouteDef>();
+  for (const factory of options.routes ?? DEFAULT_ROUTES) {
+    for (const def of factory(routeContext)) {
+      if (routeMap.has(def.path)) throw new Error(`Duplicate Studio route ${def.path}`);
+      routeMap.set(def.path, def);
+    }
+  }
+  /** 64 KiB for the playground and for every registered route with a POST handler, else a few KB. */
+  const bodyLimitFor = (pathname: string): number =>
+    pathname.startsWith('/api/playground/') || routeMap.get(pathname)?.handlers.POST !== undefined ? MAX_PLAYGROUND_BODY_BYTES : MAX_BODY_BYTES;
   const baseHeaders = (): Record<string, string> => ({
     'Content-Security-Policy': CSP,
     'X-Content-Type-Options': 'nosniff',
@@ -360,13 +439,13 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     res.end(head ? undefined : buffer);
   };
 
-  const sendJson = (res: ServerResponse, status: number, body: unknown, secretValues: readonly string[] = []): void => {
-    const safe = redactForStudio(body, { env, secretValues });
-    sendBytes(res, status, 'application/json; charset=utf-8', JSON.stringify(safe));
+  const sendJson = (res: ServerResponse, status: number, body: unknown, secretValues: readonly string[] = [], head = false): void => {
+    const safe = redactForStudio(body, { env, secretValues: knownValues(secretValues) });
+    sendBytes(res, status, 'application/json; charset=utf-8', JSON.stringify(safe), {}, head);
   };
 
   const sendError = (res: ServerResponse, status: number, message: string, extra: Record<string, string> = {}): void => {
-    const buffer = Buffer.from(JSON.stringify({ error: message }), 'utf-8');
+    const buffer = Buffer.from(JSON.stringify({ error: makeScrubber([...collectEnvSecretValues(env), ...knownValues()])(message) }), 'utf-8');
     res.writeHead(status, { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': String(buffer.length), ...extra });
     res.end(buffer);
   };
@@ -419,12 +498,12 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
   async function readJsonObject(req: IncomingMessage, body: BodyReader, res: ServerResponse): Promise<Record<string, unknown> | undefined> {
     const bytes = await body.read();
     if (body.tooLarge()) {
-      sendError(res, 413, 'request too large', { Connection: 'close' });
+      sendError(res, 413, BODY_TOO_LARGE, { Connection: 'close' });
       return undefined;
     }
     if (bytes.length === 0) return {};
     if (!/^application\/json\b/i.test(firstHeader(req.headers['content-type']) ?? '')) {
-      sendError(res, 415, 'send application/json');
+      sendError(res, 415, BODY_NOT_JSON);
       return undefined;
     }
     try {
@@ -433,7 +512,7 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     } catch {
       // Falls through to the error
     }
-    sendError(res, 400, 'the body must be a JSON object');
+    sendError(res, 400, BODY_NOT_OBJECT);
     return undefined;
   }
 
@@ -587,7 +666,17 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     data = { ...data, targets: redactForStudio(data.targets, { env, secretValues: data.secretValues }), stateGraph: redactForStudio(data.stateGraph, { env, secretValues: data.secretValues }) };
     switch (pathname) {
       case '/api/overview':
-        return sendJson(res, 200, buildOverview(data.targets, sample), data.secretValues);
+        return sendJson(
+          res,
+          200,
+          {
+            ...buildOverview(data.targets, sample),
+            workflowFileExists: data.workflowFileExists,
+            outputCompiled: sample ? true : data.outputs.flags.compiled,
+            recordingActive: sample ? false : services.recording.isActive(),
+          },
+          data.secretValues
+        );
       case '/api/workflows':
         return sendJson(res, 200, buildWorkflows(data.targets, await secretStatus()), data.secretValues);
       case '/api/graph':
@@ -595,7 +684,7 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
       case '/api/schemas':
         return sendJson(res, 200, buildSchemas(data.targets), data.secretValues);
       default:
-        return sendJson(res, 200, buildPbtView(data.pbt, data.targets, pbtRun !== undefined), data.secretValues);
+        return sendJson(res, 200, buildPbtView(data.pbt, data.targets, data.workflowFileExists && pbtRun !== undefined), data.secretValues);
     }
   }
 
@@ -638,6 +727,40 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     }
   }
 
+  /** A registered route: remote refusal, method (405), sample mode (409), then the body (413, 415, 400), then the handler. */
+  async function dispatchRoute(def: RouteDef, req: IncomingMessage, res: ServerResponse, url: URL, body: BodyReader, declaredTooLarge: boolean): Promise<void> {
+    if (def.remote === 'blocked' && !loopbackListener) return sendError(res, 403, REMOTE_REFUSED);
+    const requested = req.method ?? 'GET';
+    const method: RouteMethod | undefined = requested === 'GET' || requested === 'HEAD' ? 'GET' : requested === 'POST' ? 'POST' : undefined;
+    const handler = method === undefined ? undefined : def.handlers[method];
+    if (method === undefined || handler === undefined) {
+      const allow = [...(def.handlers.GET === undefined ? [] : ['GET', 'HEAD']), ...(def.handlers.POST === undefined ? [] : ['POST'])].join(', ');
+      return sendError(res, 405, METHOD_NOT_ALLOWED, { Allow: allow });
+    }
+    if (requested === 'HEAD' && def.handlers.GET === undefined) return sendError(res, 405, METHOD_NOT_ALLOWED, { Allow: 'POST' });
+    if (method === 'POST' && sample && def.writes !== false) return sendError(res, 409, SAMPLE_MODE);
+    let parsed: Record<string, unknown> = {};
+    if (method === 'POST') {
+      if (declaredTooLarge) return sendError(res, 413, BODY_TOO_LARGE, { Connection: 'close' });
+      const object = await readJsonObject(req, body, res);
+      if (object === undefined) return;
+      parsed = object;
+    }
+    const abort = new AbortController();
+    res.on('close', () => {
+      if (!res.writableEnded) abort.abort();
+    });
+    let outcome;
+    try {
+      outcome = await handler({ method, query: url.searchParams, body: parsed, signal: abort.signal });
+    } catch {
+      if (!res.destroyed) sendError(res, 500, 'internal error');
+      return;
+    }
+    if (res.destroyed) return;
+    sendJson(res, outcome.status, outcome.body, [], requested === 'HEAD');
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const rawUrl = req.url ?? '';
     if (rawUrl.length > MAX_URL_LENGTH) return sendError(res, 414, 'URL too long');
@@ -652,13 +775,20 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     } catch {
       return sendError(res, 400, 'bad request');
     }
-    // Only the playground POSTs read a body (a small JSON object); everywhere else it is cut off at a few KB
-    const limit = url.pathname.startsWith('/api/playground/') ? MAX_PLAYGROUND_BODY_BYTES : MAX_BODY_BYTES;
+    // Only the playground and the registered POST routes read a body (a small JSON object); elsewhere it is cut off at a few KB
+    const routeDef = routeMap.get(url.pathname);
+    const limit = bodyLimitFor(url.pathname);
     const declared = Number(firstHeader(req.headers['content-length']) ?? 0);
-    if (!Number.isFinite(declared) || declared > limit) return sendError(res, 413, 'request too large', { Connection: 'close' });
+    const declaredTooLarge = !Number.isFinite(declared) || declared > limit;
+    // A registered route answers 413 itself, after the guard checks that come before it
+    if (declaredTooLarge && routeDef === undefined) return sendError(res, 413, BODY_TOO_LARGE, { Connection: 'close' });
     let received = 0;
     let tooLarge = false;
     const chunks: Buffer[] = [];
+    let overflow: () => void = () => undefined;
+    const overflowed = new Promise<void>((done) => {
+      overflow = done;
+    });
     const finished = new Promise<void>((done) => {
       req.on('end', done);
       req.on('close', done);
@@ -668,18 +798,22 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
       received += chunk.length;
       if (received > limit) {
         tooLarge = true;
-        req.destroy();
-      } else chunks.push(chunk);
+        overflow();
+        // A registered route still has to answer (413); the others cut the connection
+        if (routeDef === undefined) req.destroy();
+        chunks.length = 0;
+      } else if (!tooLarge) chunks.push(chunk);
     });
     const body: BodyReader = {
       read: async () => {
-        await finished;
+        await Promise.race([finished, overflowed]);
         return Buffer.concat(chunks);
       },
       tooLarge: () => tooLarge,
     };
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       if (!authorized(req)) return sendError(res, 401, 'missing or invalid token', { 'WWW-Authenticate': 'Studio-Token' });
+      if (routeDef !== undefined) return dispatchRoute(routeDef, req, res, url, body, declaredTooLarge);
       if (tooLarge) return;
       return handleApi(req, res, url.pathname, body);
     }
@@ -719,7 +853,10 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
         server.close(() => done());
         server.closeAllConnections();
       });
-      // The MCP server it started, and the pictures it copied
+      // Then a recording and a compile in progress, then the MCP server it started and the pictures it copied.
+      // One failing step does not skip the next ones
+      await services.recording.close().catch(() => undefined);
+      await services.compiler.close().catch(() => undefined);
       await playground?.close();
     },
   };

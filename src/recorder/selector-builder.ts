@@ -1,4 +1,4 @@
-export interface ElementInfo {
+﻿export interface ElementInfo {
   role?: string;       // ARIA role (explicit or implicit), e.g. "button", "textbox"
   name?: string;       // accessible name, e.g. the label text or button caption
   id?: string;
@@ -40,7 +40,11 @@ export function buildSelectors(element: ElementInfo): string[] {
   if (element.text) {
     selectors.push(`text="${escapeQuotes(element.text)}"`);
   }
-  if (element.css && !(selectors.length > 0 && element.css.includes(':nth-of-type'))) {
+  if (
+    element.css &&
+    !(selectors.length > 0 && element.css.includes(':nth-of-type')) &&
+    !(selectors.length > 0 && cssStartsOnGeneratedId(element.css))
+  ) {
     selectors.push(element.css);
   }
 
@@ -64,7 +68,23 @@ function cssEscape(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char}`);
 }
 
-/** Ids made of long hex runs or UUID fragments change between page loads. */
-function looksGenerated(id: string): boolean {
-  return /[0-9a-f]{8,}/i.test(id) || /^\d+$/.test(id);
+const GENERATED_ID: RegExp[] = [
+  /[0-9a-f]{8,}/i,         // long hex runs, UUID fragments
+  /^\d+$/,                 // digits only
+  /:[rR][0-9a-z]+:/,       // React 18 useId (":r1:"), also inside Radix ids
+  /^_[rR]_[0-9a-z]+_/,     // React 19 useId ("_R_jqatpesnelb_-field")
+  /^«[^»]*»/,              // React 19.1 useId ("«r2»")
+  /^radix-/,               // Radix UI
+];
+
+/** Ids made of long hex runs, UUID fragments or framework useId output change between page loads. */
+export function looksGenerated(id: string): boolean {
+  return GENERATED_ID.some((pattern) => pattern.test(id));
+}
+
+/** A CSS path from the recorder starts at the nearest ancestor with an id: does it start on a generated one? */
+function cssStartsOnGeneratedId(css: string): boolean {
+  const match = /^#((?:\\.|[^\s>+~.\[:#\\])+)/.exec(css) ?? /^#((?:\\.|[^\s>+~\[#])+)/.exec(css);
+  if (!match) return false;
+  return looksGenerated(match[1]!.replace(/\\(.)/g, '$1'));
 }

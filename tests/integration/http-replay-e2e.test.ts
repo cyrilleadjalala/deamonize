@@ -282,6 +282,54 @@ describe('Level 1: direct HTTP replay (record, compile --http, call over MCP)', 
     // A write recipe that was sent is still never retried: (b) above asserts the POST case (one request, no replay)
   });
 
+  it('(g) a recipe secret of a step that stays on the page never causes missing_secret', async () => {
+    // A recorded request whose step plans as ui (a ui step follows it), as the login verify of a 2FA flow does
+    const patched = JSON.parse(readFileSync(workflowFile, 'utf8')) as { workflows: Array<{ label: string; steps: Array<Record<string, unknown>> }> };
+    const flow = patched.workflows.find((w) => w.label === 'Find customers')!;
+    flow.steps.unshift(
+      {
+        actionType: 'click',
+        selectors: ['#phantom'],
+        http: { method: 'POST', url: `${app.baseUrl}/api/phantom`, query: {}, headers: { 'x-totp': { $secret: 'PHANTOM_TOTP' } }, bindings: [], redacted: [] },
+      },
+      { actionType: 'click', selectors: ['#phantom-next'] }
+    );
+    const patchedFile = join(work, 'workflows-phantom.json');
+    await writeFile(patchedFile, JSON.stringify(patched));
+    const patchedDir = await mkdtemp(join(workspaceRoot, '.http-'));
+    dirs.push(patchedDir);
+    const log = console.log;
+    console.log = () => { };
+    try {
+      await compile(patchedFile, patchedDir, { http: 'auto' });
+    } finally {
+      console.log = log;
+    }
+    const call = async (env: Record<string, string>): Promise<Result> => {
+      const client = new Client({ name: 'http-replay-phantom', version: '1.0.0' });
+      const transport = new StdioClientTransport({
+        command: process.execPath,
+        args: [join(patchedDir, 'mcp-server.js')],
+        cwd: workspaceRoot,
+        env: { DAEMONIZE_STEP_TIMEOUT_MS: '2000', DAEMONIZE_CHROMIUM_PATH: join(work, 'no-such-chromium.exe'), DAEMONIZE_STORAGE_STATE: storageStatePath, ...env },
+      });
+      await client.connect(transport);
+      open.push({ client, transport });
+      const response = await client.callTool({ name: 'find_customers', arguments: { query: 'Ada' } });
+      const text = (response.content as Array<{ text: string }>)[0].text;
+      results.push(text);
+      return JSON.parse(text);
+    };
+    // The first step stays on the page: its secret is not required (the call fails later for another reason: no browser here)
+    const result = await call(auth);
+    expect(result.error, JSON.stringify(result)).not.toBe('missing_secret');
+    expect(JSON.stringify(result)).not.toContain('PHANTOM_TOTP');
+    // The secret of an HTTP-planned step is still required
+    const missing = await call({});
+    expect(missing).toMatchObject({ success: false, error: 'missing_secret', failure: { missingSecret: 'DAEMONIZE_SECRET_AUTHORIZATION' } });
+    expect(JSON.stringify(missing)).not.toContain('PHANTOM_TOTP');
+  });
+
   it('(e) leaves no cookie or token in the artifacts, the workflow file or any result', async () => {
     const values = [COOKIE_VALUE, BEARER, `Bearer ${BEARER}`];
     expect(await scanForValues(outputDir, values)).toEqual([]);

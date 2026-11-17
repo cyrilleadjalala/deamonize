@@ -7,6 +7,7 @@ import { mkdtemp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Compiler } from '../../src/compiler/compiler.js';
+import { httpSecretNames, planSteps } from '../../src/replay/runtime/http-replay.js';
 import { PbtGenerator } from '../../src/pbt/pbt-generator.js';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import { deserializeWorkflowSet, serializeWorkflowSet } from '../../src/workflow/workflow-set.js';
@@ -210,14 +211,18 @@ describe('Property 12: no env-supplied secret value appears in any compiled arti
             // The replay mode is an editable default, not a secret: the only other thing the env holds
             expect(mode).toBe('strict');
             const typed = new Set(set.workflows.flatMap((w) => w.steps.flatMap((s) => (s.secretRef === undefined ? [] : [s.secretRef]))));
-            // Names that only appear as {"$secret": NAME} references in a recorded HTTP request are listed too
+            const declared = set.workflows.flatMap((w) => (w.secrets ?? []).map((s) => (typeof s === 'string' ? s : s.name)));
+            // Without --http no recorded request is executed: its {"$secret": NAME} references are not listed
+            const expectedUiOnly = [...new Set([...typed, ...declared])].map((n) => `DAEMONIZE_SECRET_${n}`).sort();
+            expect(Object.keys(env).sort()).toEqual(expectedUiOnly);
+            // Compiled with --http, the names of the requests of the steps it runs over HTTP are listed too
             const referenced = new Set(
-              set.workflows.flatMap((w) => w.steps.flatMap((s) => [...JSON.stringify(s.http ?? {}).matchAll(/"\$secret":"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1])))
+              set.workflows.flatMap((w) => {
+                const plan = planSteps(w.steps);
+                return w.steps.flatMap((s, i) => (plan[i] === 'http' ? httpSecretNames(s.http) : []));
+              })
             );
-            const expected = [...new Set([...typed, ...referenced])].map((n) => `DAEMONIZE_SECRET_${n}`).sort();
-            expect(Object.keys(env).sort()).toEqual(expected);
-            const httpOnly = [...referenced].filter((n) => !typed.has(n));
-            for (const name of httpOnly) expect(env[`DAEMONIZE_SECRET_${name}`]).toBe(`\${DAEMONIZE_SECRET_${name}}`);
+            const expected = [...new Set([...typed, ...declared, ...referenced])].map((n) => `DAEMONIZE_SECRET_${n}`).sort();
             // Compiled with --http the same names (and still no value) are in every artifact
             if (set.targetType === 'web') {
               const httpDir = await mkdtemp(join(tmpdir(), 'daemonize-noleak-http-'));
@@ -228,8 +233,11 @@ describe('Property 12: no env-supplied secret value appears in any compiled arti
               expect(existsSync(join(httpDir, 'http-replay.js'))).toBe(true);
               expect(await scanForValues(httpDir, values)).toEqual([]);
               const httpMcp = JSON.parse(readFileSync(join(httpDir, 'mcp.json'), 'utf8'));
-              expect(Object.keys(Object.values(httpMcp.mcpServers as Record<string, { env: Record<string, string> }>)[0].env).filter((k) => k !== 'DAEMONIZE_MODE').sort()).toEqual(expected);
+              const httpEnv = Object.values(httpMcp.mcpServers as Record<string, { env: Record<string, string> }>)[0].env;
+              expect(Object.keys(httpEnv).filter((k) => k !== 'DAEMONIZE_MODE').sort()).toEqual(expected);
+              for (const name of [...referenced].filter((n) => !typed.has(n))) expect(httpEnv[`DAEMONIZE_SECRET_${name}`]).toBe(`\${DAEMONIZE_SECRET_${name}}`);
             }
+
             for (const [name, placeholder] of Object.entries(env)) expect(placeholder).toBe(`\${${name}}`);
             // A literal secret makes the compiler refuse: the path is named, the value is not, nothing is written
             const bad = withPlantedLiteral(set, planted);

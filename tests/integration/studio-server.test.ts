@@ -73,7 +73,7 @@ describe('Studio server', () => {
     await writeFile(join(dir, 'auth', 'state.json'), JSON.stringify({ cookies: [{ name: 'sid', value: COOKIE_SECRET, domain: 'localhost', path: '/' }], origins: [] }));
 
     const log = console.log;
-    console.log = () => {};
+    console.log = () => { };
     try {
       await compile(file, out);
     } finally {
@@ -244,6 +244,11 @@ describe('Studio server', () => {
       const w = body.workflows[0];
       expect(w).toMatchObject({ id: WF_ID, toolName: 'create_customer', secrets: [{ name: 'CRM_PASSWORD', kind: 'password' }] });
       expect(w.risk.highest).toBe('write');
+      // The environment of the Studio holds DAEMONIZE_SECRET_CRM_PASSWORD: configured, and only the word is returned
+      expect(w.secrets).toEqual([{ name: 'CRM_PASSWORD', kind: 'password', envVariable: 'DAEMONIZE_SECRET_CRM_PASSWORD', status: 'configured' }]);
+      expect(w).toMatchObject({ unusedSecrets: [], secretsBasis: 'ui-only' });
+      expect(Array.isArray(w.writeSteps)).toBe(true);
+      expect(['none', 'login-only', 'actions']).toContain(w.writeSummary);
       expect(w.steps[0]).toMatchObject({ usesSecret: true, primaryLevel: 'accessibility' });
       expect(w.steps[1].levels).toEqual({ http: false, accessibility: true, vision: true, coordinates: true });
       expect(w.steps[1].thumbnailUrl).toBe(`/api/assets/step-${WF_ID}-1.png`);

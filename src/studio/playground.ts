@@ -686,6 +686,22 @@ export class PlaygroundSession {
     return { command: launch.command, args: launch.args, env, cwd: launch.cwd };
   }
 
+  /**
+   * Upper-case names of the `DAEMONIZE_SECRET_*` variables that are non-empty in the environment this session passes
+   * to the server (allow-listed names of the Studio and process environment, and the literal entries of the
+   * `mcp.json` env). Names only: no value leaves this method.
+   */
+  async configuredSecretVariables(): Promise<Set<string>> {
+    const env =
+      (await this.launchSpec().catch(() => undefined))?.env ??
+      buildChildEnv({ processEnv: this.options.processEnv ?? process.env, studioEnv: this.studioEnv, mode: this.currentMode });
+    return new Set(
+      Object.entries(env)
+        .filter(([name, value]) => value !== '' && /^DAEMONIZE_SECRET_/i.test(name))
+        .map(([name]) => name.toUpperCase())
+    );
+  }
+
   private async ensureConn(): Promise<McpConnection> {
     if (this.closed) throw new PlaygroundUnavailable('the playground is closed', 'closed');
     if (this.conn !== undefined) return this.conn;

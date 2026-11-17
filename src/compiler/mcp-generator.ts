@@ -345,7 +345,10 @@ const WEB_RUNTIME_HTTP = [
   `  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });`,
   `  const deadline = startedAt + TIMEOUT_MS;`,
   `  // A secret that is not set fails the call before any step runs; only the name of its variable is reported`,
-  `  const missing = [...new Set([...missingSecrets(steps, process.env), ...missingHttpSecrets(steps, process.env)])];`,
+  `  // A step kept on the page never reads its recorded {"$secret":NAME} references: only the steps run over HTTP need them`,
+  `  const plan = planSteps(steps);`,
+  `  const httpSteps = steps.filter((_, index) => plan[index] === "http");`,
+  `  const missing = [...new Set([...missingSecrets(steps, process.env), ...missingHttpSecrets(httpSteps, process.env)])];`,
   `  if (missing.length > 0) {`,
   `    return { success: false, error: "missing_secret", failure: { missingSecret: missing[0], missing }, elapsedMs: Date.now() - startedAt };`,
   `  }`,
@@ -354,11 +357,10 @@ const WEB_RUNTIME_HTTP = [
   `  if (storagePath !== undefined && !existsSync(storagePath)) {`,
   `    return { success: false, error: "storage_state_missing", failure: { path: storagePath }, elapsedMs: Date.now() - startedAt };`,
   `  }`,
-  `  const plan = planSteps(steps);`,
   `  const variables = withRecordedDefaults(steps, args);`,
   `  // The level each step ran at; a field-filling step that only fed a request counts as http`,
   `  const levels: string[] = plan.map((mode) => (mode === "ui" ? "accessibility" : "http"));`,
-  `  const secrets: string[] = [...secretValues(steps, process.env), ...httpSecretValues(steps, process.env)];`,
+  `  const secrets: string[] = [...secretValues(steps, process.env), ...httpSecretValues(httpSteps, process.env)];`,
   `  let levelFallback = false;`,
   `  let session: { browser: Browser; context: BrowserContext; page: Page; webRun: WebRun } | undefined;`,
   `  let timer: NodeJS.Timeout | undefined;`,
@@ -1023,16 +1025,17 @@ export class McpGenerator {
       `import type { Step, Final, Limits } from "./replay.js";`,
       `import { resolveTimeoutMs } from "./settle.js";`,
       `import { missingSecrets, secretEnvName } from "./step-plan.js";`,
-      ...(http ? [`import { httpSecretNames, missingHttpSecrets, secretVariable, COOKIE_HEADER_VARIABLE } from "./http-replay.js";`] : []),
+      ...(http ? [`import { planSteps, httpSecretNames, missingHttpSecrets, secretVariable, COOKIE_HEADER_VARIABLE } from "./http-replay.js";`] : []),
       ``,
       http
         ? `// Level 1: the secrets of the recipes and the cookie header are forwarded by name, like the typed secrets.`
         : `// Level 1 (--http) is not compiled in.`,
       http
-        ? `const HTTP_SECRET_VARIABLES = (steps: Step[]): string[] => [...steps.flatMap((s) => httpSecretNames(s.http).map(secretVariable)), ...(process.env[COOKIE_HEADER_VARIABLE] ? [COOKIE_HEADER_VARIABLE] : [])];`
+        ? `const httpStepsOf = (steps: Step[]): Step[] => { const plan = planSteps(steps); return steps.filter((_, index) => plan[index] === "http"); };\n` +
+        `const HTTP_SECRET_VARIABLES = (steps: Step[]): string[] => [...httpStepsOf(steps).flatMap((s) => httpSecretNames(s.http).map(secretVariable)), ...(process.env[COOKIE_HEADER_VARIABLE] ? [COOKIE_HEADER_VARIABLE] : [])];`
         : `const HTTP_SECRET_VARIABLES = (_steps: Step[]): string[] => [];`,
       http
-        ? `const HTTP_MISSING_SECRETS = (steps: Step[]): string[] => missingHttpSecrets(steps, process.env);`
+        ? `const HTTP_MISSING_SECRETS = (steps: Step[]): string[] => missingHttpSecrets(httpStepsOf(steps), process.env);`
         : `const HTTP_MISSING_SECRETS = (_steps: Step[]): string[] => [];`,
       ``,
       healEnabled(set, options)

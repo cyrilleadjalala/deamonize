@@ -84,7 +84,7 @@ export class KiroPowerGenerator {
     };
 
     // Names only: Kiro substitutes ${VAR} from its own environment, so no value is ever written to a file
-    const secretVariables = [...new Set(set.workflows.flatMap(secretEnvNames))].sort();
+    const secretVariables = [...new Set(set.workflows.flatMap((workflow) => secretEnvNames(workflow, { http })))].sort();
     const env: Record<string, string> = Object.fromEntries(secretVariables.map((v) => [v, '${' + v + '}']));
     // The replay mode is an editable default: "strict" unless the user changes it to "heal"
     env.DAEMONIZE_MODE = 'strict';

@@ -9,6 +9,7 @@
 import { basename } from 'node:path';
 import type { HttpRecipe, SecretReference, Workflow, WorkflowSet, WorkflowStep } from '../types.js';
 import { clipText, type PbtRunResult } from './pbt-result.js';
+import { httpSecretSplit } from '../compiler/tool-description.js';
 
 export type StepLevel = 'http' | 'accessibility' | 'vision' | 'coordinates';
 export type PrimaryLevel = StepLevel | 'terminal' | 'none';
@@ -214,6 +215,15 @@ function stepView(step: WorkflowStep, index: number, targetType: 'web' | 'tui'):
 export interface SecretName {
   name: string;
   kind?: SecretReference['kind'];
+  /** `DAEMONIZE_SECRET_<name>`: the variable to set, never its value. */
+  envVariable?: string;
+  /** Present when the Studio knows the environment given to the server; absent for sample data and the static demo. */
+  status?: 'configured' | 'missing';
+}
+
+/** Upper-case names of the `DAEMONIZE_SECRET_*` variables that are non-empty in the environment of the server. Names only. */
+export interface SecretStatusSource {
+  configured: ReadonlySet<string>;
 }
 
 /** The names (never values) of the secrets a workflow uses: declared, typed by a step, or referenced by a request. */
@@ -240,6 +250,75 @@ export function secretNames(workflow: Workflow): SecretName[] {
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+const SECRET_PREFIX = 'DAEMONIZE_SECRET_';
+
+/**
+ * The secrets the compiled mode needs, and the names recorded in HTTP recipes that it never reads. Required: the
+ * declared secrets, the `secretRef` of the steps, and the `$secret` names of the steps a `--http` server runs over
+ * HTTP. With a status source each required secret says `configured` or `missing`. Names and statuses only.
+ */
+export function workflowSecrets(
+  workflow: Workflow,
+  options: { http: boolean },
+  status?: SecretStatusSource
+): { required: SecretName[]; unused: SecretName[] } {
+  const required = new Map<string, SecretName>();
+  const add = (name: unknown, kind?: SecretReference['kind']): void => {
+    if (typeof name !== 'string' || name === '') return;
+    const known = required.get(name);
+    if (known === undefined || (known.kind === undefined && kind !== undefined)) {
+      required.set(name, { name: clipText(name, 80), ...(kind === undefined ? {} : { kind }) });
+    }
+  };
+  for (const secret of workflow.secrets ?? []) {
+    if (typeof secret === 'string') add(secret);
+    else add(secret?.name, secret?.kind);
+  }
+  for (const step of workflow.steps ?? []) add(step.secretRef, step.totp === true ? 'totp' : undefined);
+  const split = httpSecretSplit(workflow, { http: options.http });
+  for (const name of split.used) add(name);
+  const withStatus = (secret: SecretName): SecretName => {
+    const envVariable = `${SECRET_PREFIX}${secret.name}`;
+    return {
+      ...secret,
+      envVariable,
+      ...(status === undefined ? {} : { status: status.configured.has(envVariable.toUpperCase()) ? ('configured' as const) : ('missing' as const) }),
+    };
+  };
+  const byName = (a: SecretName, b: SecretName): number => a.name.localeCompare(b.name);
+  return {
+    required: [...required.values()].sort(byName).map(withStatus),
+    unused: split.unused.filter((name) => !required.has(name)).map((name) => ({ name: clipText(name, 80), envVariable: `${SECRET_PREFIX}${name}` })).sort(byName),
+  };
+}
+
+export interface WriteStepView {
+  /** Zero-based step index, as in `StepView.index`. */
+  index: number;
+  label: string;
+  risk: 'write' | 'delete';
+  kind: 'login' | 'action';
+}
+
+/**
+ * The steps that write (risk other than `read`), in order. The first write is the login when a secret step comes
+ * before it. `summary` is `none`, `login-only` (the login is the only write) or `actions`.
+ */
+export function writeStepsOf(workflow: Workflow): { writeSteps: WriteStepView[]; writeSummary: 'none' | 'login-only' | 'actions' } {
+  const steps = workflow.steps ?? [];
+  const writeSteps: WriteStepView[] = [];
+  let loginIndex: number | undefined;
+  steps.forEach((step, index) => {
+    const risk = step.risk ?? 'read';
+    if (risk === 'read') return;
+    if (writeSteps.length === 0 && steps.slice(0, index).some(isSecretStep)) loginIndex = index;
+    const label = step.label !== undefined && step.label.trim() !== '' ? clipText(step.label, 80) : `${step.actionType} ${index + 1}`;
+    writeSteps.push({ index, label, risk, kind: index === loginIndex ? 'login' : 'action' });
+  });
+  const writeSummary = writeSteps.length === 0 ? 'none' : writeSteps.every((w) => w.kind === 'login') ? 'login-only' : 'actions';
+  return { writeSteps: writeSteps.slice(0, MAX_STEPS_PER_WORKFLOW), writeSummary };
+}
+
 export interface WorkflowView {
   id: string;
   label: string;
@@ -248,7 +327,13 @@ export interface WorkflowView {
   target: { name: string; type: 'web' | 'tui' };
   risk: { read: number; write: number; delete: number; highest: 'read' | 'write' | 'delete' };
   variables: Array<{ name: string; type: string; description?: string; optional: boolean }>;
+  /** Required for the compiled mode, with `status` when the environment of the server is known. */
   secrets: SecretName[];
+  /** Recorded in HTTP recipes but not read by the compiled mode. */
+  unusedSecrets: SecretName[];
+  secretsBasis: 'not-compiled' | 'ui-only' | 'http';
+  writeSteps: WriteStepView[];
+  writeSummary: 'none' | 'login-only' | 'actions';
   steps: StepView[];
   stepCount: number;
   finalScreenId?: string;
@@ -256,11 +341,13 @@ export interface WorkflowView {
   timeoutMs?: number;
 }
 
-export function buildWorkflowView(set: WorkflowSet, workflow: Workflow, outputs: StudioOutputs): WorkflowView {
+export function buildWorkflowView(set: WorkflowSet, workflow: Workflow, outputs: StudioOutputs, status?: SecretStatusSource): WorkflowView {
   const steps = (workflow.steps ?? []).slice(0, MAX_STEPS_PER_WORKFLOW);
   const risk = { read: 0, write: 0, delete: 0 };
   for (const step of workflow.steps ?? []) risk[step.risk ?? 'read'] += 1;
   const toolName = outputs.nameMap?.[workflow.id];
+  const http = outputs.flags.compiled && outputs.flags.http;
+  const { required, unused } = workflowSecrets(workflow, { http }, status);
   return {
     id: workflow.id,
     label: clipText(workflow.label ?? '', 200),
@@ -274,7 +361,10 @@ export function buildWorkflowView(set: WorkflowSet, workflow: Workflow, outputs:
       ...(text(v.description, 300) === undefined ? {} : { description: text(v.description, 300) }),
       optional: v.optional === true,
     })),
-    secrets: secretNames(workflow),
+    secrets: required,
+    unusedSecrets: unused,
+    secretsBasis: !outputs.flags.compiled ? ('not-compiled' as const) : http ? ('http' as const) : ('ui-only' as const),
+    ...writeStepsOf(workflow),
     steps: steps.map((step, index) => stepView(step, index, set.targetType)),
     stepCount: (workflow.steps ?? []).length,
     ...(workflow.finalScreenId === undefined ? {} : { finalScreenId: workflow.finalScreenId }),
@@ -283,8 +373,8 @@ export function buildWorkflowView(set: WorkflowSet, workflow: Workflow, outputs:
   };
 }
 
-export function buildWorkflows(targets: readonly StudioTarget[]): { workflows: WorkflowView[]; truncated: boolean } {
-  const all = targets.flatMap((t) => (t.set.workflows ?? []).map((w) => buildWorkflowView(t.set, w, t.outputs)));
+export function buildWorkflows(targets: readonly StudioTarget[], status?: SecretStatusSource): { workflows: WorkflowView[]; truncated: boolean } {
+  const all = targets.flatMap((t) => (t.set.workflows ?? []).map((w) => buildWorkflowView(t.set, w, t.outputs, status)));
   return { workflows: all.slice(0, MAX_WORKFLOWS), truncated: all.length > MAX_WORKFLOWS };
 }
 
@@ -319,7 +409,7 @@ export function buildTargetOverview(target: StudioTarget): TargetOverview {
       steps += 1;
       stepsByLevel[classifyStep(step, set.targetType).primaryLevel] += 1;
     }
-    for (const secret of secretNames(workflow)) secrets.add(secret.name);
+    for (const secret of workflowSecrets(workflow, { http: outputs.flags.compiled && outputs.flags.http }).required) secrets.add(secret.name);
   }
   const command = set.startCommand;
   const start =

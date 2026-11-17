@@ -22,7 +22,7 @@ export function describeTool(workflow: Workflow, options: { http?: boolean } = {
   // An accepted suggestion replaces the label as the lead of the description
   const lead = workflow.description ?? workflow.label;
   const base = (inputs.length > 0 ? `${lead.replace(/[.!]+$/, '')}. Inputs: ${inputs.join(', ')}.` : lead) + (output === undefined ? '' : ` ${output}`);
-  const secrets = secretEnvNames(workflow);
+  const secrets = secretEnvNames(workflow, options);
   const withLevel = options.http === true ? `${base} ${describeLevels(workflow)}` : base;
   return secrets.length > 0
     ? `${withLevel} Requires the environment variable(s) ${secrets.join(', ')} in the MCP server environment (names only; never pass them as inputs).`
@@ -74,7 +74,7 @@ export function describeOutput(workflow: Workflow): string | undefined {
  * The environment variables a workflow needs: `DAEMONIZE_SECRET_<NAME>` for every secretRef of its steps
  * and every name of its `secrets` list. Names only, never values.
  */
-export function secretEnvNames(workflow: Workflow): string[] {
+export function secretEnvNames(workflow: Workflow, options: SecretEnvOptions = {}): string[] {
   const names = new Set<string>();
   for (const step of workflow.steps) {
     if (step.secretRef !== undefined) names.add(step.secretRef);
@@ -82,11 +82,29 @@ export function secretEnvNames(workflow: Workflow): string[] {
   for (const entry of workflow.secrets ?? []) {
     names.add(typeof entry === 'string' ? entry : entry.name);
   }
-  // Names that only appear as {"$secret":NAME} references of a recorded HTTP request (Level 1)
-  for (const step of workflow.steps) {
-    for (const name of httpSecretNames(step.http)) names.add(name);
-  }
+  // Names of {"$secret":NAME} references of a recorded request, only for the steps the server runs over HTTP
+  for (const name of httpSecretSplit(workflow, options).used) names.add(name);
   return [...names].sort().map((name) => `DAEMONIZE_SECRET_${name}`);
+}
+
+export interface SecretEnvOptions {
+  /** The server is compiled with --http: only then is a recorded request ever executed. */
+  http?: boolean;
+}
+
+/**
+ * The `$secret` names of the recorded requests, split by whether the compiled mode executes the step over HTTP:
+ * `used` for the steps planned as `http` of a `--http` server, `unused` for every other name. A name can be in both.
+ */
+export function httpSecretSplit(workflow: Workflow, options: SecretEnvOptions = {}): { used: string[]; unused: string[] } {
+  const used = new Set<string>();
+  const unused = new Set<string>();
+  const plan = options.http === true ? planSteps(workflow.steps) : undefined;
+  workflow.steps.forEach((step, index) => {
+    const target = plan?.[index] === 'http' ? used : unused;
+    for (const name of httpSecretNames(step.http)) target.add(name);
+  });
+  return { used: [...used].sort(), unused: [...unused].sort() };
 }
 
 /**

@@ -119,7 +119,12 @@ describe('Studio playground, terminal server', () => {
     expect(greet.inputSchema.properties).not.toHaveProperty('_timeoutMs');
     expect(greet.inputSchema.$schema).toBeUndefined();
     expect(tools.find((t) => t.name === 'greet_and_save').risk).toBe('write');
-  });
+    // The secrets and write steps of each workflow travel with the tool (names and statuses only)
+    expect(greet).toMatchObject({ secrets: [], unusedSecrets: [], secretsBasis: 'ui-only', writeSteps: [], writeSummary: 'none' });
+    const save = tools.find((t) => t.name === 'greet_and_save');
+    expect(save.writeSummary).toBe('actions');
+    expect(save.writeSteps).toHaveLength(1);
+    expect(save.writeSteps[0]).toMatchObject({ risk: 'write', kind: 'action' });  });
 
   it('calls a tool with valid arguments and returns the summary a caller needs', async () => {
     const res = track(await api.json('POST', '/api/playground/call', { tool: 'greet_someone', arguments: { your_name: 'Ada' } }));

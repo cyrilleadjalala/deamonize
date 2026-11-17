@@ -83,7 +83,10 @@ describe('workflow view models', () => {
     ]);
     target.set.workflows[0].secrets = [{ name: 'APP_PASSWORD', kind: 'password' }, 'OTHER_SECRET'];
     const { workflows } = buildWorkflows([target]);
-    expect(workflows[0].secrets).toEqual([{ name: 'APP_PASSWORD', kind: 'password' }, { name: 'OTHER_SECRET' }]);
+    expect(workflows[0].secrets).toEqual([
+      { name: 'APP_PASSWORD', kind: 'password', envVariable: 'DAEMONIZE_SECRET_APP_PASSWORD' },
+      { name: 'OTHER_SECRET', envVariable: 'DAEMONIZE_SECRET_OTHER_SECRET' },
+    ]);
     expect(workflows[0].steps[0].usesSecret).toBe(true);
     const json = JSON.stringify(workflows);
     expect(json).not.toContain('hunter2-literal');
@@ -107,7 +110,10 @@ describe('workflow view models', () => {
     ]);
     const { workflows } = buildWorkflows([target]);
     expect(workflows[0].steps[0].http).toMatchObject({ method: 'GET', path: '/api/customers/{{id}}', queryKeys: ['apikey'], bindings: 1, redacted: 1 });
-    expect(workflows[0].secrets).toEqual([{ name: 'API_KEY' }]);
+    // Not compiled: nothing reads the recipe, so the name is recorded but not required
+    expect(workflows[0].secrets).toEqual([]);
+    expect(workflows[0].unusedSecrets).toEqual([{ name: 'API_KEY', envVariable: 'DAEMONIZE_SECRET_API_KEY' }]);
+    expect(workflows[0].secretsBasis).toBe('not-compiled');
     const json = JSON.stringify(workflows);
     expect(json).not.toContain('QUERYSECRET');
     expect(json).not.toContain('s3cr3t');
@@ -142,6 +148,59 @@ describe('workflow view models', () => {
     const target = web([{ actionType: 'click', selectors: ['#a'] }]);
     target.outputs = { ...NO_OUTPUTS, nameMap: { '11111111-1111-4111-8111-111111111111': 'do_it' } };
     expect(buildWorkflows([target]).workflows[0].toolName).toBe('do_it');
+  });
+});
+
+describe('secrets of the compiled mode and write steps', () => {
+  const recipe = (name: string) => ({ method: 'POST', url: 'https://a.test/x', query: {}, headers: { 'x-t': { $secret: name } }, bindings: [], redacted: [] });
+  const steps: WorkflowStep[] = [
+    { actionType: 'type', selectors: ['#pw'], secretRef: 'PW', label: 'Password', risk: 'read' },
+    { actionType: 'click', selectors: ['#verify'], label: 'Verify', risk: 'write', http: recipe('TOTP') },
+    { actionType: 'click', selectors: ['#next'] },
+    { actionType: 'click', selectors: ['#search'], http: recipe('SEARCH_KEY') },
+  ];
+  const compiled = (http: boolean): StudioTarget => {
+    const target = web(steps);
+    target.outputs = { ...NO_OUTPUTS, flags: { compiled: true, healSupport: false, http, pbtGenerated: false } };
+    return target;
+  };
+
+  it('requires only the typed secrets and the HTTP-planned recipe names, and reports the others as unused', () => {
+    const http = buildWorkflows([compiled(true)]).workflows[0];
+    expect(http.secretsBasis).toBe('http');
+    expect(http.secrets.map((s) => s.name)).toEqual(['PW', 'SEARCH_KEY']);
+    expect(http.unusedSecrets.map((s) => s.name)).toEqual(['TOTP']);
+    const ui = buildWorkflows([compiled(false)]).workflows[0];
+    expect(ui.secretsBasis).toBe('ui-only');
+    expect(ui.secrets.map((s) => s.name)).toEqual(['PW']);
+    expect(ui.unusedSecrets.map((s) => s.name)).toEqual(['SEARCH_KEY', 'TOTP']);
+  });
+
+  it('gives each required secret a status from the names that are configured, never a value', () => {
+    const { workflows } = buildWorkflows([compiled(true)], { configured: new Set(['DAEMONIZE_SECRET_PW']) });
+    expect(workflows[0].secrets).toEqual([
+      { name: 'PW', envVariable: 'DAEMONIZE_SECRET_PW', status: 'configured' },
+      { name: 'SEARCH_KEY', envVariable: 'DAEMONIZE_SECRET_SEARCH_KEY', status: 'missing' },
+    ]);
+    // Without a source the status is unknown
+    expect(buildWorkflows([compiled(true)]).workflows[0].secrets.every((s) => s.status === undefined)).toBe(true);
+  });
+
+  it('lists the write steps and says when the only write is the login', () => {
+    const [w] = buildWorkflows([compiled(true)]).workflows;
+    expect(w.writeSteps).toEqual([{ index: 1, label: 'Verify', risk: 'write', kind: 'login' }]);
+    expect(w.writeSummary).toBe('login-only');
+    expect(w.risk.highest).toBe('write');
+    const more = web([...steps, { actionType: 'click', selectors: ['#save'], risk: 'delete' }]);
+    const [m] = buildWorkflows([more]).workflows;
+    expect(m.writeSteps.map((x) => [x.index, x.kind, x.label])).toEqual([[1, 'login', 'Verify'], [4, 'action', 'click 5']]);
+    expect(m.writeSummary).toBe('actions');
+  });
+
+  it('reports none for a read-only workflow', () => {
+    const [w] = buildWorkflows([web([{ actionType: 'click', selectors: ['#a'] }])]).workflows;
+    expect(w.writeSteps).toEqual([]);
+    expect(w.writeSummary).toBe('none');
   });
 });
 

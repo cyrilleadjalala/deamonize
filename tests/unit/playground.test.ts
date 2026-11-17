@@ -165,6 +165,16 @@ describe('arguments: validation and redaction', () => {
 });
 
 describe('PlaygroundSession', () => {
+  it('reports which DAEMONIZE_SECRET_* variables the server would find, by name and never by value', async () => {
+    const { connect } = fakeServer();
+    const session = makeSession(connect, {
+      env: { DAEMONIZE_SECRET_CRM: 'pw-123', DAEMONIZE_SECRET_EMPTY: '', DAEMONIZE_SECRET_FROM_ENV: 'x', OTHER_SECRET: 'nope' },
+      launch: () => ({ command: process.execPath, args: ['server.js'], mcpEnv: { DAEMONIZE_SECRET_LITERAL: 'lit', DAEMONIZE_SECRET_PLACEHOLDER: '${DAEMONIZE_SECRET_PLACEHOLDER}', RANDOM: 'x' }, cwd: tmpdir() }),
+    });
+    const configured = await session.configuredSecretVariables();
+    expect([...configured].sort()).toEqual(['DAEMONIZE_SECRET_CRM', 'DAEMONIZE_SECRET_FROM_ENV', 'DAEMONIZE_SECRET_LITERAL']);
+    expect(JSON.stringify([...configured])).not.toContain('pw-123');
+  });
   it('starts lazily, lists the tools once and caches them', async () => {
     const { state, connect } = fakeServer();
     const session = makeSession(connect);

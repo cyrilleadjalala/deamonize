@@ -5,7 +5,8 @@ import { isAbsolute, join } from 'node:path';
 import { KiroPowerGenerator, toKebabCase } from '../../src/compiler/kiro-power-generator.js';
 import { Validator } from '@seriousme/openapi-schema-validator';
 import { Compiler } from '../../src/compiler/compiler.js';
-import { describeTool } from '../../src/compiler/tool-description.js';
+import { McpGenerator } from '../../src/compiler/mcp-generator.js';
+import { describeTool, httpSecretSplit, secretEnvNames } from '../../src/compiler/tool-description.js';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import type { Workflow, WorkflowSet } from '../../src/types.js';
 import { removeDir } from '../helpers/cleanup.js';
@@ -192,6 +193,60 @@ describe('describeTool', () => {
       )
     ).toBe('Search. Inputs: q (Search text), page.');
     expect(describeTool(workflow('x', 'Log out'))).toBe('Log out');
+  });
+});
+
+describe('secrets listed by mode', () => {
+  const recipe = (name: string) => ({ method: 'POST', url: 'https://app.test/api/x', query: {}, headers: { 'x-t': { $secret: name } }, bindings: [], redacted: [] });
+  // plan: ui, ui, ui, http: the login verify recipe sits on a step that stays on the page
+  const twoFactor = workflow('tf', 'Search clients', {
+    secrets: ['TYPED'],
+    steps: [
+      { actionType: 'type', selectors: ['#a'] },
+      { actionType: 'click', selectors: ['#b'], http: recipe('TOTP') },
+      { actionType: 'click', selectors: ['#c'] },
+      { actionType: 'click', selectors: ['#d'], http: recipe('SEARCH') },
+    ],
+  });
+
+  it('splits the recipe names by whether the compiled mode runs the step over HTTP', () => {
+    expect(httpSecretSplit(twoFactor, { http: true })).toEqual({ used: ['SEARCH'], unused: ['TOTP'] });
+    expect(httpSecretSplit(twoFactor, {})).toEqual({ used: [], unused: ['SEARCH', 'TOTP'] });
+  });
+
+  it('lists typed secrets always and recipe names only for HTTP-planned steps of a --http server', () => {
+    expect(secretEnvNames(twoFactor)).toEqual(['DAEMONIZE_SECRET_TYPED']);
+    expect(secretEnvNames(twoFactor, { http: false })).toEqual(['DAEMONIZE_SECRET_TYPED']);
+    expect(secretEnvNames(twoFactor, { http: true })).toEqual(['DAEMONIZE_SECRET_SEARCH', 'DAEMONIZE_SECRET_TYPED']);
+    expect(describeTool(twoFactor, { http: false })).not.toContain('TOTP');
+    expect(describeTool(twoFactor, { http: true })).not.toContain('TOTP');
+    expect(describeTool(twoFactor, { http: true })).toContain('DAEMONIZE_SECRET_SEARCH');
+  });
+
+  it('names the same secrets in mcp.json and SKILL.md as in the tool description', () => {
+    const toolNames = new Map([['tf', 'search_clients']]);
+    const web = { ...set, workflows: [twoFactor] };
+    const without = new KiroPowerGenerator().generate(web, toolNames, join(tmpdir(), 'out'), { http: 'off' });
+    expect(Object.keys(Object.values(without.mcp.mcpServers)[0]!.env).sort()).toEqual(['DAEMONIZE_MODE', 'DAEMONIZE_SECRET_TYPED']);
+    expect(without.skill).not.toContain('DAEMONIZE_SECRET_TOTP');
+    expect(without.skill).not.toContain('DAEMONIZE_SECRET_SEARCH');
+    const withHttp = new KiroPowerGenerator().generate(web, toolNames, join(tmpdir(), 'out'), { http: 'auto' });
+    expect(Object.keys(Object.values(withHttp.mcp.mcpServers)[0]!.env).sort()).toEqual(['DAEMONIZE_MODE', 'DAEMONIZE_SECRET_SEARCH', 'DAEMONIZE_SECRET_TYPED']);
+    expect(withHttp.skill).toContain('`DAEMONIZE_SECRET_SEARCH`');
+    expect(withHttp.skill).not.toContain('DAEMONIZE_SECRET_TOTP');
+  });
+
+  it('checks recipe secrets only for HTTP-planned steps in the generated replay, and not at all without --http', () => {
+    const web = { ...set, workflows: [twoFactor] };
+    const generator = new McpGenerator();
+    const withHttp = generator.generateReplay(web, { http: 'auto' });
+    expect(withHttp.indexOf('const plan = planSteps(steps)')).toBeLessThan(withHttp.indexOf('missingHttpSecrets(httpSteps'));
+    expect(withHttp).toContain('httpSecretValues(httpSteps');
+    const without = generator.generateReplay(web, {});
+    expect(without).not.toContain('missingHttpSecrets');
+    const docker = generator.generateDockerReplay(web, 'img', { http: 'auto' });
+    expect(docker).toContain('missingHttpSecrets(httpStepsOf(steps)');
+    expect(generator.generateDockerReplay(web, 'img', {})).toContain('const HTTP_MISSING_SECRETS = (_steps: Step[]): string[] => [];');
   });
 });
 

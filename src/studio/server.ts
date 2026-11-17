@@ -26,6 +26,7 @@ import {
   buildSchemas,
   buildWorkflows,
   isSecretStep,
+  type SecretStatusSource,
   type StudioOutputs,
   type StudioTarget,
 } from './model.js';
@@ -161,6 +162,22 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * True when the compiled server runs recipes over HTTP: `http-replay.js` exists (a stale file of an older compile
+ * does not count) and the compiled `replay.js` imports it. Read as text, capped at 1 MB; unreadable replay.js falls
+ * back to the file test.
+ */
+async function httpCompiled(outDir: string): Promise<boolean> {
+  if (!(await exists(join(outDir, 'http-replay.js')))) return false;
+  try {
+    const replay = join(outDir, 'replay.js');
+    if ((await stat(replay)).size > 1_000_000) return true;
+    return /from\s+["']\.\/http-replay\.js["']/.test(await readFile(replay, 'utf-8'));
+  } catch {
+    return true;
+  }
+}
+
 async function readOutputs(outDir: string): Promise<StudioOutputs> {
   const tryJson = async (name: string): Promise<unknown> => {
     try {
@@ -182,7 +199,7 @@ async function readOutputs(outDir: string): Promise<StudioOutputs> {
     flags: {
       compiled: await exists(join(outDir, 'mcp-server.js')),
       healSupport: await exists(join(outDir, 'heal', 'heal-step.js')),
-      http: await exists(join(outDir, 'http-replay.js')),
+      http: await httpCompiled(outDir),
       pbtGenerated: testTools.length > 0,
     },
     testTools,
@@ -295,7 +312,11 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     if (view === undefined) return undefined;
     return {
       risk: view.risk.highest,
-      sensitiveArgs: [...view.steps.flatMap((s) => (s.usesSecret && s.variable !== undefined ? [s.variable] : [])), ...view.secrets.map((s) => s.name)],
+      sensitiveArgs: [
+        ...view.steps.flatMap((s) => (s.usesSecret && s.variable !== undefined ? [s.variable] : [])),
+        ...view.secrets.map((s) => s.name),
+        ...view.unusedSecrets.map((s) => s.name),
+      ],
     };
   };
 
@@ -312,6 +333,18 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
         ...(sample ? { connect: sampleConnect, launch: sampleLaunch, healSupport: true } : {}),
       });
 
+  /** Which secrets the server would find configured: names only, none in sample mode (the sample environment is fictitious). */
+  const secretStatus = async (): Promise<SecretStatusSource | undefined> => {
+    if (sample) return undefined;
+    if (playground !== undefined) return { configured: await playground.configuredSecretVariables() };
+    return {
+      configured: new Set(
+        Object.entries(env)
+          .filter(([name, value]) => typeof value === 'string' && value !== '' && /^DAEMONIZE_SECRET_/i.test(name))
+          .map(([name]) => name.toUpperCase())
+      ),
+    };
+  };
   const baseHeaders = (): Record<string, string> => ({
     'Content-Security-Policy': CSP,
     'X-Content-Type-Options': 'nosniff',
@@ -433,7 +466,7 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
       try {
         const listed = await session.listTools();
         const data = await load().catch(() => undefined);
-        const views = data === undefined ? [] : buildWorkflows(data.targets).workflows;
+        const views = data === undefined ? [] : buildWorkflows(data.targets, await secretStatus()).workflows;
         tools = listed.map((tool) => {
           const view = views.find((w) => w.toolName === tool.name);
           const levels = view === undefined ? [] : [...new Set(view.steps.map((s) => s.primaryLevel))];
@@ -444,6 +477,8 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
             risk: view?.risk.highest ?? 'write',
             levels,
             secrets: view?.secrets ?? [],
+            unusedSecrets: view?.unusedSecrets ?? [],
+            ...(view === undefined ? {} : { secretsBasis: view.secretsBasis, writeSteps: view.writeSteps, writeSummary: view.writeSummary }),
             sensitiveArgs: view === undefined ? [] : view.steps.flatMap((s) => (s.usesSecret && s.variable !== undefined ? [s.variable] : [])),
             ...(view === undefined ? {} : { label: view.label }),
           };
@@ -554,7 +589,7 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
       case '/api/overview':
         return sendJson(res, 200, buildOverview(data.targets, sample), data.secretValues);
       case '/api/workflows':
-        return sendJson(res, 200, buildWorkflows(data.targets), data.secretValues);
+        return sendJson(res, 200, buildWorkflows(data.targets, await secretStatus()), data.secretValues);
       case '/api/graph':
         return sendJson(res, 200, buildGraph(data.targets, data.stateGraph), data.secretValues);
       case '/api/schemas':

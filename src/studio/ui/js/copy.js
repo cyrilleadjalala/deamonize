@@ -144,13 +144,34 @@ export const COPY = {
   powerSteps2: 'Choose to add a power from a local folder.',
   powerSteps3: 'Select the folder shown above and confirm.',
   notBuilt: 'Your tool is not built yet. Build it first, then connect it.',
-  previewFailed: 'The connection could not be prepared. Check the message, then try again.',
-  installFailed: 'The connection could not be made. Nothing was changed. Try again.',
+  previewFailed: 'The connection could not be prepared. Your Kiro files were left as they were. Check the message, then try again.',
+  installFailed: 'The connection could not be made. Your Kiro files were left as they were. Try again.',
+  scopeLegend: 'Where should Kiro offer this tool?',
+  scopeGlobal: 'All my projects',
+  scopeProject: 'Only this project',
+  scopeGlobalSentence: 'This tool will be available in every Kiro project you open.',
+  autoAddLabel: 'Keep Kiro up to date',
+  autoAddHelp: 'When this is on, Daemonize updates these Kiro files again after each successful try of your tool. You can turn it off at any time.',
+  autoAddNotSaved: 'This choice cannot be remembered on this computer, so it stays off.',
+  backupYes: 'A copy of your current Kiro settings file is kept next to it, with the ending .bak.',
+  backupNone: 'There is no previous settings file, so no backup is made.',
+  connectedReload: 'To see the change, open the panel in Kiro that lists tool servers and reload it, or restart Kiro.',
+  missingLead: 'These credentials have no value yet, so a call may fail until you add them:',
+  removeButton: 'Remove from Kiro',
+  removeLead: 'Already connected to Kiro:',
+  removeConfirmLead: 'This tool will be taken out of Kiro in this folder. Your other Kiro tools stay as they are:',
+  removeConfirm: 'Yes, remove it',
+  removing: 'Removing\u2026',
+  removedTitle: 'Your tool was removed from Kiro',
+  removedLead: 'These files were changed or deleted:',
+  removeFailed: 'The tool could not be removed from Kiro. Your Kiro files were left as they were. Try again.',
+  removeNothing: 'Nothing was left to remove.',
 
   // ----- demo and sample mode ------------------------------------------------------------------------------------
   demoNote: 'This is a demo. Install Daemonize to use this.',
 };
 
+export { COPY_SECRETS, allSecretsCopyTexts } from './copy-secrets.js';
 /** Texts that are the explicit technical option and are exempt from the plain-language lint. */
 export const TECHNICAL_TEXTS = new Set([COPY.copyMcp, COPY.copyMcpDone]);
 

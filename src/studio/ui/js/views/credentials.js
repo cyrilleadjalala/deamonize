@@ -1,8 +1,9 @@
 // @ts-check
 import { h } from '../dom.js';
-import { api, ApiError } from '../api.js';
+import { api, ApiError, postJson } from '../api.js';
 import { announce, pill } from '../components.js';
-import { COPY, configuredText, displayName, kindWord, reasonFor } from '../copy.js';
+import { COPY, displayName, kindWord, reasonFor } from '../copy.js';
+import { applicationText, valueStatusText } from '../copy-secrets.js';
 import { demoScreen } from './demo.js';
 
 export const REQUEST_TIMEOUT_MS = 10000;
@@ -31,13 +32,16 @@ async function withTimeout(send) {
  * One row: name, kind, status, a masked input with its label, Save and (while configured) Remove.
  * @param {{ name: string, kind: string, configured: boolean }} secret
  * @param {number} index
+ * @param {string} [application] the application origin the value belongs to, sent with save and forget
  */
-function credentialRow(secret, index) {
+export function credentialRow(secret, index, application) {
   const label = displayName(secret.name);
   const kind = secret.kind === 'totp' || secret.kind === 'token' ? secret.kind : 'password';
   const inputId = `secret-input-${index}`;
   const helpId = `secret-help-${index}`;
   const errorId = `secret-error-${index}`;
+  /** pplication is sent only when the server named one. */
+  const scope = typeof application === 'string' && application !== '' ? { application } : {};
   let configured = secret.configured === true;
   let pending = false;
 
@@ -60,7 +64,7 @@ function credentialRow(secret, index) {
   saveButton.setAttribute('aria-label', `${COPY.save} ${label}`);
 
   const refresh = () => {
-    statusHost.replaceChildren(pill(configured ? 'pass' : 'fail', configuredText(configured)));
+    statusHost.replaceChildren(pill(configured ? 'pass' : 'fail', valueStatusText(configured)));
     saveButton.disabled = pending || input.value.length < MIN_LENGTH;
     removeButton.disabled = pending;
     removeHost.replaceChildren(...(configured ? [removeButton] : []));
@@ -76,7 +80,7 @@ function credentialRow(secret, index) {
     refresh();
     let status = 0;
     try {
-      ({ status } = await withTimeout((signal) => api.secretSave(secret.name, value, signal)));
+      ({ status } = await withTimeout((signal) => postJson('/api/secrets', { name: secret.name, value, ...scope }, signal)));
     } finally {
       input.value = ''; // the value never stays in the page
       pending = false;
@@ -99,7 +103,7 @@ function credentialRow(secret, index) {
     refresh();
     let status = 0;
     try {
-      ({ status } = await withTimeout((signal) => api.secretForget(secret.name, signal)));
+      ({ status } = await withTimeout((signal) => postJson('/api/secrets/forget', { name: secret.name, ...scope }, signal)));
     } finally {
       pending = false;
       removeButton.textContent = COPY.remove;
@@ -127,6 +131,16 @@ function credentialRow(secret, index) {
   );
 }
 
+/**
+ * The list of one application's secrets, with the application line above it.
+ * @param {any[]} secrets @param {string} [application]
+ */
+export function credentialsList(secrets, application) {
+  return h('div', { class: 'secret-scope' },
+    h('p', { class: 'muted', id: 'credentials-application', text: applicationText(application) }),
+    h('ul', { class: 'plain-list secret-list' }, ...secrets.map((s, i) => credentialRow(s, i, application))));
+}
+
 /** @returns {Promise<HTMLElement>} */
 export async function renderCredentials() {
   const demo = await demoScreen(COPY.credentialsTitle);
@@ -146,7 +160,7 @@ export async function renderCredentials() {
         host.replaceChildren(h('p', { class: 'state empty', id: 'no-credentials', text: COPY.none }));
         return;
       }
-      host.replaceChildren(h('ul', { class: 'plain-list secret-list' }, ...secrets.map((s, i) => credentialRow(s, i))));
+      host.replaceChildren(credentialsList(secrets, answer?.application));
     } catch {
       host.replaceChildren(
         h('div', { class: 'state error', role: 'alert' },

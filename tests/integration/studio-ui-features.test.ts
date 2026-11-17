@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 vi.setConfig({ testTimeout: 90000, hookTimeout: 120000 });
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -193,7 +193,7 @@ describe('Studio UI first-flow screens (real Chromium, stubbed feature routes)',
     const row = page.locator('li[data-secret="CRM_PASSWORD"]');
     expect(await row.locator('.secret-name').textContent()).toBe('Crm password');
     expect(await row.textContent()).toContain('Password');
-    expect(await row.textContent()).toContain('Missing');
+    expect(await row.textContent()).toContain('has no value yet');
     expect(await page.locator('li[data-secret="CRM_TOTP"]').textContent()).toContain('Authenticator key');
     expect(await page.locator('li[data-secret="CRM_TOTP"] input').getAttribute('aria-describedby')).toContain('secret-help');
     const input = row.locator('input');
@@ -213,7 +213,7 @@ describe('Studio UI first-flow screens (real Chromium, stubbed feature routes)',
 
     await input.fill(secret);
     await save.click();
-    await expect.poll(() => row.textContent()).toContain('Configured');
+    await expect.poll(() => row.textContent()).toContain('has a value');
     expect(await input.inputValue()).toBe('');
     await expect.poll(live).toContain('Crm password saved');
     expect(await page.content()).not.toContain(secret);
@@ -222,7 +222,7 @@ describe('Studio UI first-flow screens (real Chromium, stubbed feature routes)',
     expect(bodies.some((b) => b.includes(secret))).toBe(true);
 
     await row.getByRole('button', { name: 'Remove Crm password' }).click();
-    await expect.poll(() => row.textContent()).toContain('Missing');
+    await expect.poll(() => row.textContent()).toContain('has no value yet');
     expect(await row.getByRole('button', { name: 'Remove Crm password' }).count()).toBe(0);
     await page.unroute('**/api/secrets');
     await page.unroute('**/api/secrets/forget');
@@ -312,7 +312,7 @@ describe('Studio UI first-flow screens (real Chromium, stubbed feature routes)',
     await connect.click();
     await page.locator('#connect-confirm').click();
     await expect.poll(() => posts.length).toBe(1);
-    expect(JSON.parse(posts[0])).toEqual({ confirmationId: 'id-1', kiroPath: '/work/project/.kiro' });
+    expect(JSON.parse(posts[0])).toEqual({ confirmationId: 'id-1', kiroPath: '/work/project/.kiro', scope: 'project' });
     await expect.poll(() => dialog.textContent()).toContain('DAEMONIZE_SECRET_CRM_PASSWORD');
     await page.locator('#connect-close').click();
     expect(await dialog.count()).toBe(0);

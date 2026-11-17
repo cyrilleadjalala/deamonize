@@ -3,6 +3,7 @@ import { h, clear } from '../dom.js';
 import { api, ApiError, isStatic } from '../api.js';
 import { COPY } from '../copy.js';
 import { announce, chip, copyButton, emptyState, levelBadge, pill, riskBadge, toolName as toolNameChip } from '../components.js';
+import { autoAddText } from '../copy-secrets.js';
 import { secretsSection } from '../secrets-view.js';
 import { buildArguments, describeField, fieldsFromSchema, formatElapsed, initialValues, parseTimeout } from '../schema-form.js';
 
@@ -144,6 +145,17 @@ function resultPanel(r) {
 
   return h('section', { class: 'panel pg-result', 'aria-labelledby': 'pg-result-title', dataset: { result: isRefusal ? 'refused' : bridgeError ? 'error' : success ? 'success' : 'failed' } },
     h('h3', { id: 'pg-result-title', class: 'panel-title', text: 'Result' }), ...body);
+}
+
+/**
+ * A short plain line for the auto-add result of a call. Only `added` and `failed` show a line.
+ * @param {any} autoAdd
+ * @returns {HTMLElement | null}
+ */
+export function autoAddLine(autoAdd) {
+  const text = autoAddText(autoAdd);
+  if (text === null) return null;
+  return h('p', { class: autoAdd.status === 'failed' ? 'notice error-text' : 'notice', role: 'note', id: 'pg-auto-add', dataset: { autoAdd: String(autoAdd.status) }, text });
 }
 
 /** @param {any[]} history */
@@ -402,6 +414,8 @@ function mount(root, info) {
 
     const showResult = (r) => {
       resultHost.replaceChildren(resultPanel(r));
+      const line = autoAddLine(r?.autoAdd);
+      if (line !== null) resultHost.append(line);
       const ok = r.ok !== false && r.success === true;
       announce(r.refused ? 'The call was refused before reaching the server' : r.ok === false ? `The call did not complete: ${r.error}` : ok ? 'Call succeeded' : 'Call failed');
     };

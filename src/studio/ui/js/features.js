@@ -22,3 +22,5 @@ export const FEATURE_VIEWS = {
   record: { title: COPY.recordTitle, render: renderRecordStatus },
   credentials: { title: COPY.credentialsTitle, render: renderCredentials },
 };
+/** The scope choice, auto-add and removal of the connect screen are hidden in the static demo and in sample mode. @param {any} overview */
+export const connectFeaturesVisible = (overview) => overview?.sample !== true && globalThis.document?.querySelector('meta[name="daemonize-mode"]')?.getAttribute('content') !== 'static';

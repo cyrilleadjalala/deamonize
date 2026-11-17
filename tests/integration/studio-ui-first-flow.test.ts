@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { startStudio, type StudioHandle } from '../../src/studio/server.js';
 import { removeDir } from '../helpers/cleanup.js';
+import { deriveSlug } from '../../src/studio/app-names.js';
 
 // The first flow of a new user, end to end, in a real Chromium against the REAL Studio backend: no route of the
 // feature APIs is intercepted. The recorded application is a small local fixture (a login with a password, then a
@@ -31,6 +32,7 @@ const homePage = (q: string): string => `<!doctype html><html><head><title>Items
 describe('Studio first flow in a real browser, real backend', () => {
   let base: string;
   let dir: string;
+  let appOut: string;
   let appData: string;
   let ws: string;
   let fixture: Server;
@@ -97,6 +99,10 @@ describe('Studio first flow in a real browser, real backend', () => {
     });
     await new Promise<void>((done) => fixture.listen(0, '127.0.0.1', done));
     fixtureUrl = `http://127.0.0.1:${(fixture.address() as AddressInfo).port}/login`;
+    // The tool of this application is built in its own folder next to `out`; give it the same dependencies
+    appOut = join(dir, deriveSlug({ origin: new URL(fixtureUrl).origin }));
+    await mkdir(appOut, { recursive: true });
+    await symlink(join(workspaceRoot, 'node_modules'), join(appOut, 'node_modules'), 'junction');
 
     const chromiumEnv: Record<string, string> = process.env.DAEMONIZE_CHROMIUM_PATH ? { DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH } : {};
     studio = await startStudio({
@@ -206,7 +212,7 @@ describe('Studio first flow in a real browser, real backend', () => {
     const file = await readFile(join(dir, 'daemonize.workflows.json'), 'utf-8');
     expect(file).not.toContain(PASSWORD);
     expect(JSON.parse(file).workflows).toHaveLength(1);
-    const outFiles = await readdir(join(dir, 'out'));
+    const outFiles = await readdir(appOut);
     expect(outFiles).toContain('mcp-server.js');
   });
 
@@ -216,11 +222,11 @@ describe('Studio first flow in a real browser, real backend', () => {
     await row.waitFor();
     passwordSecretName = (await row.getAttribute('data-secret')) ?? '';
     expect(passwordSecretName).not.toBe('');
-    expect(await row.textContent()).toContain('Missing');
+    expect(await row.textContent()).toContain('has no value yet');
     const input = row.locator('input');
     await input.fill(PASSWORD);
     await row.locator('[data-action=save]').click();
-    await expect.poll(() => row.textContent()).toContain('Configured');
+    await expect.poll(() => row.textContent()).toContain('has a value');
     expect(await input.inputValue()).toBe('');
     await expect.poll(live).toContain('saved');
     expect(await page.content()).not.toContain(PASSWORD);
@@ -228,7 +234,7 @@ describe('Studio first flow in a real browser, real backend', () => {
     expect(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage, document.cookie]))).not.toContain(PASSWORD);
     // It survives a reload as "Configured", still with no value in the page
     await open('#/credentials');
-    expect(await page.locator(`[data-secret="${passwordSecretName}"]`).textContent()).toContain('Configured');
+    expect(await page.locator(`[data-secret="${passwordSecretName}"]`).textContent()).toContain('has a value');
     expect(await page.content()).not.toContain(PASSWORD);
   });
 
@@ -254,18 +260,21 @@ describe('Studio first flow in a real browser, real backend', () => {
       .toBe(1);
   });
 
-  it('connects to Kiro with placeholders only', async () => {
+  it('connects to Kiro without writing the password, with no placeholder for a stored one', async () => {
     await open('#/record');
     await page.locator('#connect-btn').waitFor();
+    await page.locator('#connect-scope-project').check();
     await page.locator('#connect-folder').fill(ws);
     await page.locator('#connect-btn').click();
     const dialog = page.locator('[role="dialog"]');
     await dialog.waitFor();
     await page.locator('#connect-confirm').click();
-    await expect.poll(() => dialog.textContent(), { timeout: 20000 }).toContain('DAEMONIZE_SECRET_');
+    await expect.poll(() => dialog.textContent(), { timeout: 20000 }).toContain('Your tool is connected');
     await page.locator('#connect-close').click();
     const text = await readFile(join(ws, '.kiro', 'settings', 'mcp.json'), 'utf-8');
-    expect(text).toContain('${DAEMONIZE_SECRET_');
+    // The password is stored in the vault (previous test), so the entry needs no placeholder for it
+    expect(text).not.toContain('${DAEMONIZE_SECRET_');
+    expect(text).toContain('DAEMONIZE_APP_KEY');
     expect(text).not.toContain(PASSWORD);
   });
 

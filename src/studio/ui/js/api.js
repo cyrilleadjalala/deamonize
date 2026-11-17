@@ -204,8 +204,13 @@ export const api = {
   compileStatus: () => getFresh('/api/compile/status'),
   powerInfo: () => getFresh('/api/power/info'),
   powerSnippet: () => getFresh('/api/power/snippet'),
-  powerPreview: (workspacePath) => postJson('/api/power/preview', { workspacePath }),
-  powerInstall: (confirmationId, kiroPath) => postJson('/api/power/install', { confirmationId, kiroPath }),
+  /** @param {string} scope 'global' or 'project' @param {string} [workspacePath] only for project */
+  powerPreview: (scope, workspacePath) => postJson('/api/power/preview', scope === 'project' ? { scope, workspacePath } : { scope }),
+  /** utoAdd: true is sent only when the user ticked the box. */
+  powerInstall: (confirmationId, kiroPath, scope, autoAdd) => postJson('/api/power/install', autoAdd === true ? { confirmationId, kiroPath, scope, autoAdd: true } : { confirmationId, kiroPath, scope }),
+  powerRemove: (scope) => postJson('/api/power/remove', { scope }),
+  powerAutoAdd: () => getFresh('/api/power/auto-add'),
+  powerAutoAddOff: () => postJson('/api/power/auto-add', { enabled: false }),
   workflows: () => get('/api/workflows'),
   graph: () => get('/api/graph'),
   schemas: () => get('/api/schemas'),

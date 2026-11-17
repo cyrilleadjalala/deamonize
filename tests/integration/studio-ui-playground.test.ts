@@ -47,7 +47,8 @@ function watch(page: Page): Problems {
   page.on('pageerror', (e) => problems.pageErrors.push(e.message));
   page.on('requestfailed', (r) => {
     // An aborted call is the point of one test
-    if (!/\/api\/playground\/call$/.test(r.url())) problems.failedRequests.push(`${r.url()} ${r.failure()?.errorText ?? ''}`);
+    // A navigation cancels the reads of the connect card that were still in flight
+    if (!/\/api\/playground\/call$/.test(r.url()) && !(/\/api\/power\//.test(r.url()) && /ERR_ABORTED/.test(r.failure()?.errorText ?? ''))) problems.failedRequests.push(`${r.url()} ${r.failure()?.errorText ?? ''}`);
   });
   page.on('response', (r) => {
     if (r.status() >= 400 && !(r.status() === 409 && r.url().endsWith('/api/playground/call'))) problems.badResponses.push(`${r.status()} ${r.url()}`);

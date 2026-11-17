@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { PowerError } from '../../src/studio/contracts.js';
 import { StudioCompileRunner } from '../../src/studio/compile-runner.js';
 import { buildSnippetText } from '../../src/studio/mcp-snippet.js';
+import { createInstallRecords } from '../../src/studio/install-records.js';
+import { createAutoAddStore } from '../../src/studio/auto-add-store.js';
 import { createPowerInstaller } from '../../src/studio/power-installer.js';
 import { SERVER, writeCompiledOutput } from '../helpers/power-fixture.js';
 import { removeDir } from '../helpers/cleanup.js';
@@ -37,7 +39,16 @@ describe('studio compile and power properties', () => {
     return { out, ws };
   };
   const installerFor = (out: string, ws: string) =>
-    createPowerInstaller({ outDir: out, cwd: ws, appData: { dir: join(base, 'appdata'), ensure: async () => ({ ok: false, problem: 'unresolved' }), check: async () => ({ ok: false, problem: 'unresolved' }) } as never });
+    createPowerInstaller({
+      locate: async () => ({ slug: SERVER, outDir: out, legacy: false }),
+      cwd: ws,
+      home: join(out, '..', 'home'),
+      // ensure works so the install record can be stored; check is not ok so the snippet carries no data folder
+      appData: { dir: join(base, 'appdata'), ensure: async () => { await mkdir(join(base, 'appdata'), { recursive: true }); return { ok: true, dir: join(base, 'appdata') }; }, check: async () => ({ ok: false, problem: 'unresolved' }) },
+      vault: { names: async () => new Set<string>(), namesFor: async () => new Set<string>() },
+      records: createInstallRecords({ appData: { dir: join(base, 'appdata'), ensure: async () => { await mkdir(join(base, 'appdata'), { recursive: true }); return { ok: true, dir: join(base, 'appdata') }; }, check: async () => ({ ok: true, dir: join(base, 'appdata') }) } }),
+      autoAdd: createAutoAddStore({ appData: { dir: join(base, 'appdata'), ensure: async () => ({ ok: true, dir: join(base, 'appdata') }), check: async () => ({ ok: true, dir: join(base, 'appdata') }) } }),
+    });
   const files = async (dir: string, prefix = ''): Promise<string[]> => {
     const found: string[] = [];
     for (const e of await readdir(dir, { withFileTypes: true })) {
@@ -61,7 +72,7 @@ describe('studio compile and power properties', () => {
           const gate = new Promise<void>((r) => (release = r));
           const runner = new StudioCompileRunner({
             workflowFile: join(base, 'w.json'),
-            outDir: join(base, 'no-out'),
+            target: async () => ({ outDir: join(base, 'no-out'), slug: 'app' }),
             playground: () => undefined,
             scrub: (t) => t,
             paths: [],
@@ -100,7 +111,7 @@ describe('studio compile and power properties', () => {
       fc.asyncProperty(word, fc.constantFrom('C:\\Users\\bob\\proj', '/home/bob/proj', '\\\\server\\share\\x', join(base, 'x')), fc.boolean(), async (secret, path, wrote) => {
         const runner = new StudioCompileRunner({
           workflowFile: join(base, 'w.json'),
-          outDir: join(base, 'no-out'),
+          target: async () => ({ outDir: join(base, 'no-out'), slug: 'app' }),
           playground: () => undefined,
           scrub: (t) => t.split(secret).join('***'),
           paths: [base],
@@ -132,7 +143,7 @@ describe('studio compile and power properties', () => {
       fc.asyncProperty(fc.oneof(fc.string(), fc.constant(undefined), fc.integer()), fc.string(), fc.boolean(), async (id, path, swap) => {
         const { out, ws } = await fresh();
         const power = installerFor(out, ws);
-        const preview = await power.preview(ws);
+        const preview = await power.preview({ scope: 'project', workspacePath: ws });
         const before = await files(ws);
         const wrongId = id === preview.confirmationId ? 'x' : id;
         const wrongPath = path === preview.kiroPath ? `${path}x` : path;
@@ -140,11 +151,11 @@ describe('studio compile and power properties', () => {
           ? [{ confirmationId: preview.confirmationId, kiroPath: wrongPath }, { confirmationId: wrongId, kiroPath: preview.kiroPath }]
           : [{ confirmationId: wrongId, kiroPath: wrongPath }];
         for (const attempt of attempts) {
-          await expect(power.install(attempt)).rejects.toMatchObject({ status: 400 });
+          await expect(power.install({ ...attempt, scope: 'project' })).rejects.toMatchObject({ status: 409 });
         }
         expect(await files(ws)).toEqual(before);
         // The right pair still works after failed attempts
-        await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath });
+        await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope: 'project' });
       }),
       RUNS
     );
@@ -166,7 +177,7 @@ describe('studio compile and power properties', () => {
           const root = join(out, '..');
           const before = await files(root);
           const power = installerFor(out, ws);
-          const error = await power.preview(candidate).then(() => undefined, (e: unknown) => e);
+          const error = await power.preview({ scope: 'project', workspacePath: candidate }).then(() => undefined, (e: unknown) => e);
           expect(error).toBeInstanceOf(PowerError);
           expect(await files(root)).toEqual(before);
         }
@@ -181,8 +192,8 @@ describe('studio compile and power properties', () => {
         const root = join(out, '..');
         const before = (await files(root)).filter((f) => !f.startsWith('out/'));
         const power = installerFor(out, ws);
-        const preview = await power.preview(target);
-        await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath });
+        const preview = await power.preview({ scope: 'project', workspacePath: target });
+        await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope: 'project' });
         const added = (await files(root)).filter((f) => !f.startsWith('out/') && !before.includes(f));
         expect(added.length).toBe(2);
         for (const f of added) expect(f.startsWith(`ws/${folder}/.kiro/`)).toBe(true);
@@ -205,8 +216,8 @@ describe('studio compile and power properties', () => {
           const file = join(ws, '.kiro', 'settings', 'mcp.json');
           await writeFile(file, JSON.stringify({ ...top, mcpServers: servers }));
           const power = installerFor(out, ws);
-          const preview = await power.preview(ws);
-          await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath });
+          const preview = await power.preview({ scope: 'project', workspacePath: ws });
+          await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope: 'project' });
           const merged = JSON.parse(await readFile(file, 'utf-8')) as Record<string, unknown> & { mcpServers: Record<string, unknown> };
           for (const [k, v] of Object.entries(top)) expect(merged[k]).toEqual(v);
           for (const [k, v] of Object.entries(servers)) expect(merged.mcpServers[k]).toEqual(v);
@@ -222,7 +233,7 @@ describe('studio compile and power properties', () => {
         const file = join(ws, '.kiro', 'settings', 'mcp.json');
         await writeFile(file, content);
         const power = installerFor(out, ws);
-        await expect(power.preview(ws)).rejects.toMatchObject({ status: 409 });
+        await expect(power.preview({ scope: 'project', workspacePath: ws })).rejects.toMatchObject({ status: 409 });
         expect(await readFile(file, 'utf-8')).toBe(content);
         expect(await files(ws)).toEqual(['.kiro/settings/mcp.json']);
       }),
@@ -244,8 +255,8 @@ describe('studio compile and power properties', () => {
           source.mcpServers[SERVER]!.env = { ...otherEnv, ...secretEnv };
           await writeFile(join(out, 'mcp.json'), JSON.stringify(source));
           const power = installerFor(out, ws);
-          const preview = await power.preview(ws);
-          const result = await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath });
+          const preview = await power.preview({ scope: 'project', workspacePath: ws });
+          const result = await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope: 'project' });
           const values = [...Object.values(secretEnv), ...Object.values(otherEnv)];
           const written = await readFile(join(ws, '.kiro', 'settings', 'mcp.json'), 'utf-8');
           const snippet = await power.snippet();

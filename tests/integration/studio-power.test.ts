@@ -35,7 +35,7 @@ describe('Studio power flow', () => {
     const workflowFile = join(base, 'daemonize.workflows.json');
     const compiler = createCompileRunner({
       workflowFile,
-      outDir: out,
+      target: async () => ({ outDir: out, slug: 'app' }),
       playground: () => undefined,
       scrub: (t) => t,
       paths: [base],
@@ -50,6 +50,7 @@ describe('Studio power flow', () => {
       outDir: out,
       staticDir: join(base, 'ui'),
       env: { DAEMONIZE_DATA_DIR: join(base, 'appdata') },
+      home: join(base, 'home'),
       services: { compiler },
     });
     const h = handle;
@@ -74,7 +75,7 @@ describe('Studio power flow', () => {
     await mkdir(join(ws, '.kiro', 'settings'), { recursive: true });
     await writeFile(join(ws, '.kiro', 'settings', 'mcp.json'), JSON.stringify({ mcpServers: { other: { command: 'x' } } }));
 
-    const preview = await call('POST', '/api/power/preview', { workspacePath: ws });
+    const preview = await call('POST', '/api/power/preview', { scope: 'project', workspacePath: ws });
     expect(preview.status).toBe(200);
     expect(preview.json?.files).toEqual([
       { path: 'settings/mcp.json', outcome: 'merge' },
@@ -82,12 +83,12 @@ describe('Studio power flow', () => {
     ]);
     expect(preview.json?.placeholders).toEqual(['DAEMONIZE_SECRET_PASSWORD', 'DAEMONIZE_SECRET_TOTP']);
 
-    const wrong = await call('POST', '/api/power/install', { confirmationId: preview.json?.confirmationId, kiroPath: 'elsewhere' });
-    expect(wrong.status).toBe(400);
+    const wrong = await call('POST', '/api/power/install', { confirmationId: preview.json?.confirmationId, kiroPath: 'elsewhere', scope: 'project' });
+    expect(wrong.status).toBe(409);
 
-    const done = await call('POST', '/api/power/install', { confirmationId: preview.json?.confirmationId, kiroPath: preview.json?.kiroPath });
+    const done = await call('POST', '/api/power/install', { confirmationId: preview.json?.confirmationId, kiroPath: preview.json?.kiroPath, scope: 'project' });
     expect(done.status).toBe(200);
-    expect(done.json?.written).toEqual(['settings/mcp.json', `skills/${SERVER}/SKILL.md`]);
+    expect(done.json?.written).toEqual([join(ws, '.kiro', 'settings', 'mcp.json'), join(ws, '.kiro', 'skills', SERVER, 'SKILL.md')]);
     const merged = JSON.parse(await readFile(join(ws, '.kiro', 'settings', 'mcp.json'), 'utf-8')) as { mcpServers: Record<string, unknown> };
     expect(Object.keys(merged.mcpServers)).toEqual(['other', SERVER]);
     expect(JSON.stringify(merged)).not.toContain(FAKE_SECRET_VALUE);

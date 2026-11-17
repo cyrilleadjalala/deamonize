@@ -24,10 +24,31 @@ export function placeholderEnv(sourceEnv: unknown): Record<string, string> {
   return env;
 }
 
-/** Rebuilds the entry: fixed shape, absolute server path, placeholders only. */
-export function buildServerEntry(source: unknown, serverJsPath: string): ServerEntry {
+export interface EntryContext {
+  /** Absolute App_Data_Dir; omitted from the entry when undefined or empty. */
+  dataDir?: string;
+  applicationKey?: string;
+  /** Secret_Names with a stored value (names only). Either `PASSWORD` or `DAEMONIZE_SECRET_PASSWORD` is accepted. */
+  configuredNames?: ReadonlySet<string>;
+}
+
+/**
+ * Rebuilds the entry: exactly `type`, `command`, `args`, `env`. `env` holds the strict mode, the data folder and the
+ * application key as plain values, and a `${NAME}` placeholder for every required secret that is not stored.
+ * A value of the source is never copied. Without `ctx` the entry carries a placeholder for every required secret.
+ */
+export function buildServerEntry(source: unknown, serverJsPath: string, ctx: EntryContext = {}): ServerEntry {
   const sourceEnv = typeof source === 'object' && source !== null ? (source as { env?: unknown }).env : undefined;
-  return { type: 'stdio', command: 'node', args: [serverJsPath], env: placeholderEnv(sourceEnv) };
+  const configured = ctx.configuredNames ?? new Set<string>();
+  const env: Record<string, string> = { DAEMONIZE_MODE: 'strict' };
+  if (ctx.dataDir !== undefined && ctx.dataDir !== '') env.DAEMONIZE_DATA_DIR = ctx.dataDir;
+  if (ctx.applicationKey !== undefined && ctx.applicationKey !== '') env.DAEMONIZE_APP_KEY = ctx.applicationKey;
+  for (const [key, value] of Object.entries(placeholderEnv(sourceEnv))) {
+    if (key === 'DAEMONIZE_MODE') continue;
+    if (SECRET_NAME.test(key) && (configured.has(key) || configured.has(key.slice('DAEMONIZE_SECRET_'.length)))) continue;
+    env[key] = value;
+  }
+  return { type: 'stdio', command: 'node', args: [serverJsPath], env };
 }
 
 /** `DAEMONIZE_SECRET_*` names held by an entry. */

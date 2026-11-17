@@ -3,7 +3,7 @@
  * Daemonize Studio: a dependency-free single-page app. Hash routes, one module per view, no build step.
  */
 import { h, clear } from './js/dom.js';
-import { api, ApiError, isStatic } from './js/api.js';
+import { api, ApiError, isDemo, isStatic } from './js/api.js';
 import { startRouter } from './js/router.js';
 import { announce, errorState, loadingState } from './js/components.js';
 import { renderOverview } from './js/views/overview.js';
@@ -39,6 +39,8 @@ async function showBanner() {
   if (banner === null) return;
   try {
     const overview = await api.overview();
+    // The credentials page needs a live Studio: it stays hidden in the static demo and in sample mode
+    if (!isDemo(overview)) document.getElementById('nav-credentials')?.removeAttribute('hidden');
     if (isStatic) {
       clear(banner);
       banner.append(

@@ -2102,3 +2102,131 @@ select.input {
 .write-note ul, .pg-dialog #pg-confirm-writes ul { margin: 0.25rem 0 0; }
 .pg-dialog #pg-confirm-writes { margin: 0.5rem 0; font-size: 0.9rem; }
 .secrets-section .secrets-unused { margin-top: 0.5rem; }
+
+/* ---------- first flow: welcome, new action, recording status, credentials, connect, dialog ---------- */
+.welcome {
+  max-width: 720px;
+}
+
+.welcome-steps {
+  padding-left: 1.4rem;
+  margin: 0 0 16px;
+}
+
+.welcome-steps li {
+  margin-bottom: 6px;
+}
+
+.overview-actions {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.new-action-host:not(:empty) {
+  margin-top: 12px;
+}
+
+.new-action-form {
+  max-width: 640px;
+}
+
+.new-action-form .input,
+.secret-row .input,
+.connect-card .input {
+  width: 100%;
+  max-width: 560px;
+}
+
+.record-state {
+  font-size: 1.1rem;
+  margin: 0 0 8px;
+}
+
+.record-labels {
+  margin: 8px 0 12px;
+}
+
+.secret-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.secret-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.secret-remove {
+  display: inline-flex;
+}
+
+.connect-card {
+  margin-top: 16px;
+}
+
+.connect-power {
+  margin-top: 12px;
+}
+
+code.path {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.connect-files {
+  margin: 8px 0 12px;
+}
+
+.connect-files .outcome {
+  display: inline-block;
+  min-width: 4.5rem;
+  font-weight: 600;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 16px;
+}
+
+.dialog {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  width: min(640px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: var(--shadow);
+}
+
+.dialog-title {
+  margin-top: 0;
+}
+
+.secret-row input:focus-visible,
+.new-action-form input:focus-visible,
+.connect-card input:focus-visible,
+.dialog button:focus-visible,
+.dialog a:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--red);
+}

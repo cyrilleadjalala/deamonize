@@ -160,9 +160,52 @@ export function invalidate(path) {
   cache.delete(path);
 }
 
+/** GET that never uses the page cache (status polls and lists the user just changed). @param {string} path @returns {Promise<any>} */
+export function getFresh(path) {
+  invalidate(path);
+  return request(path);
+}
+
+/**
+ * An old server or the static demo sends no `workflowFileExists`: it is read as true.
+ * @param {any} overview
+ */
+function normalizeOverview(overview) {
+  if (overview === null || typeof overview !== 'object') return overview;
+  return { ...overview, workflowFileExists: overview.workflowFileExists !== false, recordingActive: overview.recordingActive === true };
+}
+
+/** True when the new features must stay hidden: the static demo, or the Studio started with --sample. @param {any} overview */
+export const isDemo = (overview) => isStatic || overview?.sample === true;
+
+export { postJson };
+
 export const api = {
   /** @returns {Promise<any>} */
-  overview: () => get('/api/overview'),
+  overview: async () => normalizeOverview(await get('/api/overview')),
+  /** Same as `overview` but read again from the server. */
+  overviewFresh: async () => normalizeOverview(await getFresh('/api/overview')),
+  workflowsFresh: () => getFresh('/api/workflows'),
+  // ----- recording and sessions ------------------------------------------------------------------------------
+  recordStart: (payload) => postJson('/api/record/start', payload),
+  recordStatus: () => getFresh('/api/record/status'),
+  recordStop: () => postJson('/api/record/stop', {}),
+  /** `{ applicationKey, available }`. Only the Application_Key (an origin) is sent, never the full address. */
+  sessionFor: (key) => getFresh(`/api/sessions?key=${encodeURIComponent(key)}`),
+  sessions: () => getFresh('/api/sessions'),
+  sessionForget: (applicationKey) => postJson('/api/sessions/forget', { applicationKey }),
+  // ----- credentials -------------------------------------------------------------------------------------------
+  secrets: () => getFresh('/api/secrets'),
+  /** The value travels in the body of this one request and nowhere else. */
+  secretSave: (name, value, signal) => postJson('/api/secrets', { name, value }, signal),
+  secretForget: (name, signal) => postJson('/api/secrets/forget', { name }, signal),
+  // ----- compile and connect -----------------------------------------------------------------------------------
+  compileStart: () => postJson('/api/compile', {}),
+  compileStatus: () => getFresh('/api/compile/status'),
+  powerInfo: () => getFresh('/api/power/info'),
+  powerSnippet: () => getFresh('/api/power/snippet'),
+  powerPreview: (workspacePath) => postJson('/api/power/preview', { workspacePath }),
+  powerInstall: (confirmationId, kiroPath) => postJson('/api/power/install', { confirmationId, kiroPath }),
   workflows: () => get('/api/workflows'),
   graph: () => get('/api/graph'),
   schemas: () => get('/api/schemas'),

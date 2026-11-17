@@ -1,7 +1,9 @@
 // @ts-check
 import { h } from '../dom.js';
-import { api } from '../api.js';
-import { chip, emptyState, levelBadge, levelLegend, panel, riskBadge, toolName, varChip } from '../components.js';
+import { api, isDemo } from '../api.js';
+import { announce, chip, emptyState, levelBadge, levelLegend, panel, riskBadge, toolName, varChip } from '../components.js';
+import { COPY } from '../copy.js';
+import { applicationKey } from '../validate.js';
 import { WEB_LEVELS } from '../levels.js';
 import { href } from '../router.js';
 import { secretsSection } from '../secrets-view.js';
@@ -123,8 +125,49 @@ function writeNote(wf) {
           `Step ${s.index + 1}: ${s.label} (${s.risk})`,
           s.kind === 'login' ? h('span', { class: 'muted', text: ' \u00B7 login form' }) : null))));
 }
-/** @param {any} wf */
-function detail(wf) {
+/**
+ * "Saved session available: yes/no" for the application of a web action, with a "Forget session" button that is
+ * enabled only for "yes". Only the Application_Key (an origin) is ever shown or sent.
+ * @param {any} wf @param {any} overview
+ * @returns {HTMLElement | null}
+ */
+function sessionPanel(wf, overview) {
+  const target = (overview?.targets ?? []).find((t) => t.name === wf.target.name && t.type === wf.target.type);
+  const key = wf.target.type === 'web' && typeof target?.start === 'string' ? applicationKey(target.start) : undefined;
+  if (key === undefined) return null;
+  const text = h('p', { id: 'session-text', role: 'status', text: COPY.hintChecking });
+  const error = h('p', { class: 'error-text', role: 'alert' });
+  const forget = /** @type {HTMLButtonElement} */ (h('button', { type: 'button', class: 'btn btn-small', id: 'forget-session', disabled: true, text: COPY.forgetSession }));
+  const show = (available) => {
+    text.textContent = available ? COPY.sessionYes : COPY.sessionNo;
+    forget.disabled = !available;
+  };
+  api
+    .sessionFor(key)
+    .then((answer) => show(answer?.available === true))
+    .catch(() => show(false));
+  forget.addEventListener('click', async () => {
+    forget.disabled = true;
+    error.textContent = '';
+    try {
+      const { status } = await api.sessionForget(key);
+      if (status === 200) {
+        show(false);
+        announce(COPY.sessionForgotten);
+      } else {
+        error.textContent = COPY.sessionForgetFailed;
+        forget.disabled = false;
+      }
+    } catch {
+      error.textContent = COPY.sessionForgetFailed;
+      forget.disabled = false;
+    }
+  });
+  return panel('p-session', 'Signed-in session', h('p', { class: 'muted small' }, h('code', { text: key })), text, forget, error);
+}
+
+/** @param {any} wf @param {any} [overview] the overview, set only when the new features are shown */
+function detail(wf, overview) {
   const vars = wf.variables.length
     ? h('div', { class: 'table-wrap' },
         h(
@@ -178,7 +221,9 @@ function detail(wf) {
       h('div', { class: 'side' },
         panel('p-facts', 'About', facts),
         panel('p-vars', 'Variables', vars),
-        panel('p-secrets', 'Secrets needed', secrets, h('p', { class: 'muted small', text: 'Names only. Set them as environment variables when the tool runs.' })))
+        panel('p-secrets', 'Secrets needed', secrets, h('p', { class: 'muted small', text: 'Names only. Set them as environment variables when the tool runs.' }),
+          overview ? h('p', null, h('a', { class: 'btn btn-small', href: href('credentials'), text: COPY.credentialsLink })) : null),
+        overview ? sessionPanel(wf, overview) : null)
     )
   );
 }
@@ -186,6 +231,8 @@ function detail(wf) {
 /** @param {{ parts: string[] }} route */
 export async function renderWorkflows(route) {
   const { workflows, truncated } = await api.workflows();
+  const overview = await api.overview().catch(() => null);
+  const features = overview !== null && !isDemo(overview) ? overview : undefined;
   const activeId = route.parts[0];
   const active = workflows.find((w) => w.id === activeId);
   const root = h('div', { class: 'view view-workflows' });
@@ -219,7 +266,7 @@ export async function renderWorkflows(route) {
   root.appendChild(h('h1', { class: 'view-title', tabindex: active ? undefined : '-1', text: 'Workflows' }));
   const main = h('div', { class: 'wf-main' },
     active
-      ? detail(active)
+      ? detail(active, features)
       : h('div', { class: 'state empty' },
           h('p', { class: 'state-title', text: 'Pick a workflow' }),
           h('p', { class: 'muted', text: 'Each one becomes a tool. Open it to see its steps, the replay level of each step, and what it needs.' }),

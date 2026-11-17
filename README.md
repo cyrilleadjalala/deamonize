@@ -149,6 +149,28 @@ Detail: [docs/secrets.md](docs/secrets.md).
 - **Result.** `--result-rect` and `--result-regex` (named groups become `data`, flag `g` gives an array), `--final-rect` for the drift region.
 - **Sandbox.** `record` and `compile` store `--sandbox-image`, `--sandbox-package`, `--sandbox-install`, `--sandbox-network` in the workflow file. `sandbox build [dir]` accepts `--image`, `--package`, `--install`, `--network`, `--tag`, `--no-cache` and `--print` (prints the Dockerfile and builds nothing).
 
+## Studio-first
+
+You can run the whole cycle from the Studio, without a terminal after the first command.
+
+```bash
+daemonize          # no command: the same as `daemonize studio --open`; Ctrl+C stops it
+```
+
+1. **Start.** `daemonize` opens the Studio in your browser. With no workflow file yet, the first screen is a welcome screen. Nothing is created on disk until you record.
+2. **New action.** Press **+ New action**, give the action a name and the web address where the task starts. Tick **Reuse my signed-in session** to keep your sign-in between recordings.
+3. **Record.** A browser window opens on that address. Do the task once, then press **Finish and save** in the page panel or in the Studio. Closing the window early keeps a recovery file.
+4. **Build.** The recording is turned into a tool at once. The Studio shows the progress and a **Recompile** button on the Overview.
+5. **Credentials.** Open **Credentials** and type each password, authenticator key (paste the key or the full `otpauth://` text) or access code once. Values are write-only: no screen or route shows them again.
+6. **Test.** **Test it** opens the playground with the new tool selected. It shows which credentials are configured or missing.
+7. **Connect.** **Connect to Kiro** previews the files it will write in your project's `.kiro/` folder (`settings/mcp.json` and `skills/<name>/SKILL.md`), and writes them only after you confirm. **Copy MCP configuration** copies the settings for another assistant, with placeholders instead of values. **Add as a Kiro Power instead** shows the output folder to import from the Powers panel.
+
+Browser for recording: bundled Chromium first, then Google Chrome, then Microsoft Edge. To use another browser, set `DAEMONIZE_CHROMIUM_PATH` to its executable; it is then the only browser tried.
+
+Where data lives: saved sessions and the credential vault are stored in a per-user folder outside your project (Windows `%LOCALAPPDATA%\Daemonize`, macOS `~/Library/Application Support/Daemonize`, Linux `$XDG_DATA_HOME/daemonize` or `~/.local/share/daemonize`). Set `DAEMONIZE_DATA_DIR` (an absolute path) to choose another folder. The folder is refused when it is the current directory, inside it, inside a git repository or inside the output folder, and then sessions and credentials are unavailable (the Studio says so). If your home folder is itself a git repository, set `DAEMONIZE_DATA_DIR` to a folder outside it.
+
+Details, routes and guard rules: [docs/studio.md](docs/studio.md).
+
 ## Studio
 
 ```bash

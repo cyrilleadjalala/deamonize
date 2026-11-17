@@ -59,6 +59,7 @@ export const SYNTHETIC_FIXTURE_FILES = Object.freeze([
   'tests/integration/studio-secrets.test.ts',
   'tests/integration/studio-record.test.ts',
   'tests/integration/studio-power.test.ts',
+  'tests/integration/studio-ui-features.test.ts',
   'tests/integration/studio-ui-first-flow.test.ts',
 ]);
 

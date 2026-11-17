@@ -10,9 +10,15 @@
  * `router.js` reads FEATURE_ROUTES only when a route is parsed, never while loading, so a view module may import
  * `router.js` (for `href`) without a cycle problem.
  */
+import { renderRecordStatus } from './views/record-status.js';
+import { renderCredentials } from './views/credentials.js';
+import { COPY } from './copy.js';
 
 /** @type {string[]} */
-export const FEATURE_ROUTES = [];
+export const FEATURE_ROUTES = ['record', 'credentials'];
 
 /** @type {Record<string, { title: string, render: (route: import('./router.js').Route) => HTMLElement | Promise<HTMLElement> }>} */
-export const FEATURE_VIEWS = {};
+export const FEATURE_VIEWS = {
+  record: { title: COPY.recordTitle, render: renderRecordStatus },
+  credentials: { title: COPY.credentialsTitle, render: renderCredentials },
+};

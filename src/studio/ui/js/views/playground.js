@@ -1,6 +1,7 @@
 // @ts-check
 import { h, clear } from '../dom.js';
-import { api, ApiError } from '../api.js';
+import { api, ApiError, isStatic } from '../api.js';
+import { COPY } from '../copy.js';
 import { announce, chip, copyButton, emptyState, levelBadge, pill, riskBadge, toolName as toolNameChip } from '../components.js';
 import { secretsSection } from '../secrets-view.js';
 import { buildArguments, describeField, fieldsFromSchema, formatElapsed, initialValues, parseTimeout } from '../schema-form.js';
@@ -369,6 +370,13 @@ function mount(root, info) {
           h('ul', { class: 'plain-list' }, ...secrets.map((s) => h('li', null, h('span', { class: 'chip secret', text: s.name }), h('span', { class: 'muted', text: ` read from DAEMONIZE_SECRET_${s.name} in the Studio\u2019s environment. Its value is never shown.` })))))
       : null;
 
+    // A notice with a link to the credentials page while a required secret is missing (not in the demo or sample mode)
+    const hasMissing = Array.isArray(secrets) && secrets.some((s) => s.status === 'missing');
+    const missingNotice =
+      hasMissing && !isStatic && info.simulated !== true
+        ? h('p', { class: 'notice', role: 'note', id: 'pg-missing-notice' }, `${COPY.missingNotice} `, h('a', { href: '#/credentials', text: COPY.missingLink }), '.')
+        : null;
+
     const timeoutId = 'pg-timeout';
     const timeoutErr = h('p', { class: 'error-text', id: 'pg-timeout-err', role: 'alert' });
     const timeoutInput = h('input', { id: timeoutId, class: 'input pg-timeout', type: 'text', inputmode: 'numeric', autocomplete: 'off', 'aria-describedby': 'pg-timeout-help pg-timeout-err', value: state.timeout, placeholder: 'default' });
@@ -458,7 +466,7 @@ function mount(root, info) {
       ...fieldNodes.length ? fieldNodes : [h('p', { class: 'muted', text: 'This tool takes no arguments.' })],
       timeoutField,
       secretsBlock,
-      h('div', { class: 'run-bar' }, callBtn, abortBtn, spinner),
+      h('div', { class: 'run-bar' }, callBtn, abortBtn, spinner, missingNotice),
       callError);
 
     resultHost = h('div', { class: 'pg-result-host' });

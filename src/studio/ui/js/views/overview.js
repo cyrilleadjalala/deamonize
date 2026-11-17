@@ -1,9 +1,14 @@
 // @ts-check
 import { h, setWidth } from '../dom.js';
-import { api } from '../api.js';
+import { api, isDemo } from '../api.js';
 import { chip, levelBadge, pill, emptyState } from '../components.js';
 import { levelInfo } from '../levels.js';
 import { href } from '../router.js';
+import { COPY } from '../copy.js';
+import { welcomePanel } from './welcome.js';
+import { newActionSection } from './new-action.js';
+import { recompileControl } from './recompile.js';
+import { connectCard } from './connect.js';
 
 const LEVEL_ORDER = ['http', 'accessibility', 'vision', 'coordinates', 'terminal', 'none'];
 
@@ -132,11 +137,31 @@ function healthStrip(pbt, targets) {
 export async function renderOverview() {
   const [overview, wf, pbt] = await Promise.all([api.overview(), api.workflows(), api.pbt().catch(() => null)]);
   const targets = overview.targets ?? [];
+  const live = !isDemo(overview);
   const root = h('div', { class: 'view view-overview' });
   root.appendChild(h('h1', { class: 'view-title', tabindex: '-1', text: 'Overview' }));
   root.appendChild(h('p', { class: 'view-lead', text: 'What Daemonize learned from your recordings, and how safely it can replay it.' }));
+  if (live && overview.recordingActive === true) {
+    root.appendChild(h('p', { class: 'notice', role: 'note', id: 'recording-active' }, `${COPY.recordingInProgress} `, h('a', { href: href('record'), text: COPY.seeRecording })));
+  }
+  const noActions = (wf.workflows ?? []).length === 0;
+  if (noActions && live) {
+    root.appendChild(welcomePanel());
+    root.appendChild(h('p', { class: 'muted' }, h('a', { href: href('credentials'), text: COPY.credentialsLink })));
+    return root;
+  }
+  if (live) {
+    // New action, credentials and the build controls (hidden in the static demo and in sample mode)
+    root.appendChild(
+      h('div', { class: 'overview-actions run-bar' },
+        newActionSection(),
+        h('a', { class: 'btn', href: href('credentials'), text: COPY.credentialsLink }),
+        recompileControl())
+    );
+    if (overview.outputCompiled === true) root.appendChild(connectCard());
+  }
   if (targets.length === 0) {
-    root.appendChild(emptyState('No targets yet', 'Record a workflow, then run daemonize compile and reload this page.'));
+    root.appendChild(emptyState('No targets yet', 'Add an action to get started.'));
     return root;
   }
   root.appendChild(healthStrip(pbt, targets));

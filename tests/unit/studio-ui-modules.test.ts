@@ -81,6 +81,42 @@ describe('Studio UI schema table', () => {
   });
 });
 
+describe('Studio UI modules of the first flow', () => {
+  const ui = resolve(import.meta.dirname, '../../src/studio/ui');
+
+  it('has the seam and the helper modules, and builds them without innerHTML or inline style', () => {
+    for (const file of ['features', 'copy', 'validate', 'dialog', 'announcer']) {
+      const source = readFileSync(join(ui, 'js', `${file}.js`), 'utf8');
+      expect(source, file).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML/);
+    }
+  });
+
+  it('lists the two feature routes and their views in the seam', () => {
+    const source = readFileSync(join(ui, 'js/features.js'), 'utf8');
+    expect(source).toMatch(/FEATURE_ROUTES = \['record', 'credentials'\]/);
+    expect(source).toMatch(/record: \{/);
+    expect(source).toMatch(/credentials: \{/);
+  });
+
+  it('exports the pure helpers', async () => {
+    // @ts-expect-error no type declarations for the browser modules
+    const copy = await import('../../src/studio/ui/js/copy.js');
+    // @ts-expect-error no type declarations for the browser modules
+    const validate = await import('../../src/studio/ui/js/validate.js');
+    // @ts-expect-error no type declarations for the browser modules
+    const announcer = await import('../../src/studio/ui/js/announcer.js');
+    expect(typeof copy.statusText).toBe('function');
+    expect(typeof validate.validateName).toBe('function');
+    expect(typeof announcer.announceOnChange).toBe('function');
+  });
+
+  it('shows the welcome screen instead of the old empty text', () => {
+    const overview = readFileSync(join(ui, 'js/views/overview.js'), 'utf8');
+    expect(overview).toContain('welcomePanel()');
+    expect(overview).not.toContain('Record a workflow, then run daemonize compile');
+  });
+});
+
 describe('Studio UI preservation (write note and chips)', () => {
   const ui = resolve(import.meta.dirname, '../../src/studio/ui');
   const css = readFileSync(join(ui, 'app.css'), 'utf8');

@@ -109,6 +109,9 @@ describe('Property 12: The recording state machine follows its edges', () => {
           if (now !== previous) expect(edges.has(`${previous}>${now}`), `${previous} to ${now}`).toBe(true);
           previous = now;
         };
+        // The state is sampled between events only, so a compile that is already allowed would go through
+        // 'compiling' unseen (start, compileOk, saveDone, start): observe it when the compile actually starts.
+        compiler.onRun = observe;
         for (const event of sequence) {
           const before = m.status();
           switch (event) {

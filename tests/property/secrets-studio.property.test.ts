@@ -137,7 +137,8 @@ describe('Phantom HTTP secrets', () => {
         expect(secretEnvNames(workflow, { http })).toEqual(expected);
         const description = describeTool(workflow, { http });
         for (const name of allRecipeNames(workflow)) {
-          if (!expected.includes(`${PREFIX}${name}`)) expect(description).not.toContain(`${PREFIX}${name}`);
+          // whole names only: Z__ must not match inside Z__0
+          if (!expected.includes(`${PREFIX}${name}`)) expect(description).not.toMatch(new RegExp(`${PREFIX}${name}(?![A-Za-z0-9_])`));
         }
       }),
       { numRuns: 200 }

@@ -54,10 +54,13 @@ export class FakeCompiler implements CompileRunner {
   runs = 0;
   outcome: CompileOutcome = { ok: true };
   gate: Promise<void> | undefined;
+  /** Called when a run starts, before it waits: lets a test see the state the caller set just before. */
+  onRun: (() => void) | undefined;
   status() { return { state: 'idle' as const, phase: null }; }
   tryStart(): boolean { return true; }
   async runExclusive(): Promise<CompileOutcome> {
     this.runs++;
+    this.onRun?.();
     if (this.gate !== undefined) await this.gate;
     return this.outcome;
   }

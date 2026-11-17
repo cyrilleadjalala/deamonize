@@ -144,7 +144,14 @@ describe('recording properties (real browser)', () => {
               await page.keyboard.press('Control+A');
               await page.keyboard.type(o.text);
               await page.keyboard.press('Tab'); // leaving the field records it
-              if (o.text !== query) expected.push(`type:${o.text}`);
+              if (o.text !== query) {
+                // A select that keeps its value records nothing, so two typed texts can still meet with no step
+                // between them: the recorder then updates the typed step instead of adding one (Requirement 2.8).
+                // Seen with [type a, select free (already free), type b], which records only type:b.
+                const last = expected.length - 1;
+                if (last >= 0 && expected[last].startsWith('type:')) expected[last] = `type:${o.text}`;
+                else expected.push(`type:${o.text}`);
+              }
               query = o.text;
             } else {
               await page.locator('#plan').selectOption(o.value);

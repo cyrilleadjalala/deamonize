@@ -298,7 +298,10 @@ describe('Property 10: The vault wins in the Child_Server environment and only t
         await session.listTools();
         const child = specs[0].env;
         for (const n of names) {
-          expect(child[`DAEMONIZE_SECRET_${n}`]).toBe(`${value}-${n}`);
+          // Precedence reversed on purpose (kiro-global-connect-vault-bridge, Req 6.7): a non-empty environment value wins over the vault
+          const actual = child[`DAEMONIZE_SECRET_${n}`];
+          if (other === 'both') expect(['studio-other', 'mcp-other']).toContain(actual);
+          else expect(actual).toBe(other === 'studio' ? 'studio-other' : other === 'mcp' ? 'mcp-other' : `${value}-${n}`);
           expect(Object.keys(child).filter((k) => k.toUpperCase() === `DAEMONIZE_SECRET_${n}`.toUpperCase())).toHaveLength(1);
         }
         expect(JSON.stringify(specs[0].args)).not.toContain(value);

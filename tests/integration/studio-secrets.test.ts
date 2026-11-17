@@ -25,6 +25,8 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'daemonize-ss-'));
   await mkdir(join(root, 'out'), { recursive: true });
   await writeFile(join(root, 'workflows.json'), serializeWorkflowSet(set));
+  // A compiled legacy folder: without mcp-server.js the application locator would point at a not yet compiled sibling folder
+  await writeFile(join(root, 'out', 'mcp-server.js'), '// compiled');
   await writeFile(join(root, 'out', 'mcp.json'), JSON.stringify({ mcpServers: { app: { command: 'node', args: [fixture], env: { DAEMONIZE_SECRET_PW: '${DAEMONIZE_SECRET_PW}' } } } }));
 });
 afterAll(async () => {

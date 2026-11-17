@@ -10,3 +10,4 @@ export const SECRET_TOTP_INVALID = 'This is not a valid one-time code key. Paste
 export const SECRET_UNAVAILABLE = 'This computer cannot keep credentials safely right now, so nothing was saved. Credentials are never stored as plain text.';
 export const SECRET_UNREADABLE = 'Your saved credentials could not be read. Enter them again in the Credentials panel.';
 export const SECRET_UNKNOWN = 'There is no saved credential with this name.';
+export const SECRET_APPLICATION_INVALID = 'The application is not valid. Use its web address, for example https://app.example.';

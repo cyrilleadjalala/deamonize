@@ -4,6 +4,7 @@
  */
 import { VaultUnavailableError } from '../contracts.js';
 import {
+  SECRET_APPLICATION_INVALID,
   SECRET_NAME_INVALID,
   SECRET_NOT_REQUIRED,
   SECRET_TOTP_INVALID,
@@ -17,7 +18,7 @@ import {
 } from '../messages/secrets.js';
 import { requiredSecrets } from '../required-secrets.js';
 import { extractTotpSecret } from '../totp-secret.js';
-import { plainName } from '../validate-action.js';
+import { applicationKey, plainName } from '../validate-action.js';
 import type { RouteContext, RouteDef, RouteResponse } from './types.js';
 
 const MAX_VALUE_BYTES = 4096;
@@ -30,6 +31,29 @@ export function secretRoutes(ctx: RouteContext): RouteDef[] {
   const stopServer = async (): Promise<void> => {
     if (ctx.playground?.serverStarted === true) await ctx.playground.stopNow();
   };
+  /** The Application_Key the request names, 
+ull when it names an invalid one, undefined when it names none. */
+  const parseApplication = (raw: unknown): string | null | undefined => {
+    if (raw === undefined) return undefined;
+    return typeof raw === 'string' && applicationKey(raw) === raw ? raw : null;
+  };
+  const activeKey = async (): Promise<string | undefined> => {
+    try {
+      return (await ctx.activeApplication()).applicationKey;
+    } catch {
+      return undefined;
+    }
+  };
+  /** Upper-case variable names that count as configured for an application: names only. */
+  const configuredFor = async (application: string | undefined, active: string | undefined): Promise<ReadonlySet<string>> => {
+    if (application === undefined || application === active) return ctx.configuredSecretVariables();
+    const names = new Set<string>();
+    for (const [name, value] of Object.entries(ctx.studioEnv)) {
+      if (typeof value === 'string' && value !== '' && /^DAEMONIZE_SECRET_/i.test(name)) names.add(name.toUpperCase());
+    }
+    for (const name of await ctx.services.vault.namesFor(application)) names.add(variableOf(name));
+    return names;
+  };
   const unknownField = (body: Record<string, unknown>, allowed: readonly string[]): boolean => Object.keys(body).some((k) => !allowed.includes(k));
 
   return [
@@ -37,14 +61,20 @@ export function secretRoutes(ctx: RouteContext): RouteDef[] {
       path: '/api/secrets',
       remote: 'blocked',
       handlers: {
-        GET: async () => {
-          const configured = await ctx.configuredSecretVariables();
+        GET: async (req) => {
+          const asked = parseApplication(req.query.get('application') ?? undefined);
+          if (asked === null) return bad(SECRET_APPLICATION_INVALID, 'application');
+          const active = await activeKey();
+          const application = asked ?? active;
+          const configured = await configuredFor(application, active);
           const secrets = (await required()).map((s) => ({ name: s.name, kind: s.kind, configured: configured.has(variableOf(s.name)) }));
-          return { status: 200, body: { secrets } };
+          return { status: 200, body: application === undefined ? { secrets } : { application, secrets } };
         },
         POST: async (req) => {
           const body = req.body;
-          if (unknownField(body, ['name', 'value'])) return bad(SECRET_UNEXPECTED_FIELD);
+          if (unknownField(body, ['name', 'value', 'application'])) return bad(SECRET_UNEXPECTED_FIELD);
+          const application = parseApplication(body.application);
+          if (application === null) return bad(SECRET_APPLICATION_INVALID, 'application');
           const name = plainName(body.name);
           if (!name.ok) return bad(SECRET_NAME_INVALID, 'name');
           const known = (await required()).find((s) => s.name === name.value);
@@ -61,7 +91,8 @@ export function secretRoutes(ctx: RouteContext): RouteDef[] {
             stored = key;
           }
           try {
-            await ctx.services.vault.set(known.name, stored);
+            if (application === undefined) await ctx.services.vault.set(known.name, stored);
+            else await ctx.services.vault.setFor(application, known.name, stored);
           } catch (err) {
             if (err instanceof VaultUnavailableError) return { status: 503, body: { error: SECRET_UNAVAILABLE } };
             throw err;
@@ -77,20 +108,22 @@ export function secretRoutes(ctx: RouteContext): RouteDef[] {
       handlers: {
         POST: async (req) => {
           const body = req.body;
-          if (unknownField(body, ['name'])) return bad(SECRET_UNEXPECTED_FIELD);
+          if (unknownField(body, ['name', 'application'])) return bad(SECRET_UNEXPECTED_FIELD);
+          const application = parseApplication(body.application);
+          if (application === null) return bad(SECRET_APPLICATION_INVALID, 'application');
           const name = plainName(body.name);
           if (!name.ok) return bad(SECRET_NAME_INVALID, 'name');
           const isRequired = (await required()).some((s) => s.name === name.value);
-          if (!isRequired && !(await ctx.services.vault.has(name.value))) return bad(SECRET_UNKNOWN, 'name');
+          if (!isRequired && !(application === undefined ? await ctx.services.vault.has(name.value) : (await ctx.services.vault.namesFor(application)).has(name.value))) return bad(SECRET_UNKNOWN, 'name');
           let removed: boolean;
           try {
-            removed = await ctx.services.vault.remove(name.value);
+            removed = application === undefined ? await ctx.services.vault.remove(name.value) : await ctx.services.vault.removeFor(application, name.value);
           } catch (err) {
             if (err instanceof VaultUnavailableError) return { status: 503, body: { error: SECRET_UNAVAILABLE } };
             throw err;
           }
           if (removed) await stopServer();
-          const configured = (await ctx.configuredSecretVariables()).has(variableOf(name.value));
+          const configured = (await configuredFor(application, application === undefined ? undefined : await activeKey())).has(variableOf(name.value));
           return { status: 200, body: { name: name.value, configured } };
         },
       },

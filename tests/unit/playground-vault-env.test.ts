@@ -43,11 +43,14 @@ function fake(answer: Record<string, unknown> = { success: true, text: 'ok' }) {
 }
 
 describe('playground with the vault', () => {
-  it('gives the vault value to the child, over the Studio and mcp.json values, and nowhere else', async () => {
+  // Precedence reversed on purpose (kiro-global-connect-vault-bridge, Req 6.7 / 7.12): an explicit, non-empty environment value
+  // (not a ${...} placeholder) wins over the vault, so what a user sets by hand is never silently replaced.
+  it('gives the environment value to the child over the vault and mcp.json values, and the vault value only when there is none', async () => {
     const data = await tempDir();
     const vault = createSecretVault({ appData: appData(data), keyProvider: provider() });
     await vault.set('CRM', PLANTED);
     const { specs, connect } = fake();
+    await vault.set('ONLYVAULT', 'vault-only-value');
     const studioEnv = { DAEMONIZE_SECRET_CRM: 'studio-value', daemonize_secret_crm: 'lower-case-value' };
     const before = JSON.stringify(process.env);
     const session = new PlaygroundSession({
@@ -56,13 +59,14 @@ describe('playground with the vault', () => {
       connect,
       launch: () => ({ command: process.execPath, args: ['server.js'], mcpEnv: { DAEMONIZE_SECRET_CRM: 'mcp-literal' }, cwd: data }),
       vault,
-      requiredSecretNames: async () => ['CRM'],
+      requiredSecretNames: async () => ['CRM', 'ONLYVAULT'],
       healSupport: false,
     });
     sessions.push(session);
     await session.listTools();
     const env = specs[0].env;
-    expect(env.DAEMONIZE_SECRET_CRM).toBe(PLANTED);
+    expect(env.DAEMONIZE_SECRET_CRM).toBe('studio-value');
+    expect(env.DAEMONIZE_SECRET_ONLYVAULT).toBe('vault-only-value');
     expect(Object.keys(env).filter((k) => k.toUpperCase() === 'DAEMONIZE_SECRET_CRM')).toEqual(['DAEMONIZE_SECRET_CRM']);
     expect(JSON.stringify(specs[0].args)).not.toContain(PLANTED);
     expect(JSON.stringify(process.env)).toBe(before);

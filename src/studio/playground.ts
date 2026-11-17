@@ -20,6 +20,7 @@ import { basename, join, resolve, sep } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { Validator } from '../validator/validator.js';
+import { isUnexpandedPlaceholder, pickSecret } from '../replay/runtime/vault-format.js';
 import { VaultUnreadableError, type SecretVault } from './contracts.js';
 import { clipText } from './pbt-result.js';
 import { collectEnvSecretValues, makeScrubber, redactForStudio, REDACTED } from './redact.js';
@@ -529,8 +530,10 @@ export interface HistoryEntry {
 }
 
 export interface PlaygroundOptions {
-  /** The output directory of `daemonize compile`. */
-  outDir: string;
+  /** The output directory of `daemonize compile`; a function follows the active application. */
+  outDir: string | (() => string);
+  /** Application_Key of the active application: scoped secrets of this key are given to the child. */
+  applicationKey?: () => string | undefined;
   /** Environment of the Studio: the source of `DAEMONIZE_*` values; its secret values are scrubbed from every answer. */
   env?: Record<string, string | undefined>;
   /** Idle time after which the server is stopped (default 5 min). */
@@ -548,7 +551,7 @@ export interface PlaygroundOptions {
   /** Extra secret values to scrub (the Studio's own). */
   secretValues?: () => readonly string[];
   /** The Secret_Vault: its values reach the child only (behavior: studio-first-flow group G2). */
-  vault?: Pick<SecretVault, 'snapshot' | 'names' | 'values'>;
+  vault?: Pick<SecretVault, 'snapshot' | 'names' | 'values' | 'snapshotFor' | 'namesFor'>;
   /** Names of the secrets the workflows require (behavior: studio-first-flow group G2). */
   requiredSecretNames?: () => Promise<readonly string[]>;
   /** The real environment (default process.env), for the system variables of the child. */
@@ -601,6 +604,11 @@ export class PlaygroundSession {
     this.currentPreview = this.studioEnv.DAEMONIZE_SCREENSHOT === 'final';
   }
 
+  private outDirNow(): string {
+    const dir = this.options.outDir;
+    return typeof dir === 'function' ? dir() : dir;
+  }
+
   get mode(): ReplayModeName {
     return this.currentMode;
   }
@@ -618,7 +626,7 @@ export class PlaygroundSession {
   }
 
   get healSupport(): boolean {
-    return this.options.healSupport ?? existsSync(join(resolve(this.options.outDir), 'heal', 'heal-step.js'));
+    return this.options.healSupport ?? existsSync(join(resolve(this.outDirNow()), 'heal', 'heal-step.js'));
   }
 
   history(): HistoryEntry[] {
@@ -637,7 +645,7 @@ export class PlaygroundSession {
   /** Whether a server can be started at all, and why not. */
   async availability(): Promise<{ available: boolean; reason?: string; message?: string }> {
     try {
-      await (this.options.launch ?? (() => readLaunch(this.options.outDir)))();
+      await (this.options.launch ?? (() => readLaunch(this.outDirNow())))();
       return { available: true };
     } catch (err) {
       if (err instanceof PlaygroundUnavailable) return { available: false, reason: err.reason, message: err.message };
@@ -681,12 +689,12 @@ export class PlaygroundSession {
 
   /**
    * The server to start. With `strictVault` an unreadable vault throws VaultUnreadableError (no process may start with
-   * half of its credentials); otherwise the vault values are skipped. Vault values win over any other source of the
-   * same name, only the `DAEMONIZE_SECRET_<NAME>` key form is created, and neither `process.env` nor the Studio
+   * half of its credentials); otherwise the vault values are skipped. A non-empty environment value that is not a
+   * `${...}` placeholder wins over the vault (scoped, then generic), only the `DAEMONIZE_SECRET_<NAME>` key form is created, and neither `process.env` nor the Studio
    * environment object is changed.
    */
   private async launchSpec(options: { strictVault?: boolean } = {}): Promise<LaunchSpec> {
-    const launch = await (this.options.launch ?? (() => readLaunch(this.options.outDir)))();
+    const launch = await (this.options.launch ?? (() => readLaunch(this.outDirNow())))();
     const env = buildChildEnv({
       processEnv: this.options.processEnv ?? process.env,
       studioEnv: this.studioEnv,
@@ -697,18 +705,21 @@ export class PlaygroundSession {
     const vault = this.options.vault;
     if (vault !== undefined) {
       let snapshot: Record<string, string> = {};
+      const appKey = this.options.applicationKey?.();
       try {
-        snapshot = await vault.snapshot();
+        snapshot = appKey === undefined ? await vault.snapshot() : await vault.snapshotFor(appKey);
       } catch (err) {
         if (options.strictVault === true || !(err instanceof VaultUnreadableError)) throw err;
       }
       const required = this.options.requiredSecretNames === undefined ? Object.keys(snapshot) : await this.options.requiredSecretNames().catch(() => Object.keys(snapshot));
       for (const name of required) {
-        const value = snapshot[name];
-        if (typeof value !== 'string' || value === '') continue;
         const key = `DAEMONIZE_SECRET_${name}`;
-        for (const existing of Object.keys(env)) if (existing.toUpperCase() === key.toUpperCase()) delete env[existing];
-        env[key] = value;
+        const existing = Object.keys(env).filter((k) => k.toUpperCase() === key.toUpperCase());
+        // Environment (non-empty, not a `${...}` placeholder) > scoped > generic. The snapshot already holds scoped over generic.
+        const picked = pickSecret({ explicit: existing.map((k) => env[k]).find((v) => v !== '' && !isUnexpandedPlaceholder(v)), scoped: snapshot[name] });
+        if (picked === undefined) continue;
+        for (const k of existing) delete env[k];
+        env[key] = picked;
       }
     }
     return { command: launch.command, args: launch.args, env, cwd: launch.cwd };
@@ -728,7 +739,9 @@ export class PlaygroundSession {
         .filter(([name, value]) => value !== '' && /^DAEMONIZE_SECRET_/i.test(name))
         .map(([name]) => name.toUpperCase())
     );
-    for (const name of (await this.options.vault?.names().catch(() => undefined)) ?? []) names.add(`DAEMONIZE_SECRET_${name.toUpperCase()}`);
+    const appKey = this.options.applicationKey?.();
+    const vaultNames = appKey === undefined ? this.options.vault?.names() : this.options.vault?.namesFor(appKey);
+    for (const name of (await vaultNames?.catch(() => undefined)) ?? []) names.add(`DAEMONIZE_SECRET_${name.toUpperCase()}`);
     return names;
   }
   private async ensureConn(): Promise<McpConnection> {

@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chmod, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DPAPI_PROTECT, DPAPI_UNPROTECT, KEY_BYTES, KEY_SERVICE as SERVICE, LINUX_KEY_ATTRS, parseHexKey as parseHex } from '../replay/runtime/vault-format.js';
 
 export class KeyStoreUnavailableError extends Error { }
 
@@ -26,9 +27,8 @@ export interface KeyProvider {
   create(key: Buffer): Promise<void>;
 }
 
-export const KEY_BYTES = 32;
+export { KEY_BYTES, DPAPI_PROTECT, DPAPI_UNPROTECT };
 const TIMEOUT_MS = 15_000;
-const SERVICE = 'daemonize-studio-vault-v1';
 const ENV_ALLOW = new Set(
   ['PATH', 'SystemRoot', 'windir', 'HOME', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'DISPLAY'].map((n) => n.toUpperCase())
 );
@@ -94,21 +94,16 @@ export const runProcess: RunProcess = (file, args, options) =>
 const unavailable = (reason: string): KeyStoreUnavailableError => new KeyStoreUnavailableError(`The system key store is not available: ${reason}`);
 
 function parseHexKey(text: string): Buffer {
-  const hex = text.trim();
-  if (!/^[0-9a-f]{64}$/i.test(hex)) throw unavailable('the stored key is not valid');
-  return Buffer.from(hex, 'hex');
+  try {
+    return parseHex(text);
+  } catch {
+    throw unavailable('the stored key is not valid');
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Windows: DPAPI
 // ---------------------------------------------------------------------------
-
-const PS_PREAMBLE = `$ErrorActionPreference='Stop'\nAdd-Type -AssemblyName System.Security\n$e=[Text.Encoding]::UTF8.GetBytes('${SERVICE}')\n$i=[Console]::In.ReadToEnd().Trim()\n$b=[Convert]::FromBase64String($i)\n`;
-const encodeScript = (script: string): string => Buffer.from(script, 'utf16le').toString('base64');
-/** stdin = base64 key, stdout = base64 blob */
-export const DPAPI_PROTECT = encodeScript(`${PS_PREAMBLE}[Console]::Out.Write([Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($b,$e,'CurrentUser')))`);
-/** stdin = base64 blob, stdout = base64 key */
-export const DPAPI_UNPROTECT = encodeScript(`${PS_PREAMBLE}[Console]::Out.Write([Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Unprotect($b,$e,'CurrentUser')))`);
 
 export interface ProviderOptions {
   /** The App_Data_Dir (Windows blob file and the test `file` provider). */
@@ -195,7 +190,7 @@ function macProvider(options: ProviderOptions): KeyProvider {
 function linuxProvider(options: ProviderOptions): KeyProvider {
   const run = options.run ?? runProcess;
   const env = minimalEnv(options.env ?? process.env);
-  const attrs = ['service', 'daemonize-studio', 'account', 'vault-key-v1'];
+  const attrs = LINUX_KEY_ATTRS;
   return {
     id: 'secret-service',
     async get() {

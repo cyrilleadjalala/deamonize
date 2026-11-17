@@ -184,13 +184,14 @@ describe('PlaygroundSession', () => {
     expect(JSON.stringify([...configured])).not.toContain('vault-pw-1');
   });
 
-  it('puts a vault value in the child environment, over the Studio value of the same name', async () => {
+  // Precedence reversed on purpose (kiro-global-connect-vault-bridge, Req 6.7 / 7.12): a non-empty environment value wins over the vault.
+  it('puts a vault value in the child environment, but a Studio value of the same name wins over it', async () => {
     const { state, connect } = fakeServer();
     const vault = { snapshot: async () => ({ CRM: 'vault-pw-1' }), names: async () => new Set(['CRM']), values: () => ['vault-pw-1'] };
     const env = { DAEMONIZE_SECRET_CRM: 'studio-pw' };
     const session = makeSession(connect, { env, vault, requiredSecretNames: async () => ['CRM'] });
     await session.listTools();
-    expect(state.specs[0].env.DAEMONIZE_SECRET_CRM).toBe('vault-pw-1');
+    expect(state.specs[0].env.DAEMONIZE_SECRET_CRM).toBe('studio-pw');
     expect(state.specs[0].args).toEqual(['server.js']);
     expect(env.DAEMONIZE_SECRET_CRM).toBe('studio-pw');
   });

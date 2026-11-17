@@ -9,16 +9,16 @@
  * There is no plain-text mode: when the key store or the App_Data_Dir cannot be used, `set` throws
  * VaultUnavailableError and nothing is written.
  */
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { VaultUnavailableError, VaultUnreadableError, type AppData, type SecretVault } from './contracts.js';
 import { InertSecretVault } from './inert-services.js';
 import { createKeyProvider, KEY_BYTES, KeyStoreUnavailableError, type KeyProvider } from './key-providers.js';
+import { VAULT_FILE, decryptVault, encryptVault, isScopedKey, scopedKey } from '../replay/runtime/vault-format.js';
 import { extractTotpSecret, normalizeBase32 } from './totp-secret.js';
 
-export const VAULT_FILE = 'secrets.vault.json';
-const AAD = Buffer.from('daemonize-vault-v1', 'utf-8');
+export { VAULT_FILE, encryptVault, decryptVault };
 /** A vault is a few small values: a bigger file is not one of ours. */
 const MAX_VAULT_BYTES = 4 * 1024 * 1024;
 
@@ -35,42 +35,6 @@ interface Cache {
   mtimeMs: number;
   size: number;
   map: Map<string, string>;
-}
-
-interface Envelope {
-  v: 1;
-  alg: 'aes-256-gcm';
-  iv: string;
-  tag: string;
-  ct: string;
-}
-
-export function encryptVault(key: Buffer, map: ReadonlyMap<string, string>): Envelope {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  cipher.setAAD(AAD);
-  const ct = Buffer.concat([cipher.update(JSON.stringify(Object.fromEntries(map)), 'utf-8'), cipher.final()]);
-  return { v: 1, alg: 'aes-256-gcm', iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), ct: ct.toString('base64') };
-}
-
-/** Throws when the envelope is malformed, the key is wrong, or the bytes were changed. */
-export function decryptVault(key: Buffer, text: string): Map<string, string> {
-  const env = JSON.parse(text) as Partial<Envelope> | null;
-  if (env === null || typeof env !== 'object' || env.v !== 1 || env.alg !== 'aes-256-gcm' || typeof env.iv !== 'string' || typeof env.tag !== 'string' || typeof env.ct !== 'string') {
-    throw new Error('not a vault');
-  }
-  const iv = Buffer.from(env.iv, 'base64');
-  const tag = Buffer.from(env.tag, 'base64');
-  if (iv.length !== 12 || tag.length !== 16) throw new Error('not a vault');
-  const decipher = createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAAD(AAD);
-  decipher.setAuthTag(tag);
-  const plain = Buffer.concat([decipher.update(Buffer.from(env.ct, 'base64')), decipher.final()]).toString('utf-8');
-  const parsed = JSON.parse(plain) as unknown;
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not a vault');
-  const map = new Map<string, string>();
-  for (const [name, value] of Object.entries(parsed)) if (typeof value === 'string') map.set(name, value);
-  return map;
 }
 
 class FileSecretVault implements SecretVault {
@@ -147,7 +111,7 @@ class FileSecretVault implements SecretVault {
   }
 
   async names(): Promise<ReadonlySet<string>> {
-    return this.exclusive(async () => new Set([...(await this.tryLoad())].filter(([, v]) => v !== '').map(([n]) => n)));
+    return this.exclusive(async () => new Set([...(await this.tryLoad())].filter(([n, v]) => v !== '' && !isScopedKey(n)).map(([n]) => n)));
   }
 
   values(): readonly string[] {
@@ -169,7 +133,7 @@ class FileSecretVault implements SecretVault {
     return this.exclusive(async () => {
       const map = await this.load();
       const out: Record<string, string> = {};
-      for (const [name, value] of map) if (value !== '') out[name] = value;
+      for (const [name, value] of map) if (value !== '' && !isScopedKey(name)) out[name] = value;
       return out;
     });
   }
@@ -217,6 +181,11 @@ class FileSecretVault implements SecretVault {
   }
 
   async set(name: string, value: string): Promise<void> {
+    if (isScopedKey(name)) throw new Error('A generic secret name cannot contain "/".');
+    return this.putEntry(name, value);
+  }
+
+  private async putEntry(entryKey: string, value: string): Promise<void> {
     return this.exclusive(async () => {
       const dir = await this.usableDir();
       const { key, fresh } = await this.keyForWrite(dir);
@@ -224,21 +193,61 @@ class FileSecretVault implements SecretVault {
       let current = new Map<string, string>();
       if (!fresh) current = await this.tryLoad();
       const next = new Map(current);
-      next.set(name, value);
+      next.set(entryKey, value);
       await this.write(dir, key, next);
       this.typed.add(value);
     });
   }
 
-  async remove(name: string): Promise<boolean> {
+  private async dropEntry(entryKey: string): Promise<boolean> {
     return this.exclusive(async () => {
       const dir = await this.usableDir();
       const current = await this.tryLoad();
-      if (!current.has(name) || this.key === undefined) return false;
+      if (!current.has(entryKey) || this.key === undefined) return false;
       const next = new Map(current);
-      next.delete(name);
+      next.delete(entryKey);
       await this.write(dir, this.key, next);
       return true;
+    });
+  }
+
+  async remove(name: string): Promise<boolean> {
+    if (isScopedKey(name)) return false;
+    return this.dropEntry(name);
+  }
+
+  async setFor(applicationKey: string, name: string, value: string): Promise<void> {
+    if (applicationKey === '' || name === '' || isScopedKey(name)) throw new Error('Invalid application or secret name.');
+    if (value === '') throw new Error('A credential cannot be empty.');
+    return this.putEntry(scopedKey(applicationKey, name), value);
+  }
+
+  async removeFor(applicationKey: string, name: string): Promise<boolean> {
+    if (applicationKey === '' || name === '' || isScopedKey(name)) return false;
+    return this.dropEntry(scopedKey(applicationKey, name));
+  }
+
+  async namesFor(applicationKey: string): Promise<ReadonlySet<string>> {
+    return this.exclusive(async () => {
+      const prefix = `${applicationKey}/`;
+      const out = new Set<string>();
+      for (const [n, v] of await this.tryLoad()) {
+        if (v === '') continue;
+        if (!isScopedKey(n)) out.add(n);
+        else if (applicationKey !== '' && n.startsWith(prefix) && !isScopedKey(n.slice(prefix.length))) out.add(n.slice(prefix.length));
+      }
+      return out;
+    });
+  }
+
+  async snapshotFor(applicationKey: string): Promise<Record<string, string>> {
+    return this.exclusive(async () => {
+      const map = await this.load();
+      const prefix = `${applicationKey}/`;
+      const out: Record<string, string> = {};
+      for (const [n, v] of map) if (v !== '' && !isScopedKey(n)) out[n] = v;
+      if (applicationKey !== '') for (const [n, v] of map) if (v !== '' && n.startsWith(prefix) && !isScopedKey(n.slice(prefix.length))) out[n.slice(prefix.length)] = v;
+      return out;
     });
   }
 }

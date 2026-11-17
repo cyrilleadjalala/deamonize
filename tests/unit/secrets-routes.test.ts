@@ -40,8 +40,8 @@ async function setup(options: { vault?: SecretVault; env?: Record<string, string
     studioEnv: options.env ?? {},
   } as unknown as RouteContext;
   const routes = new Map<string, RouteDef>(secretRoutes(ctx).map((r) => [r.path, r]));
-  const call = (path: string, method: 'GET' | 'POST', body: Record<string, unknown> = {}): Promise<RouteResponse> =>
-    routes.get(path)!.handlers[method]!({ method, query: new URLSearchParams(), body, signal: new AbortController().signal });
+  const call = (path: string, method: 'GET' | 'POST', body: Record<string, unknown> = {}, query = ''): Promise<RouteResponse> =>
+    routes.get(path)!.handlers[method]!({ method, query: new URLSearchParams(query), body, signal: new AbortController().signal });
   return { dir, vault, stops, call, routes };
 }
 
@@ -124,5 +124,62 @@ describe('secrets routes', () => {
     expect((await call('/api/secrets/forget', 'POST', { name: 'NOPE' })).status).toBe(400);
     expect((await call('/api/secrets/forget', 'POST', { name: '..' })).status).toBe(400);
     expect((await call('/api/secrets/forget', 'POST', { name: 'PW', other: 1 })).status).toBe(400);
+  });
+
+  describe('with an application', () => {
+    const APP = 'https://app.example';
+    const OTHER = 'https://other.example';
+
+    it('answers application and per-application configured flags', async () => {
+      const { call, vault } = await setup();
+      await vault.setFor(APP, 'PW', PLANTED);
+      const res = await call('/api/secrets', 'GET', {}, `application=${encodeURIComponent(APP)}`);
+      expect(res.body).toEqual({ application: APP, secrets: [{ name: 'OTP', kind: 'totp', configured: false }, { name: 'PW', kind: 'password', configured: true }] });
+      const other = await call('/api/secrets', 'GET', {}, `application=${encodeURIComponent(OTHER)}`);
+      expect((other.body as { secrets: Array<{ configured: boolean }> }).secrets.every((s) => !s.configured)).toBe(true);
+      expect(JSON.stringify([res.body, other.body])).not.toContain(PLANTED);
+    });
+
+    it('refuses an invalid application with 400 SECRET_APPLICATION_INVALID in every route', async () => {
+      const { call, vault, stops } = await setup();
+      for (const application of ['not a url', 'https://app.example/path', 'ftp://x.example', 42]) {
+        const post = await call('/api/secrets', 'POST', { name: 'PW', value: PLANTED, application });
+        expect(post.status).toBe(400);
+        expect(post.body).toMatchObject({ field: 'application' });
+        expect(JSON.stringify(post.body)).not.toContain(PLANTED);
+        expect((await call('/api/secrets/forget', 'POST', { name: 'PW', application })).status).toBe(400);
+      }
+      expect((await call('/api/secrets', 'GET', {}, 'application=nope')).status).toBe(400);
+      expect(await vault.snapshot()).toEqual({});
+      expect(stops.count).toBe(0);
+    });
+
+    it('stores and forgets the scoped value only, and stops the server', async () => {
+      const { call, vault, stops } = await setup();
+      await vault.set('PW', 'generic-value');
+      const res = await call('/api/secrets', 'POST', { name: 'PW', value: PLANTED, application: APP });
+      expect(res).toEqual({ status: 200, body: { name: 'PW', configured: true } });
+      expect(await vault.snapshotFor(APP)).toEqual({ PW: PLANTED });
+      expect(await vault.snapshot()).toEqual({ PW: 'generic-value' });
+      expect(await vault.snapshotFor(OTHER)).toEqual({ PW: 'generic-value' });
+      const forget = await call('/api/secrets/forget', 'POST', { name: 'PW', application: APP });
+      expect(forget.status).toBe(200);
+      expect(await vault.snapshotFor(APP)).toEqual({ PW: 'generic-value' });
+      expect(stops.count).toBe(2);
+    });
+
+    it('refuses an empty value with 400 before touching the vault', async () => {
+      const { call, vault } = await setup();
+      const res = await call('/api/secrets', 'POST', { name: 'PW', value: '', application: APP });
+      expect(res.status).toBe(400);
+      expect(await vault.namesFor(APP)).toEqual(new Set());
+    });
+
+    it('answers 503 without the value when the vault is unavailable', async () => {
+      const { call } = await setup({ vault: new InertSecretVault() });
+      const res = await call('/api/secrets', 'POST', { name: 'PW', value: PLANTED, application: APP });
+      expect(res.status).toBe(503);
+      expect(JSON.stringify(res.body)).not.toContain(PLANTED);
+    });
   });
 });

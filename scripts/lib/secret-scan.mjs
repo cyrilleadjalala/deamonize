@@ -32,6 +32,9 @@ export const SYNTHETIC_FIXTURE_FILES = Object.freeze([
   'tests/integration/secrets-e2e.test.ts',
   'tests/integration/studio-server.test.ts',
   'tests/integration/suggest.test.ts',
+  'tests/property/vault-reader-failures.property.test.ts',
+  'tests/unit/credentials-view.test.ts',
+  'tests/unit/vault-reader.test.ts',
   'tests/property/redaction.property.test.ts',
   'tests/unit/heal.test.ts',
   'tests/unit/heal-cache.test.ts',
@@ -61,6 +64,7 @@ export const SYNTHETIC_FIXTURE_FILES = Object.freeze([
   'tests/integration/studio-power.test.ts',
   'tests/integration/studio-ui-features.test.ts',
   'tests/integration/studio-ui-first-flow.test.ts',
+  'tests/integration/vault-bridge.test.ts',
 ]);
 
 /** Words that make a value a placeholder, not a credential. */

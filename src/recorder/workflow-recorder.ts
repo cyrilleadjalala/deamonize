@@ -75,6 +75,24 @@ export class WorkflowRecorder {
     return this.steps.length - 1;
   }
 
+  /**
+   * Replace the value of a recorded `type` step (a live field typed again with no other step in between).
+   * Refused for a step that is not a plain `type`, is a secret, or is already a variable.
+   */
+  replaceValue(stepIndex: number, value: string): void {
+    const step = this.steps[stepIndex];
+    if (step === undefined) {
+      throw new Error(`No step at index ${stepIndex}`);
+    }
+    if (step.actionType !== 'type' || step.secretRef !== undefined) {
+      throw new Error(`Step ${stepIndex} is not a typed value that can be replaced`);
+    }
+    if (step.variable !== undefined) {
+      throw new Error(`Step ${stepIndex} is already the variable "${step.variable}"`);
+    }
+    step.value = value;
+  }
+
   /** Attach the Visual_Anchor captured for a step. */
   setVisual(stepIndex: number, visual: VisualAnchor): void {
     const step = this.steps[stepIndex];

@@ -6,6 +6,7 @@ import { NetworkCapture } from './network-capture.js';
 import { buildHttpRecipe } from './http-correlate.js';
 import { followUpReads, selectRecipe } from './select-recipe.js';
 import { prepareVisualAnchor, writeThumbnail, type PreparedVisual } from './visual-anchor.js';
+import { dropNavigationReads, isScreenNavigation, navigationReason, type NavigationInfo } from './navigation-rule.js';
 import type { Anchor, ExtractorKind, ResultZone, RowBinding, StepActionType, StepRisk, WorkflowVariable } from '../types.js';
 
 /** The part of Playwright's binding source the recorder uses. */
@@ -28,7 +29,30 @@ export interface CapturedEvent {
   rowBinding?: RowBinding;      // the target lies in a table row, card or list item
   rowTexts?: string[];          // texts of that row, to recognise the value of a variable in it
   canvas?: boolean;             // a click on a <canvas>: no selector, only the clicked point (`box`)
+  replaces?: number;            // a `type` event: index of the previous flush of the same field (no other step since)
+  continues?: boolean;          // the same, when that index is not known to the page yet: the last step is meant
 }
+
+/** Binding the panel of the page calls to read its state and to store its collapse state. */
+export const PANEL_BINDING = '__daemonizePanel';
+/** Binding the "Finish and save" button calls: ends the session while the page is still open. */
+export const FINISH_BINDING = '__daemonizeFinish';
+
+export type PanelRequest = { type: 'state' } | { type: 'collapse'; collapsed: boolean };
+
+/** What the panel in the page shows. Labels only: a typed value never goes into it. */
+export interface PanelState {
+  steps: number;
+  last: string[];
+  collapsed: boolean;
+  zone?: { kind: string };
+  ending: boolean;
+}
+
+/** Why the session ended: the panel button, an AbortSignal, or a call from Node (a Studio-driven recording). */
+export type EndReason = 'panel' | 'signal' | 'api';
+
+const LAST_LABELS = 3;
 
 /** Where an event came from, when known by the recorder and not only by the page. */
 export interface HandleContext {
@@ -127,12 +151,26 @@ export class LiveRecorder {
   private readonly stepActions = new Map<number, number>();
   private readonly visual: LiveRecorderOptions['visual'];
   private thumbnails = 0;
+  private readonly thumbnailed = new Set<number>();
+  private readonly lastLabels: string[] = [];
+  private collapsed = false;
+  private endReason: EndReason | undefined;
+  private resolveEnded: (reason: EndReason) => void = () => { };
+  private readonly urlBefore = new Map<number, { url: string; page: number }>();
+  private readonly lastUrls = new Map<number, string>();
+  private readonly typedKeys = new Map<number, string>();
+
+  /** Resolves once, with the reason of the first `requestEnd`. `record()` awaits it next to the terminal and the window. */
+  readonly ended: Promise<EndReason>;
 
   constructor(
     private readonly page: Page,
     private readonly recorder: WorkflowRecorder,
     options: LiveRecorderOptions = {},
   ) {
+    this.ended = new Promise<EndReason>((resolve) => {
+      this.resolveEnded = resolve;
+    });
     this.pages = [page];
     this.visual = options.visual;
     this.network = options.captureNetwork === true ? new NetworkCapture(page.context()) : undefined;
@@ -175,10 +213,18 @@ export class LiveRecorder {
       const used = [...new Set([...pending, ...(step.rowBinding?.variable === undefined ? [] : [step.rowBinding.variable])])];
       pending.length = 0;
 
-      const attempts = requests.map((request) => ({ request, ...buildHttpRecipe(values, request) }));
-      const rank = (a: (typeof attempts)[number]): number => a.bound.length;
+      const allAttempts = requests.map((request) => ({ request, ...buildHttpRecipe(values, request) }));
       // A submit step is a write or delete in the UI (classifyRisk): a follow-up GET is not its recipe
       const submit = (step.risk ?? 'read') !== 'read';
+      // A click that changes the route and carries no variable: the reads after it are mount requests of the new screen
+      const screenNavigation = isScreenNavigation({ actionType: step.actionType, submit, nav: this.navigationOf(index) });
+      const { kept: attempts, dropped } = dropNavigationReads(allAttempts, { screenNavigation, used });
+      if (attempts.length === 0 && dropped.length > 0) {
+        this.recorder.setHttp(index, undefined, 'read');
+        reports.push({ ...base, level: 'accessibility', reason: navigationReason(dropped) });
+        return;
+      }
+      const rank = (a: (typeof attempts)[number]): number => a.bound.length;
       const qualifying = selectRecipe(attempts, { submit, used });
 
       // The recipe carries the risk of its own method; without a recipe, a write seen anywhere must not be replayed twice
@@ -213,6 +259,51 @@ export class LiveRecorder {
       });
     });
     return reports;
+  }
+
+  /**
+   * End the session from outside the page: the "Finish and save" button of the panel, an AbortSignal, or a
+   * Studio-driven recording all go through here. Idempotent: only the first call counts.
+   */
+  requestEnd(reason: EndReason = 'api'): void {
+    if (this.endReason !== undefined) return;
+    this.endReason = reason;
+    this.resolveEnded(reason);
+  }
+
+  /** What the panel of the page shows now. */
+  panelState(): PanelState {
+    return {
+      steps: this.steps,
+      last: [...this.lastLabels],
+      collapsed: this.collapsed,
+      ...(this.zone === undefined ? {} : { zone: { kind: this.zone.extractor?.kind ?? 'text' } }),
+      ending: this.endReason !== undefined,
+    };
+  }
+
+  /**
+   * The route before and after a step, from the URL of its page when the page reported it and the URL of the next
+   * step of the same page (or the last URL the page had). Undefined when the step has no known URL.
+   */
+  navigationOf(index: number): NavigationInfo | undefined {
+    const here = this.urlBefore.get(index);
+    if (here === undefined) return undefined;
+    let to: string | undefined;
+    for (let next = index + 1; next < this.steps; next++) {
+      const candidate = this.urlBefore.get(next);
+      if (candidate !== undefined && candidate.page === here.page) {
+        to = candidate.url;
+        break;
+      }
+    }
+    to ??= this.lastUrls.get(here.page);
+    return to === undefined ? undefined : { from: here.url, to };
+  }
+
+  private noteLabel(label: string): void {
+    this.lastLabels.push(label);
+    if (this.lastLabels.length > LAST_LABELS) this.lastLabels.shift();
   }
 
   /** The Result_Zone the user marked in the page, if any (the last mark wins). */
@@ -292,6 +383,21 @@ export class LiveRecorder {
     await page.exposeBinding('__daemonizeMarkResult', (_source, request: MarkResultRequest) =>
       this.handleMarkResult(request)
     );
+    await page.exposeBinding(PANEL_BINDING, (_source, request: PanelRequest) => {
+      if (request?.type === 'collapse') {
+        this.collapsed = request.collapsed === true;
+        return { ok: true };
+      }
+      return this.panelState();
+    });
+    await page.exposeBinding(FINISH_BINDING, () => {
+      this.requestEnd('panel');
+      return { ok: true };
+    });
+    this.lastUrls.set(pageIndex, page.url());
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) this.lastUrls.set(pageIndex, frame.url());
+    });
     await page.addInitScript(CAPTURE_SCRIPT);
   }
 
@@ -306,12 +412,17 @@ export class LiveRecorder {
     // The action starts now, when the page reports it, not when the queue reaches it
     const actionId = this.network?.beginAction();
     const prepared = this.prepareVisual(event, source.frame);
+    // The page has not navigated yet when it reports a click: this is the route the step started on
+    const urlBefore = source.frame.page().url();
     const run = async (): Promise<number | null> => {
       const ctx: HandleContext = { pageIndex, actionId };
       if (event.frameComplete === false && source.frame.parentFrame() !== null) {
         ctx.frame = await frameChain(source.frame).catch(() => undefined);
       }
       const index = this.handle(event, ctx);
+      if (index !== null && !this.urlBefore.has(index)) {
+        this.urlBefore.set(index, { url: urlBefore, page: pageIndex });
+      }
       if (index !== null) await this.attachVisual(index, await prepared);
       return index;
     };
@@ -330,6 +441,25 @@ export class LiveRecorder {
     }
 
     this.switchTo(ctx.pageIndex ?? this.current);
+
+    // A live field typed again with no other step in between updates its step instead of adding one
+    const replaced = event.replaces ?? (event.continues === true ? this.steps - 1 : undefined);
+    if (event.actionType === 'type' && replaced !== undefined && replaced === this.steps - 1) {
+      const key = selectors.join('\n');
+      if (this.typedKeys.get(replaced) === key) {
+        if (event.secretRef !== undefined) {
+          if (ctx.actionId !== undefined) this.stepActions.set(replaced, ctx.actionId);
+          return replaced;
+        }
+        try {
+          this.recorder.replaceValue(replaced, event.value ?? '');
+          if (ctx.actionId !== undefined) this.stepActions.set(replaced, ctx.actionId);
+          return replaced;
+        } catch {
+          // The step became a variable (or is not a plain typed value): the new text is a step of its own
+        }
+      }
+    }
 
     const secretRef = event.secretRef !== undefined && SECRET_NAME.test(event.secretRef) ? event.secretRef : undefined;
     const anchor = canvas
@@ -352,6 +482,8 @@ export class LiveRecorder {
       totp: secretRef === 'OTP' ? true : undefined,
     });
     this.steps += 1;
+    this.noteLabel(event.label ?? event.actionType);
+    if (event.actionType === 'type') this.typedKeys.set(index, selectors.join('\n'));
     if (ctx.actionId !== undefined) this.stepActions.set(index, ctx.actionId);
     if (event.rowBinding !== undefined) {
       this.bindRowToKnownVariable(index, event.rowTexts ?? []);
@@ -399,7 +531,11 @@ export class LiveRecorder {
           workflowId: this.recorder.id,
           index,
         });
-        this.thumbnails += 1;
+        // A step typed again keeps its thumbnail file (same name): it is counted once
+        if (!this.thumbnailed.has(index)) {
+          this.thumbnailed.add(index);
+          this.thumbnails += 1;
+        }
       }
       this.recorder.setVisual(index, anchor);
     } catch {
@@ -420,6 +556,7 @@ export class LiveRecorder {
       risk: 'read',
     });
     this.steps += 1;
+    this.noteLabel(opens ? 'switch to new page' : `switch to page ${pageIndex}`);
     this.current = pageIndex;
     if (opens) this.switchSteps.set(pageIndex, index);
   }

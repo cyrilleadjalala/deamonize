@@ -135,3 +135,51 @@ describe('capture script helpers (role, accessible name, context, secrets)', () 
     });
   });
 });
+describe('capture script panel (no recorder bindings in the page)', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await chromium.launch({ headless: true, executablePath: process.env.DAEMONIZE_CHROMIUM_PATH || undefined });
+    page = await browser.newPage();
+    await page.setContent('<html><body><label for="n">A long label for a field</label><input id="n" /></body></html>');
+    await page.evaluate(CAPTURE_SCRIPT);
+  }, 60000);
+
+  afterAll(async () => {
+    await browser?.close();
+  });
+
+  it('mounts one root with the indicator and the result button, and hides what needs the finish binding', async () => {
+    expect(await page.locator('[data-daemonize-ui]').count()).toBe(1);
+    expect(await page.locator('[data-daemonize-panel]').count()).toBe(1);
+    expect(await page.locator('[data-daemonize-panel]').textContent()).toContain('Recording');
+    expect(await page.locator('[data-daemonize-action=mark-result]').isVisible()).toBe(true);
+    // No __daemonizeFinish: no finish button, and no step counter without __daemonizePanel
+    expect(await page.locator('[data-daemonize-action=finish]').isVisible()).toBe(false);
+    expect(await page.locator('[data-daemonize-panel]').textContent()).not.toMatch(/\d+ steps?/);
+  });
+
+  it('exposes the live flush delay and the offer model', async () => {
+    expect(await page.evaluate(() => (window as any).__daemonizeHelpers.LIVE_FLUSH_MS)).toBe(600);
+    const offers = await page.evaluate(() => {
+      const model = (window as any).__daemonizeHelpers.offerModel.create('/a');
+      const route = model.route;
+      model.apply({ t: 'typed', fieldId: 'x', stepIndex: 3, suggestion: 'email', label: 'Email', route });
+      const afterTyped = model.offer && model.offer.fieldId;
+      model.apply({ t: 'input', fieldId: 'x' });
+      const sameField = model.offer && model.offer.fieldId;
+      model.apply({ t: 'input', fieldId: 'y' });
+      const otherField = model.offer;
+      model.apply({ t: 'typed', fieldId: 'y', stepIndex: 4, suggestion: 's', label: 'S', route });
+      model.apply({ t: 'route', route: '/b' });
+      return { afterTyped, sameField, otherField, afterRoute: model.offer };
+    });
+    expect(offers).toEqual({ afterTyped: 'x', sameField: 'x', otherField: null, afterRoute: null });
+  });
+
+  it('sizes the variable name input from the suggestion, capped at 360px', async () => {
+    // The rule is in the script text: max(220px, (length + 4) ch) with a cap of min(360px, 60vw)
+    expect(CAPTURE_SCRIPT).toContain("width:max(220px,' + (offer.suggestion.length + 4) + 'ch);max-width:min(360px,60vw)");
+  });
+});

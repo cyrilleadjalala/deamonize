@@ -1,4 +1,7 @@
 import { createInterface } from 'node:readline/promises';
+import { writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import { LiveRecorder, type NetworkStepReport } from '../../recorder/live-recorder.js';
 import { WorkflowRecorder } from '../../recorder/workflow-recorder.js';
@@ -26,6 +29,11 @@ export interface RecordOptions {
    * The session ends when it resolves; used to drive the page from tests.
    */
   drive?: (page: Page, live: LiveRecorder) => Promise<void>;
+  /**
+   * Ends the session like the "Finish and save" button of the panel (`LiveRecorder.requestEnd('signal')`), while the
+   * page is still open. A Studio-driven recording uses it, or calls `live.requestEnd('api')` from `drive`.
+   */
+  signal?: AbortSignal;
 }
 
 export interface RecordSummary {
@@ -96,26 +104,15 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
       });
     });
 
-    const session = options.drive ? options.drive(page, live) : waitForUser(page);
-    await Promise.race([session, stopped]);
+    // A Node-side stop (a Studio-driven recording, a signal) takes the same end path as the panel button
+    const stop = (): void => live!.requestEnd('signal');
+    if (options.signal?.aborted === true) stop();
+    else options.signal?.addEventListener('abort', stop, { once: true });
 
-    // Every reported event is recorded, and no thumbnail is being taken while the final screen is read
-    await live.idle();
-    // The final screen is only available while the window is still open
-    const finalScreen = page.isClosed() ? undefined : await captureFinalScreen(page, options.finalZone);
-    // The zone given on the command line, else the one marked in the page
-    const marked: ResultZone | undefined = options.resultZone !== undefined
-      ? { selector: options.resultZone, ...(options.resultKind === undefined ? {} : { extractor: { kind: options.resultKind } as ResultZone['extractor'] }) }
-      : live.resultZone;
-    const resultZone = marked === undefined ? undefined : await readResultZone(page, marked);
-    const network = await live.finalizeNetwork();
-    const workflow = recorder.finish(
-      finalScreen,
-      options.finalZone !== undefined ? { selector: options.finalZone } : undefined,
-      resultZone
-    );
+    const session = options.drive ? options.drive(page, live) : waitForUser(page, live.ended);
+    await Promise.race([session, stopped, live.ended]);
 
-    const totalWorkflows = await saveWorkflow(options.out, target, workflow);
+    const { workflow, totalWorkflows, network } = await completeRecording({ options, page, live, recorder, target });
 
     return {
       out: options.out,
@@ -134,7 +131,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     if (closing || !(err instanceof BrowserStoppedError)) {
       throw err;
     }
-    throw await interrupted((err as Error).message, options.out, target, recorder, live);
+    throw await interrupted((err as Error).message, options, target, recorder, live);
   } finally {
     closing = true;
     await browser.close().catch(() => { });
@@ -162,37 +159,168 @@ function secretSummary(workflow: Workflow): Pick<RecordSummary, 'secrets' | 'con
 /** The browser went away on its own while the user was recording. */
 class BrowserStoppedError extends Error { }
 
+/** The result zone to check: the one given on the command line, else the one marked in the page. */
+function markedZoneOf(options: Pick<RecordOptions, 'resultZone' | 'resultKind'>, live: Pick<LiveRecorder, 'resultZone'>): ResultZone | undefined {
+  return options.resultZone !== undefined
+    ? { selector: options.resultZone, ...(options.resultKind === undefined ? {} : { extractor: { kind: options.resultKind } as ResultZone['extractor'] }) }
+    : live.resultZone;
+}
+
+/** A result zone was marked, but the window was closed before it could be checked on the final page. */
+class ZoneUnverifiedError extends Error { }
+
+type RecordingTarget = Parameters<typeof saveWorkflow>[1];
+const NETWORK_RESCUE_MS = 5000;
+
+/** What `completeRecording` works on: everything the end of a session needs. */
+export interface CompletionContext {
+  options: Pick<RecordOptions, 'out' | 'finalZone' | 'resultZone' | 'resultKind'>;
+  page: Page;
+  live: Pick<LiveRecorder, 'idle' | 'finalizeNetwork' | 'resultZone' | 'stepCount'>;
+  recorder: Pick<WorkflowRecorder, 'finish'>;
+  target: RecordingTarget;
+}
+
+/** Stage overrides, for tests that force a stage to fail. */
+export interface CompletionHooks {
+  captureFinalScreen?: (page: Page, zone?: string) => Promise<ScreenContent>;
+  readResultZone?: (page: Page, zone: ResultZone) => Promise<ResultZone>;
+  finalizeNetwork?: (live: CompletionContext['live']) => Promise<NetworkStepReport[]>;
+  saveWorkflow?: typeof saveWorkflow;
+}
+
+export interface Completion {
+  workflow: Workflow;
+  totalWorkflows: number;
+  network: NetworkStepReport[];
+}
+
+/** What the end of a session has done so far, to rescue the steps when a stage fails. */
+interface CompletionState {
+  finalScreen?: ScreenContent;
+  marked?: ResultZone;
+  networkTried: boolean;
+  workflow?: Workflow;
+}
+
+/**
+ * Everything that follows the end of a session, in stages (idle, screen, zone, network, finish, save). A failure at
+ * any stage, with at least one step recorded, writes `<out>.recovery.json` with the steps and the marked result zone
+ * (unchecked) and throws an error that names the file and the cause. Nothing is written when no step was recorded.
+ */
+export async function completeRecording(context: CompletionContext, hooks: CompletionHooks = {}): Promise<Completion> {
+  const { options, page, live, recorder, target } = context;
+  const state: CompletionState = { networkTried: false };
+  const doScreen = hooks.captureFinalScreen ?? captureFinalScreen;
+  const doZone = hooks.readResultZone ?? readResultZone;
+  const doNetwork = hooks.finalizeNetwork ?? ((l: CompletionContext['live']) => l.finalizeNetwork());
+  const doSave = hooks.saveWorkflow ?? saveWorkflow;
+  try {
+    // Every reported event is recorded, and no thumbnail is being taken while the final screen is read
+    await live.idle();
+    // The final screen is only available while the window is still open
+    state.finalScreen = page.isClosed() ? undefined : await doScreen(page, options.finalZone);
+    state.marked = markedZoneOf(options, live);
+    if (state.marked !== undefined && page.isClosed()) {
+      throw new ZoneUnverifiedError(
+        'the window was closed before the result zone could be checked (use "Finish and save" in the panel to avoid this)'
+      );
+    }
+    const resultZone = state.marked === undefined ? undefined : await doZone(page, state.marked);
+    state.networkTried = true;
+    const network = await doNetwork(live);
+    state.workflow = recorder.finish(
+      state.finalScreen,
+      options.finalZone !== undefined ? { selector: options.finalZone } : undefined,
+      resultZone
+    );
+    const totalWorkflows = await doSave(options.out, target, state.workflow);
+    return { workflow: state.workflow, totalWorkflows, network };
+  } catch (err) {
+    throw await rescue(err as Error, context, hooks, state);
+  }
+}
+
+/**
+ * Keep the steps recorded so far in `<out>.recovery.json` (itself a valid workflow file), or in the temp directory
+ * when that cannot be written. Returns the error to throw: it names the file and the cause.
+ */
+async function rescue(err: Error, context: CompletionContext, hooks: CompletionHooks, state: CompletionState): Promise<Error> {
+  const { options, live, recorder, target } = context;
+  const stopped = err instanceof BrowserStoppedError;
+  if (stopped) console.error(`[record] ${err.message} before the recording was finished`);
+
+  if (live.stepCount === 0) {
+    return stopped ? new Error(`Recording interrupted: ${err.message}. Nothing had been recorded yet.`) : err;
+  }
+
+  try {
+    if (!state.networkTried) {
+      state.networkTried = true;
+      const finalize = hooks.finalizeNetwork ?? ((l: CompletionContext['live']) => l.finalizeNetwork());
+      await withDeadline(finalize(live), NETWORK_RESCUE_MS).catch(() => undefined);
+    }
+    // The marked zone is kept as marked: the page is not there to check it
+    state.marked ??= markedZoneOf(options, live);
+    const workflow =
+      state.workflow ??
+      recorder.finish(state.finalScreen, options.finalZone !== undefined ? { selector: options.finalZone } : undefined, state.marked);
+
+    const save = hooks.saveWorkflow ?? saveWorkflow;
+    let file = `${options.out}.recovery.json`;
+    try {
+      await save(file, target, workflow);
+    } catch {
+      file = join(tmpdir(), `daemonize-recovery-${workflow.id}.json`);
+      await writeFile(file, JSON.stringify(workflow, null, 2));
+    }
+    const kept = `The ${live.stepCount} step(s) recorded so far were saved to ${file}.`;
+    return new Error(
+      stopped ? `Recording interrupted: ${err.message}. ${kept}` : `Recording failed after the session ended: ${err.message}. ${kept}`,
+      { cause: err }
+    );
+  } catch (failure) {
+    return new Error(
+      `Recording failed: ${err.message}. The ${live.stepCount} step(s) recorded so far could not be saved: ${(failure as Error).message}`,
+      { cause: err }
+    );
+  }
+}
+
+function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    work.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
+
 /**
  * The browser stopped while recording: say so, and keep what was recorded in a
  * recovery file next to the workflow file, which is itself a valid workflow file.
  */
 async function interrupted(
   reason: string,
-  out: string,
-  target: Parameters<typeof saveWorkflow>[1],
+  options: RecordOptions,
+  target: RecordingTarget,
   recorder: WorkflowRecorder | undefined,
   live: LiveRecorder | undefined
 ): Promise<Error> {
-  console.error(`[record] ${reason} before the recording was finished`);
-
-  if (recorder === undefined || live === undefined || live.stepCount === 0) {
+  if (recorder === undefined || live === undefined) {
+    console.error(`[record] ${reason} before the recording was finished`);
     return new Error(`Recording interrupted: ${reason}. Nothing had been recorded yet.`);
   }
-
-  const recoveryFile = `${out}.recovery.json`;
-  await saveWorkflow(recoveryFile, target, recorder.finish());
-  return new Error(
-    `Recording interrupted: ${reason}. The ${live.stepCount} step(s) recorded so far were saved to ${recoveryFile}.`
-  );
+  const context: CompletionContext = { options, page: undefined as unknown as Page, live, recorder, target };
+  return rescue(new BrowserStoppedError(reason), context, {}, { networkTried: false });
 }
 
-async function waitForUser(page: Page): Promise<void> {
+async function waitForUser(page: Page, ended: Promise<unknown>): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const windowClosed = new Promise<void>((resolve) => page.once('close', () => resolve()));
   try {
     await Promise.race([
-      rl.question('Use the browser window, then press Enter here to finish (or close the window): '),
+      rl.question('Use the browser window, then click "Finish and save" in its panel or press Enter here (or close the window): '),
       windowClosed,
+      ended,
     ]);
   } finally {
     rl.close();

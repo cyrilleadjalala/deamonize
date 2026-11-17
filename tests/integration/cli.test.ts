@@ -78,7 +78,7 @@ describe('CLI: record → compile → merge', () => {
         await page.locator('[data-daemonize-action=make-variable]').click();
         await page.locator('[data-daemonize-action=variable-name]').press('Enter'); // keeps the suggested name
         await expect(page.locator('[data-daemonize-ui]').textContent()).resolves.toContain('saved');
-        await page.getByRole('button', { name: 'Save' }).click();
+        await page.getByRole('button', { name: 'Save', exact: true }).click();
         await page.waitForURL('**/result*');
       },
     });

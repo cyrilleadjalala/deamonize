@@ -60,7 +60,7 @@ describe('Visual_Anchors recorded in a real browser', () => {
     await page.keyboard.press('Tab'); // leaving the field records it
     await page.keyboard.type('hunter2');
     await page.keyboard.press('Tab');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.waitForFunction(() => document.title === 'Saved');
   };
 
@@ -126,7 +126,7 @@ describe('Visual_Anchors recorded in a real browser', () => {
   it('copies the thumbnails of the kept workflows when merging into another file', async () => {
     const merged = join(dir, 'merged.json');
     const other = join(dir, 'other.json');
-    await record({ url: baseUrl, name: 'App', label: 'Other', out: other, headless: true, drive: async (page) => { await page.getByRole('button', { name: 'Save' }).click(); } });
+    await record({ url: baseUrl, name: 'App', label: 'Other', out: other, headless: true, drive: async (page) => { await page.getByRole('button', { name: 'Save', exact: true }).click(); } });
     expect(await merge(join(dir, 'workflows.json'), other, merged)).toBe(2);
     const set = deserializeWorkflowSet(await readFile(merged, 'utf-8'));
     const paths = set.workflows.flatMap((w) => w.steps.map((s) => s.visual?.thumbnailPath)).filter((p): p is string => p !== undefined);

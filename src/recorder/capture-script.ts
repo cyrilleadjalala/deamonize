@@ -38,7 +38,9 @@ export const CAPTURE_SCRIPT = `
   const MAX_TEXT_SELECTOR_LENGTH = 60;
   const MAX_NAME_LENGTH = 80;
   const MAX_SUMMARY_LENGTH = 60;
-  const CHIP_LIFETIME_MS = 15000;
+  const LIVE_FLUSH_MS = 600;
+  const NOTICE_LIFETIME_MS = 6000;
+  const STATE_POLL_MS = 2000;
   const HOVER_WINDOW_MS = 10000;
   const SCROLL_WINDOW_MS = 5000;
   const MAX_HOVER_CANDIDATES = 400;
@@ -552,44 +554,6 @@ export const CAPTURE_SCRIPT = `
     return text.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'value';
   }
 
-  let chip = null;
-
-  function removeChip() {
-    if (chip) {
-      chip.remove();
-      chip = null;
-    }
-  }
-
-  // "Make variable" box shown after a typed or selected value is recorded.
-  function showChip(stepIndex, suggestion, rowText) {
-    removeChip();
-    const box = document.createElement('div');
-    box.setAttribute(UI_ATTR, '');
-    box.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:2147483647;background:#1f2937;color:#fff;font:13px system-ui,sans-serif;padding:8px 10px;border-radius:8px;display:flex;gap:8px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.3)';
-    chip = box;
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = 'Make variable';
-    button.setAttribute('data-daemonize-action', 'make-variable');
-    button.addEventListener('click', () => askName(box, stepIndex, suggestion, rowText));
-    box.appendChild(button);
-
-    // The same box offers to mark the element that holds the result of the workflow
-    const mark = document.createElement('button');
-    mark.type = 'button';
-    mark.textContent = 'Mark result';
-    mark.setAttribute('data-daemonize-action', 'mark-result');
-    mark.addEventListener('click', () => startMarkResult());
-    box.appendChild(mark);
-
-    document.documentElement.appendChild(box);
-    setTimeout(() => {
-      if (chip === box && !box.contains(document.activeElement) && !markingResult) removeChip();
-    }, CHIP_LIFETIME_MS);
-  }
-
   // ---------------------------------------------------------------- result zone
 
   const RESULT_KINDS = ['text', 'table', 'list', 'fields', 'json', 'attribute'];
@@ -636,55 +600,372 @@ export const CAPTURE_SCRIPT = `
     return info;
   }
 
-  function showNotice(text, keep) {
-    removeChip();
-    const box = document.createElement('div');
-    box.setAttribute(UI_ATTR, '');
-    box.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:2147483647;background:#1f2937;color:#fff;font:13px system-ui,sans-serif;padding:8px 10px;border-radius:8px;display:flex;gap:8px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.3)';
-    box.appendChild(document.createTextNode(text));
-    chip = box;
-    document.documentElement.appendChild(box);
-    if (!keep) setTimeout(() => { if (chip === box) removeChip(); }, CHIP_LIFETIME_MS);
-    return box;
+  // ---------------------------------------------------------------- recording panel
+
+  // One root element per frame (data-daemonize-ui): everything the recorder shows lives inside it, so inUi() and the
+  // screen hash drop it as a whole. The top frame shows the whole panel, a sub-frame only the offer row.
+  const IS_TOP = window === window.top;
+  const hasPanelBinding = () => typeof window.__daemonizePanel === 'function';
+  const hasFinishBinding = () => typeof window.__daemonizeFinish === 'function';
+
+  const BTN_STYLE = 'font:inherit;color:#111827;background:#e5e7eb;border:0;border-radius:6px;padding:3px 9px;cursor:pointer;margin:0';
+  const PRIMARY_STYLE = 'font:inherit;font-weight:600;color:#fff;background:#2563eb;border:0;border-radius:6px;padding:5px 10px;cursor:pointer;margin:0;width:100%';
+  const ROOT_STYLE = 'all:initial;position:fixed;right:12px;bottom:12px;z-index:2147483647;display:block;box-sizing:border-box;background:#1f2937;color:#fff;font:13px/1.4 system-ui,sans-serif;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.3);padding:8px 10px;';
+  const TOP_STYLE = ROOT_STYLE + 'width:max-content;min-width:250px;max-width:calc(100vw - 24px)';
+  const FRAME_STYLE = ROOT_STYLE + 'width:max-content;max-width:calc(100vw - 24px);display:none';
+
+  let root = null;
+  let ui = {};
+  let panelState = { steps: 0, last: [], collapsed: false, ending: false };
+  let saving = false;
+  let lastMark = null;
+  let offerKey = null;
+  let offerMode = 'none';
+  let resultKey = null;
+  let noticeTimer = null;
+
+  function uiEl(tag, text, style, action) {
+    const el = document.createElement(tag);
+    if (text) el.textContent = text;
+    if (style) el.style.cssText = style;
+    if (action) el.setAttribute('data-daemonize-action', action);
+    return el;
+  }
+
+  function uiButton(text, action, onClick, style) {
+    const button = uiEl('button', text, style || BTN_STYLE, action);
+    button.type = 'button';
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  function buildRoot() {
+    const el = uiEl('div', '', IS_TOP ? TOP_STYLE : FRAME_STYLE);
+    el.setAttribute(UI_ATTR, '');
+    ui = {};
+    if (IS_TOP) {
+      el.setAttribute('data-daemonize-panel', '');
+      el.setAttribute('role', 'region');
+      el.setAttribute('aria-label', 'Daemonize recorder');
+      const header = uiEl('div', '', 'display:flex;align-items:center;gap:8px');
+      ui.title = uiEl('strong', 'Recording', 'flex:1;font-weight:600');
+      ui.count = uiEl('span', '', 'opacity:.8');
+      ui.toggle = uiButton('-', 'toggle-panel', togglePanel, BTN_STYLE + ';padding:0 7px');
+      header.append(uiEl('span', '', 'width:10px;height:10px;border-radius:50%;background:#ef4444;flex:none'), ui.title, ui.count, ui.toggle);
+      el.appendChild(header);
+    }
+    ui.body = uiEl('div', '', IS_TOP ? 'display:block;margin-top:8px' : 'display:block');
+    if (IS_TOP) {
+      ui.last = uiEl('ol', '', 'margin:0 0 8px;padding:0 0 0 18px;opacity:.85;display:none', 'last-steps');
+      ui.body.appendChild(ui.last);
+    }
+    ui.offer = uiEl('div', '', 'display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px');
+    ui.body.appendChild(ui.offer);
+    if (IS_TOP) {
+      ui.result = uiEl('div', '', 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px');
+      ui.finish = uiButton('Finish and save', 'finish', finishClicked, PRIMARY_STYLE);
+      ui.body.append(ui.result, ui.finish);
+    }
+    ui.status = uiEl('p', '', 'margin:6px 0 0;padding:0;display:none');
+    ui.status.setAttribute('aria-live', 'polite');
+    ui.body.appendChild(ui.status);
+    el.appendChild(ui.body);
+    return el;
+  }
+
+  // A document that was rewritten (document.open) loses the listeners of the panel: a detached root is built again
+  function ensurePanel() {
+    if (!document.documentElement) return;
+    if (root && root.parentNode !== document.documentElement) {
+      root = null;
+      offerKey = null;
+      resultKey = null;
+      if (offerMode === 'naming') offerMode = 'none';
+    }
+    if (!root) {
+      if (!IS_TOP) return;
+      root = buildRoot();
+      document.documentElement.appendChild(root);
+      renderPanel();
+      refreshState();
+      return;
+    }
+  }
+
+  // A sub-frame shows its root only while it has something to show
+  function ensureFrameRoot() {
+    if (IS_TOP) {
+      ensurePanel();
+      return;
+    }
+    if (!document.documentElement) return;
+    if (root && root.parentNode !== document.documentElement) {
+      root = null;
+      offerKey = null;
+    }
+    if (!root) {
+      root = buildRoot();
+      document.documentElement.appendChild(root);
+    }
+  }
+
+  function showOrHideFrameRoot() {
+    if (IS_TOP || !root) return;
+    root.style.display = offerMode !== 'none' || ui.status.textContent !== '' ? 'block' : 'none';
+  }
+
+  function setStatus(text, keep) {
+    ensureFrameRoot();
+    if (!root) return;
+    clearTimeout(noticeTimer);
+    ui.status.textContent = text;
+    ui.status.style.display = text ? 'block' : 'none';
+    if (text && !keep) {
+      noticeTimer = setTimeout(() => setStatus(''), NOTICE_LIFETIME_MS);
+    }
+    showOrHideFrameRoot();
+  }
+
+  function renderPanel() {
+    if (!root || !IS_TOP) return;
+    const stateKnown = hasPanelBinding();
+    ui.count.textContent = stateKnown ? panelState.steps + (panelState.steps === 1 ? ' step' : ' steps') : '';
+    ui.last.textContent = '';
+    panelState.last.forEach((label) => ui.last.appendChild(uiEl('li', label, 'margin:0;padding:0')));
+    ui.last.style.display = panelState.last.length > 0 ? 'block' : 'none';
+    ui.body.style.display = panelState.collapsed ? 'none' : 'block';
+    ui.toggle.textContent = panelState.collapsed ? '+' : '-';
+    ui.toggle.setAttribute('aria-expanded', panelState.collapsed ? 'false' : 'true');
+    ui.toggle.setAttribute('aria-label', panelState.collapsed ? 'Expand the recorder panel' : 'Collapse the recorder panel');
+    // Without the finish binding (a page recorded by other means) the button and the counter are not offered
+    ui.finish.style.display = hasFinishBinding() ? 'block' : 'none';
+    if (panelState.ending && !saving) {
+      saving = true;
+      setStatus('Saving…', true);
+    }
+    ui.finish.disabled = saving;
+    ui.finish.style.opacity = saving ? '.6' : '1';
+    renderResult();
+    renderOffer();
+  }
+
+  async function refreshState() {
+    if (!IS_TOP || !hasPanelBinding()) return;
+    try {
+      const state = await window.__daemonizePanel({ type: 'state' });
+      if (state && typeof state.steps === 'number') {
+        panelState = state;
+        renderPanel();
+      }
+    } catch (e) {
+      // The page is going away
+    }
+  }
+
+  function togglePanel() {
+    panelState.collapsed = !panelState.collapsed;
+    renderPanel();
+    if (hasPanelBinding()) Promise.resolve(window.__daemonizePanel({ type: 'collapse', collapsed: panelState.collapsed })).catch(() => {});
+  }
+
+  // Record promises not settled yet: "Finish and save" waits for them
+  const outstanding = new Set();
+  function track(pending) {
+    const settled = Promise.resolve(pending).catch(() => {});
+    outstanding.add(settled);
+    settled.then(() => {
+      outstanding.delete(settled);
+      refreshState();
+    });
+    return pending;
+  }
+
+  async function finishClicked() {
+    if (saving) return;
+    saving = true;
+    ui.finish.disabled = true;
+    setStatus('Saving…', true);
+    try {
+      flushLive();
+      await Promise.all(Array.from(outstanding));
+      const result = await window.__daemonizeFinish();
+      if (!result || !result.ok) throw new Error((result && result.error) || 'Could not finish the recording');
+      renderPanel();
+    } catch (e) {
+      saving = false;
+      ui.finish.disabled = false;
+      setStatus((e && e.message) || 'Could not finish the recording', false);
+    }
+  }
+
+  // ---------------------------------------------------------------- the offer ("Make variable")
+
+  // The offer is the last typed or selected field of the current route. Pure: it is also exposed for tests.
+  function createOfferModel(initialRoute) {
+    let offer = null;
+    let route = initialRoute;
+    return {
+      apply(e) {
+        if (e.t === 'typed' || e.t === 'row') {
+          if (e.route === route) {
+            offer = { fieldId: e.fieldId, stepIndex: e.stepIndex, suggestion: e.suggestion, label: e.label, route: e.route, rowText: e.rowText };
+          }
+        } else if (e.t === 'input') {
+          if (offer !== null && offer.fieldId !== e.fieldId) offer = null;
+        } else if (e.t === 'route') {
+          offer = null;
+          route = e.route;
+        } else if (e.t === 'clear') {
+          offer = null;
+        }
+        return offer;
+      },
+      get offer() { return offer; },
+      get route() { return route; },
+    };
+  }
+
+  const model = createOfferModel(location.pathname);
+  const fieldIds = new WeakMap();
+  let fieldCount = 0;
+  function fieldIdOf(el) {
+    if (!fieldIds.has(el)) fieldIds.set(el, 'f' + ++fieldCount);
+    return fieldIds.get(el);
+  }
+
+  function offerKeyOf(offer) {
+    return offer ? [offer.fieldId, offer.stepIndex, offer.rowText === undefined ? '' : offer.rowText].join('|') : null;
+  }
+
+  function renderOffer() {
+    if (!root) return;
+    const offer = model.offer;
+    const key = offerKeyOf(offer);
+    if (key === offerKey && (offerMode !== 'none' || key === null)) return;
+    offerKey = key;
+    ui.offer.textContent = '';
+    if (!offer) {
+      offerMode = 'none';
+      ui.offer.style.display = 'none';
+      showOrHideFrameRoot();
+      return;
+    }
+    offerMode = 'offer';
+    ui.offer.style.display = 'flex';
+    const label = offer.rowText !== undefined ? 'Selected: ' + offer.rowText : 'Field: ' + offer.label;
+    const text = uiEl('span', label, 'opacity:.85;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap');
+    text.title = label;
+    ui.offer.append(uiButton('Make variable', 'make-variable', () => askName(offer)), text);
+    showOrHideFrameRoot();
+  }
+
+  function setOffer(event) {
+    ensureFrameRoot();
+    model.apply(event);
+    renderOffer();
+  }
+
+  function askName(offer) {
+    offerMode = 'naming';
+    ui.offer.textContent = '';
+    const input = uiEl('input', '', 'font:inherit;color:#111827;background:#fff;border:1px solid #9ca3af;border-radius:4px;padding:2px 6px;margin:0;box-sizing:border-box;width:max(220px,' + (offer.suggestion.length + 4) + 'ch);max-width:min(360px,60vw)', 'variable-name');
+    input.type = 'text';
+    input.value = offer.suggestion;
+    input.title = offer.suggestion;
+
+    const ok = uiButton('OK', 'confirm-variable', confirm);
+    const message = uiEl('span', '', 'flex-basis:100%');
+
+    async function confirm() {
+      const name = input.value.trim();
+      const request = { stepIndex: offer.stepIndex, name };
+      if (offer.rowText !== undefined) request.rowText = offer.rowText;
+      const result = await window.__daemonizeMarkVariable(request);
+      if (result && result.ok) {
+        setOffer({ t: 'clear' });
+        setStatus('Variable "' + name + '" saved', false);
+      } else {
+        message.textContent = (result && result.error) || 'Could not save the variable';
+      }
+    }
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirm();
+      }
+    });
+
+    ui.offer.append(input, ok, message);
+    input.focus();
+    input.select();
+  }
+
+  // ---------------------------------------------------------------- result zone (panel part)
+
+  function renderResult() {
+    if (!root || !IS_TOP) return;
+    const kind = lastMark ? lastMark.kind : panelState.zone ? panelState.zone.kind : '';
+    const key = [markingResult, kind, lastMark !== null].join('|');
+    if (key === resultKey) return;
+    resultKey = key;
+    ui.result.textContent = '';
+    if (markingResult) {
+      ui.result.append(
+        uiEl('span', 'Click the element that holds the result', 'flex:1'),
+        uiButton('Cancel', 'cancel-mark-result', cancelMarkResult)
+      );
+      return;
+    }
+    ui.result.appendChild(uiButton(kind ? 'Choose another result' : 'Choose the result to capture', 'mark-result', startMarkResult));
+    if (lastMark) {
+      const select = uiEl('select', '', 'font:inherit;color:#111827;margin:0', 'result-kind');
+      RESULT_KINDS.forEach((k) => {
+        const option = document.createElement('option');
+        option.value = k;
+        option.textContent = k;
+        select.appendChild(option);
+      });
+      select.value = lastMark.kind;
+      select.addEventListener('change', async () => {
+        lastMark.kind = select.value;
+        await window.__daemonizeMarkResult({ info: lastMark.info, kind: lastMark.kind });
+        refreshState();
+      });
+      ui.result.append(uiEl('span', 'Result zone:', 'opacity:.85'), select);
+    } else if (kind) {
+      ui.result.appendChild(uiEl('span', 'Result zone: ' + kind, 'opacity:.85'));
+    }
   }
 
   function startMarkResult() {
     markingResult = true;
-    showNotice('Click the element that holds the result (Esc to cancel)', true);
+    ensureFrameRoot();
+    renderResult();
+    setStatus('Click the element that holds the result (Esc to cancel)', true);
   }
 
   function cancelMarkResult() {
     markingResult = false;
-    removeChip();
+    renderResult();
+    setStatus('');
   }
 
   async function finishMarkResult(target) {
     markingResult = false;
     const el = resultZoneElement(target);
     const info = resultInfoOf(el);
-    let kind = suggestResultKind(el);
-    const send = async () => window.__daemonizeMarkResult({ info, kind });
-    const result = await send();
+    const kind = suggestResultKind(el);
+    const result = await window.__daemonizeMarkResult({ info, kind });
     if (!result || !result.ok) {
-      showNotice((result && result.error) || 'Could not set the result zone', false);
+      renderResult();
+      setStatus((result && result.error) || 'Could not set the result zone', false);
       return;
     }
-    const box = showNotice('Result zone set as', true);
-    const select = document.createElement('select');
-    select.setAttribute('data-daemonize-action', 'result-kind');
-    RESULT_KINDS.forEach((k) => {
-      const option = document.createElement('option');
-      option.value = k;
-      option.textContent = k;
-      select.appendChild(option);
-    });
-    select.value = kind;
-    select.addEventListener('change', async () => {
-      kind = select.value;
-      await send();
-    });
-    box.appendChild(select);
-    setTimeout(() => { if (chip === box && !box.contains(document.activeElement)) removeChip(); }, CHIP_LIFETIME_MS);
+    lastMark = { info, kind };
+    renderResult();
+    setStatus('Result zone set', false);
+    refreshState();
   }
 
   document.addEventListener('keydown', (e) => {
@@ -695,47 +976,6 @@ export const CAPTURE_SCRIPT = `
       startMarkResult();
     }
   }, true);
-
-  function askName(box, stepIndex, suggestion, rowText) {
-    box.textContent = '';
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = suggestion;
-    input.setAttribute('data-daemonize-action', 'variable-name');
-    input.style.cssText = 'width:140px';
-
-    const ok = document.createElement('button');
-    ok.type = 'button';
-    ok.textContent = 'OK';
-    ok.setAttribute('data-daemonize-action', 'confirm-variable');
-
-    const message = document.createElement('span');
-
-    async function confirm() {
-      const request = { stepIndex, name: input.value.trim() };
-      if (rowText !== undefined) request.rowText = rowText;
-      const result = await window.__daemonizeMarkVariable(request);
-      if (result && result.ok) {
-        box.textContent = 'Variable "' + input.value.trim() + '" saved';
-        setTimeout(() => { if (chip === box) removeChip(); }, 1500);
-      } else {
-        message.textContent = (result && result.error) || 'Could not save the variable';
-      }
-    }
-
-    ok.addEventListener('click', confirm);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        confirm();
-      }
-    });
-
-    box.append(input, ok, message);
-    input.focus();
-    input.select();
-  }
 
   // Position of the element in the viewport of the top page, when every frame up to it can be walked
   function viewportBox(el) {
@@ -757,7 +997,14 @@ export const CAPTURE_SCRIPT = `
       return undefined;
     }
   }
+  // The last event sent to the recorder: a field typed again with nothing in between updates its step
+  let lastEmit = null;
+  let lastInputEl = null;
+  let typedSeq = 0;
+
   function emit(actionType, el, value, extra) {
+    // Text typed and not recorded yet comes before whatever the user does next
+    if (actionType !== 'type') flushLive();
     const context = parentContext(el);
     const info = infoOf(el, context);
     const { anchor, frameComplete } = anchorOf(el, info, context);
@@ -778,16 +1025,30 @@ export const CAPTURE_SCRIPT = `
       event.value = value;
     }
     if (extra) Object.assign(event, extra);
+    if (actionType === 'type' && lastEmit && lastEmit.el === el && lastEmit.type === 'type') {
+      // Same field, nothing sent in between: the recorder updates that step (by index when this page already knows it)
+      if (typeof lastEmit.index === 'number') event.replaces = lastEmit.index;
+      else event.continues = true;
+    }
 
-    const pending = window.__daemonizeRecord(event);
+    const pending = track(window.__daemonizeRecord(event));
+    const entry = { el, type: actionType, index: undefined };
+    lastEmit = entry;
+    Promise.resolve(pending).then((index) => { if (typeof index === 'number') entry.index = index; }).catch(() => {});
     hoverTrail = [];
     baselineScroll = { x: window.scrollX, y: window.scrollY };
     refreshBaseline();
     scheduleBaseline();
     if ((actionType === 'type' || actionType === 'select') && !event.secretRef) {
+      // Only the latest typed field is offered: a result that comes back after the user moved on is ignored
+      const route = location.pathname;
+      const seq = ++typedSeq;
+      lastInputEl = el;
+      const label = info.name || info.nameAttr || info.id || 'value';
       Promise.resolve(pending)
         .then((index) => {
-          if (typeof index === 'number') showChip(index, toSnake(info.name || info.nameAttr || info.id || 'value'));
+          if (typeof index !== 'number' || seq !== typedSeq) return;
+          setOffer({ t: 'typed', fieldId: fieldIdOf(el), stepIndex: index, suggestion: toSnake(label), label, route });
         })
         .catch(() => {});
     }
@@ -823,9 +1084,41 @@ export const CAPTURE_SCRIPT = `
     return secretKind(el) ? '' : el.value;
   }
 
-  // Record the typed value once, when the field is left or Enter is pressed.
+  // The text field being typed in, flushed LIVE_FLUSH_MS after its last input event
+  let liveField = null;
+  let liveTimer = null;
+
+  function flushLive() {
+    clearTimeout(liveTimer);
+    const el = liveField;
+    liveField = null;
+    if (el && el.isConnected) flush(el);
+  }
+
+  document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!e.isTrusted || !(el instanceof Element) || inUi(el) || !isTextField(el)) return;
+    if (el !== lastInputEl) {
+      // Another field: the previous one is recorded now, and its offer no longer applies
+      flushLive();
+      lastInputEl = el;
+      typedSeq++;
+    }
+    if (model.offer !== null) setOffer({ t: 'input', fieldId: fieldIdOf(el) });
+    liveField = el;
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(flushLive, LIVE_FLUSH_MS);
+  }, true);
+
+  window.addEventListener('pagehide', flushLive, true);
+
+  // Record the typed value when the field is quiet for a moment, left, or Enter is pressed.
   function flush(el) {
     if (!isTextField(el)) return;
+    if (liveField === el) {
+      clearTimeout(liveTimer);
+      liveField = null;
+    }
     if (lastValues.get(el) === el.value) return;
     lastValues.set(el, el.value);
     emit('type', el, valueToRecord(el));
@@ -1016,7 +1309,8 @@ export const CAPTURE_SCRIPT = `
     const header = pos >= 0 ? row.closest('table, [role=table], [role=grid]') : null;
     const headRow = header ? header.querySelector('tr:has(th), [role=row]:has([role=columnheader])') : null;
     const headCell = headRow ? Array.from(headRow.children)[pos] : null;
-    showChip(-1, toSnake(headCell ? collapse(headCell.textContent) : 'row_key'), selected);
+    const suggestion = toSnake(headCell ? collapse(headCell.textContent) : 'row_key');
+    setOffer({ t: 'row', fieldId: 'row:' + selected, stepIndex: -1, suggestion, label: suggestion, route: location.pathname, rowText: selected });
   }
 
   document.addEventListener('keydown', (e) => {
@@ -1028,7 +1322,43 @@ export const CAPTURE_SCRIPT = `
     enterPressedAt = performance.now();
   }, true);
 
+  // ---------------------------------------------------------------- route changes and mounting
+
+  // A route is the pathname: a live search that only changes ?q= keeps the offer
+  function onRouteMaybeChanged() {
+    const route = location.pathname;
+    if (route !== model.route) setOffer({ t: 'route', route });
+    ensurePanel();
+    refreshState();
+  }
+
+  if (window.navigation && typeof window.navigation.addEventListener === 'function') {
+    // Sees pushState, replaceState, back and forward without patching anything of the page
+    window.navigation.addEventListener('currententrychange', onRouteMaybeChanged);
+  } else {
+    for (const name of ['pushState', 'replaceState']) {
+      const original = history[name];
+      history[name] = function () {
+        const result = original.apply(this, arguments);
+        onRouteMaybeChanged();
+        return result;
+      };
+    }
+  }
+  window.addEventListener('popstate', onRouteMaybeChanged);
+  window.addEventListener('hashchange', onRouteMaybeChanged);
+
+  document.addEventListener('DOMContentLoaded', ensurePanel);
+  window.addEventListener('load', ensurePanel);
+  document.addEventListener('visibilitychange', () => { ensurePanel(); refreshState(); });
+  // The document element is replaced by page.setContent and document.write; the panel is mounted again
+  new MutationObserver(ensurePanel).observe(document, { childList: true });
+  if (IS_TOP) setInterval(() => { ensurePanel(); refreshState(); }, STATE_POLL_MS);
+  ensurePanel();
+
   window.__daemonizeHelpers = {
+    offerModel: { create: createOfferModel },
+    LIVE_FLUSH_MS,
     roleOf,
     accessibleName: accessibleNameOf,
     parentContext,

@@ -251,7 +251,7 @@ async function downscale(page: Page, png: Buffer, width: number, height: number)
 async function takeThumbnail(page: Page, clip: Box): Promise<Buffer | undefined> {
   // caret 'initial' and the default animations: hiding the caret leaves a `style=""` attribute on the focused
   // field, which would change the recorded final screen
-  const shot = await page.screenshot({ type: 'png', clip, scale: 'css', caret: 'initial' });
+  const shot = await page.screenshot({ type: 'png', clip, scale: 'css', caret: 'initial', style: '[data-daemonize-ui] { visibility: hidden !important }' });
   for (const factor of DOWNSCALE_FACTORS) {
     const size = fitSize(clip.width, clip.height, factor);
     let png: Buffer;

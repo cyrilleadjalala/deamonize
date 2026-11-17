@@ -122,7 +122,8 @@ describe('Result_Zone on a web page: record → compile → call over MCP', () =
         url, name: 'Orders', label: 'Show payload', out, headless: true,
         drive: async (page) => {
           await page.getByRole('button', { name: 'Show orders' }).click();
-          await page.keyboard.press('Alt+Shift+R');
+          // The panel button does what the shortcut does: no keyboard needed
+          await page.getByRole('button', { name: 'Choose the result to capture' }).click();
           await page.locator('#payload').click();
           await page.locator('[data-daemonize-action=result-kind]').waitFor();
           expect(await page.locator('[data-daemonize-action=result-kind]').inputValue()).toBe('json');

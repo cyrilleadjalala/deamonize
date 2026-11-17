@@ -88,7 +88,8 @@ describe('LiveRecorder (record in a real browser, then replay)', () => {
     await page.keyboard.type('hunter2');
     await page.locator('#plan').focus(); // leaving the password field records it
     await page.locator('#plan').selectOption('pro');
-    await page.getByRole('button', { name: 'Save' }).click();
+    // exact: the recording panel has a "Finish and save" button too
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.waitForURL('**/result*');
     await settle();
 
@@ -198,6 +199,56 @@ describe('LiveRecorder (record in a real browser, then replay)', () => {
     expect(step.selectors[0]).toBe('#promo-box');
     expect(step.selectors).toContain('text="Apply promo"');
   }, 30000);
+
+  it('replaces the value of the last typed step, but not a variable, a secret or a step that is not last', async () => {
+    const recorder = new WorkflowRecorder('Replace');
+    const live = new LiveRecorder(page, recorder);
+    const event = (value: string, replaces?: number) => ({
+      actionType: 'type' as const,
+      info: { role: 'textbox', name: 'Search', id: 'q', css: '#q' },
+      value,
+      label: 'type Search',
+      ...(replaces === undefined ? {} : { replaces }),
+    });
+
+    expect(live.handle(event('ad'))).toBe(0);
+    expect(live.handle(event('ada', 0))).toBe(0);
+    expect(recorder.stepsSoFar()).toHaveLength(1);
+    expect(recorder.stepsSoFar()[0].value).toBe('ada');
+
+    // Once the value is a variable, typing again is a new step
+    live.markVariable(0, { name: 'q' });
+    expect(live.handle(event('adam', 0))).toBe(1);
+    expect(recorder.stepsSoFar().map((s) => s.value)).toEqual(['ada', 'adam']);
+
+    expect(() => recorder.replaceValue(0, 'x')).toThrow(/already the variable/);
+    expect(() => recorder.replaceValue(9, 'x')).toThrow(/No step/);
+    // A replacement that is not about the last step is a step of its own
+    expect(live.handle(event('adamo', 0))).toBe(2);
+  });
+
+  it('ends once, whatever the reason, and describes its panel without any typed value', async () => {
+    const recorder = new WorkflowRecorder('Panel state');
+    const live = new LiveRecorder(page, recorder);
+    expect(live.panelState()).toEqual({ steps: 0, last: [], collapsed: false, ending: false });
+
+    for (const label of ['type A', 'click B', 'click C', 'click D']) {
+      live.handle({ actionType: 'click', info: { role: 'button', name: label, css: 'button' }, label });
+    }
+    live.handle({ actionType: 'type', info: { role: 'textbox', name: 'Email', css: '#e' }, value: 'secret-looking@x.io', label: 'type Email' });
+    const state = live.panelState();
+    expect(state.steps).toBe(5);
+    expect(state.last).toEqual(['click C', 'click D', 'type Email']);
+    expect(JSON.stringify(state)).not.toContain('secret-looking');
+
+    let resolved: string | undefined;
+    void live.ended.then((reason) => { resolved = reason; });
+    live.requestEnd('api');
+    live.requestEnd('panel');
+    await live.ended;
+    expect(resolved).toBe('api');
+    expect(live.panelState().ending).toBe(true);
+  });
 
   it('refuses to attach twice', async () => {
     const live = new LiveRecorder(page, new WorkflowRecorder('a'));

@@ -116,7 +116,8 @@ describe('Level 1: direct HTTP replay (record, compile --http, call over MCP)', 
     const skill = readFileSync(join(outputDir, 'skills', Object.keys(mcp.mcpServers)[0], 'SKILL.md'), 'utf8');
     expect(skill).toContain('## HTTP replay');
     expect(skill).toContain('Runs over HTTP, without a browser.');
-    expect(skill).toMatch(/Step 2 runs over HTTP; steps 3, 4 use the browser/);
+    // The search is followed by a browser step (the server-rendered form), so the whole workflow runs in the browser
+    expect(skill).toMatch(/Find then save SSR\. Inputs: query, ssr_name\. Runs in the browser/);
     expect(readFileSync(join(outputDir, 'sandbox', 'Dockerfile'), 'utf8')).toContain('COPY http-replay.js ./http-replay.js');
   });
 
@@ -224,13 +225,61 @@ describe('Level 1: direct HTTP replay (record, compile --http, call over MCP)', 
     expect(ssr.levels).toEqual(['accessibility', 'accessibility']);
     expect(app.direct).toEqual(direct);
 
-    // The search runs over HTTP; the field typed for it is replayed on the page once the form needs the browser
+    // The form needs the browser, so the search before it runs on the page as well (mixed workflow rule)
     const mixed = await server.call('find_then_save_ssr', { query: 'Ada', ssr_name: 'Linus' });
     expect(mixed.success, JSON.stringify(mixed)).toBe(true);
     expect(mixed.text).toContain('Saved Linus');
-    expect(mixed.levels).toEqual(['accessibility', 'http', 'accessibility', 'accessibility']);
+    expect(mixed.levels).toEqual(['accessibility', 'accessibility', 'accessibility', 'accessibility']);
     expect(mixed.levelFallback).toBeUndefined();
-    expect(app.direct.search).toBe(direct.search + 1);
+    // A browser step follows the search: it runs on the page, not over HTTP
+    expect(app.direct.search).toBe(direct.search);
+  });
+
+  it('(f) a GET recipe on a step whose UI risk is write falls back to the page once; a POST failure still does not', async () => {
+    // The recorder may leave `risk: write` on a step whose recipe is a GET (a search submitted with Enter)
+    const patched = JSON.parse(readFileSync(workflowFile, 'utf8')) as { workflows: Array<{ label: string; steps: Array<{ actionType: string; http?: unknown; risk?: string }> }> };
+    for (const step of patched.workflows.find((w) => w.label === 'Find customers')!.steps) {
+      if (step.http !== undefined) step.risk = 'write';
+    }
+    const patchedFile = join(work, 'workflows-write-get.json');
+    await writeFile(patchedFile, JSON.stringify(patched));
+    const patchedDir = await mkdtemp(join(workspaceRoot, '.http-'));
+    dirs.push(patchedDir);
+    const log = console.log;
+    console.log = () => { };
+    try {
+      await compile(patchedFile, patchedDir, { http: 'auto' });
+    } finally {
+      console.log = log;
+    }
+    const client = new Client({ name: 'http-replay-get-fallback', version: '1.0.0' });
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [join(patchedDir, 'mcp-server.js')],
+      cwd: workspaceRoot,
+      env: { DAEMONIZE_STEP_TIMEOUT_MS: '5000', DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH ?? '', DAEMONIZE_STORAGE_STATE: storageStatePath, ...auth },
+    });
+    await client.connect(transport);
+    open.push({ client, transport });
+
+    app.changeApiForDirect = true;
+    const direct = app.direct.search;
+    let result: Result;
+    try {
+      const response = await client.callTool({ name: 'find_customers', arguments: { query: 'Ada' } });
+      result = JSON.parse((response.content as Array<{ text: string }>)[0].text);
+    } finally {
+      app.changeApiForDirect = false;
+    }
+    results.push(JSON.stringify(result));
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    expect(result.levelFallback).toBe(true);
+    expect(result.levels).toEqual(['accessibility', 'accessibility']);
+    expect(result.text).toContain('Ada');
+    // One direct attempt, then the page once
+    expect(app.direct.search).toBe(direct + 1);
+
+    // A write recipe that was sent is still never retried: (b) above asserts the POST case (one request, no replay)
   });
 
   it('(e) leaves no cookie or token in the artifacts, the workflow file or any result', async () => {

@@ -15,6 +15,7 @@ import {
   missingHttpSecrets,
   planSteps,
   rebaseOrigin,
+  recipeMutates,
   runHttpStep,
   shapeHash,
   shapeOf,
@@ -260,10 +261,54 @@ describe('planning the steps', () => {
   it('keeps a click, a secret or an unbound variable on the page', () => {
     expect(planSteps([{ actionType: 'type', variable: 'other' }, { actionType: 'click', http: http('q') }])).toEqual(['ui', 'http']);
     expect(planSteps([{ actionType: 'type', secretRef: 'PW' }, { actionType: 'click', http: http('q') }])).toEqual(['ui', 'http']);
-    expect(planSteps([{ actionType: 'click', http: http('q') }, { actionType: 'click' }])).toEqual(['http', 'ui']);
-    // Nothing after it carries the value
-    expect(planSteps([{ actionType: 'click', http: http('q') }, { actionType: 'type', variable: 'q' }])).toEqual(['http', 'ui']);
+    expect(planSteps([{ actionType: 'click', http: http('q') }, { actionType: 'click' }])).toEqual(['ui', 'ui']);
+    // Nothing after it carries the value; a browser step follows the request, so the request runs on the page
+    expect(planSteps([{ actionType: 'click', http: http('q') }, { actionType: 'type', variable: 'q' }])).toEqual(['ui', 'ui']);
     expect(isHttpOnly(planSteps([]))).toBe(false);
+  });
+});
+
+describe('planning mixed workflows', () => {
+  const recipeFor = (variable: string | undefined, auth?: HttpRecipeLike['auth']): HttpRecipeLike =>
+    recipe({ method: 'POST', auth, bindings: variable === undefined ? [] : [{ variable, in: 'body', name: `/${variable}` }] });
+
+  it('keeps every step before a browser step on the page: credentials, code, verify', () => {
+    const plan = planSteps([
+      { actionType: 'type', variable: 'email' },
+      { actionType: 'type', variable: 'password' },
+      { actionType: 'click', http: recipeFor('password', 'none') },
+      { actionType: 'type', secretRef: 'TOTP', totp: true },
+      { actionType: 'click', http: recipeFor('code', 'storageState') },
+    ]);
+    expect(plan).toEqual(['ui', 'ui', 'ui', 'ui', 'ui']);
+  });
+
+  it('keeps an HTTP-only workflow on HTTP', () => {
+    const plan = planSteps([{ actionType: 'type', variable: 'q' }, { actionType: 'click', http: recipeFor('q', 'storageState') }]);
+    expect(plan).toEqual(['prep', 'http']);
+    expect(isHttpOnly(plan)).toBe(true);
+  });
+
+  it('replays a prep step on the page when the request it feeds is demoted', () => {
+    expect(planSteps([{ actionType: 'type', variable: 'q' }, { actionType: 'click', http: recipeFor('q') }, { actionType: 'click' }])).toEqual(['ui', 'ui', 'ui']);
+  });
+
+  it('keeps a final suffix on HTTP unless its recipe depends on the browser cookies', () => {
+    expect(planSteps([{ actionType: 'click' }, { actionType: 'click', http: recipeFor(undefined, 'none') }])).toEqual(['ui', 'http']);
+    expect(planSteps([{ actionType: 'click' }, { actionType: 'click', http: recipeFor(undefined, 'env:TOKEN') }])).toEqual(['ui', 'http']);
+    expect(planSteps([{ actionType: 'click' }, { actionType: 'click', http: recipeFor(undefined, 'storageState') }])).toEqual(['ui', 'ui']);
+    expect(
+      planSteps([
+        { actionType: 'click' },
+        { actionType: 'click', http: recipeFor(undefined, 'storageState') },
+        { actionType: 'click', http: recipeFor(undefined, 'none') },
+      ])
+    ).toEqual(['ui', 'ui', 'http']);
+  });
+
+  it('recipeMutates is false for GET and HEAD only, whatever the case', () => {
+    for (const method of ['GET', 'get', 'HEAD']) expect(recipeMutates({ method })).toBe(false);
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE', 'delete']) expect(recipeMutates({ method })).toBe(true);
   });
 });
 

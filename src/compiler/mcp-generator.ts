@@ -336,9 +336,9 @@ const WEB_RUNTIME = [
 ];
 
 // With --http (Level 1): a recipe is executed directly (http-replay.ts); a workflow whose steps all have one runs
-// without a browser. The browser starts on the first step that needs it (a step without recipe, or the Level 2
+// without a browser. A workflow that has a ui step runs every step up to the last one in the browser (planSteps), so\n// page and cookies stay in sync. The browser starts on the first step that needs it (a step without recipe, or the Level 2
 // fallback of a read step), at which point the field-filling steps skipped so far are replayed on the page.
-// A write or delete step whose request failed is never repeated on another level.
+// A recipe that mutates (POST/PUT/PATCH/DELETE) whose request failed is never repeated on another level; a GET may fall back.
 const WEB_RUNTIME_HTTP = [
   `async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides, track: HealTrack) {`,
   `  const startedAt = Date.now();`,
@@ -421,7 +421,7 @@ const WEB_RUNTIME_HTTP = [
   `            continue;`,
   `          }`,
   `          // A write or delete request may have reached the server: another level could do the action twice`,
-  `          if ((step.risk ?? "read") !== "read") {`,
+  `          if (recipeMutates(step.http)) {`,
   `            return httpFailureResult({ stepIndex: index, step, outcome, levels: levels.map((l, i) => (i > index ? "not_run" : l)), elapsedMs: Date.now() - startedAt });`,
   `          }`,
   `          // A read step is repeated on the page, strictly`,
@@ -966,7 +966,7 @@ export class McpGenerator {
           `import { boundText, redactDeep, zoneFailureResult, type ExtractorLike } from "./extract.js";`,
           `import { missingSecrets, secretValues, redactSecrets, runStepsStrict, describeFailure, failureResult, StepExecutionError, HealUnavailableError, HealFailedError, healEligible, hasNoDomTarget, parseMode, resolveStepValue, type ReplayMode } from "./step-plan.js";`,
           ...(http
-            ? [`import { planSteps, runHttpStep, withRecordedDefaults, rebaseOrigin, missingHttpSecrets, httpSecretValues, buildHttpResult, httpFailureResult, scrub } from "./http-replay.js";`]
+            ? [`import { planSteps, recipeMutates, runHttpStep, withRecordedDefaults, rebaseOrigin, missingHttpSecrets, httpSecretValues, buildHttpResult, httpFailureResult, scrub } from "./http-replay.js";`]
             : []),
         ]
         : [

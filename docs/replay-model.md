@@ -9,12 +9,19 @@ Each step is replayed by the most stable means available:
 
 | Level | Name in `levels` | What it is | When it is used |
 | --- | --- | --- | --- |
-| 1 | `http` | The recorded fetch/XHR request, with Variables bound into it and secrets taken from the environment | Web only, compiled with `compile --http`, and only for steps that have a recorded request. A read step whose request fails is repeated in the browser (`levelFallback: true`). A write or delete step is never repeated: the call fails with `http_failed` |
+| 1 | `http` | The recorded fetch/XHR request, with Variables bound into it and secrets taken from the environment | Web only, compiled with `compile --http`, and only for steps that have a recorded request. A step whose request fails is repeated in the browser (`levelFallback: true`) when the request is a GET or HEAD. A step whose request is a POST, PUT, PATCH or DELETE is never repeated: the call fails with `http_failed` |
 | 2 | `accessibility` | Role and accessible name, then recorded fallbacks, with relational anchors (the row of a table is found by a Variable bound to a cell text, never by position) | Always |
 | 3 | vision | A multimodal model finds the element on a screenshot | Only with `--heal`, only after Levels 1 and 2 failed, or when the page has no DOM (canvas) |
 
 Server-rendered applications such as Adminer have no fetch/XHR to record: every step stays at Level 2. That is a normal result.
 
+## Mixed workflows (--http)
+Node etch() runs outside the browser: it moves neither the page to the next screen nor the cookies of the browser. So the plan (planSteps in src/replay/runtime/http-replay.ts) follows one rule:
+- A workflow where every step has a request, or only fills a field for a later request, runs over HTTP with no browser (unchanged).
+- Otherwise every step up to and including the last browser step runs in the browser (ccessibility), whether it has a request or not. A field-filling step whose value a later request carries is replayed on the page too, so the page receives the value. This keeps the DOM and the cookies of the page in step with the browser steps that follow (a two-step login: password screen, then a code screen).
+- The final suffix, the steps after the last browser step, stays over HTTP. The exception is a request whose uth is storageState: it relies on the cookies of the browser session, the response may rotate them, and CSRF state can be paired with the page. Such a request runs in the browser, together with every step before it. A request with uth 
+one or env:NAME, or with no uth, does not depend on the browser and stays over HTTP.
+The fallback to the browser after a failed request depends on the request, not on the risk of the step: only a request that mutates (POST, PUT, PATCH, DELETE) is never repeated, so a GET that fails (a redirect to an HTML login page with status 200, a changed shape) can fall back to Level 2 once.
 ## STRICT and HEAL
 
 | | STRICT (default) | HEAL (opt-in) |

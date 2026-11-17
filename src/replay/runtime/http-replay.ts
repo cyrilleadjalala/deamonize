@@ -670,12 +670,12 @@ export type StepMode = 'http' | 'prep' | 'ui';
 const PREPARATORY = new Set(['type', 'select', 'hover', 'scrollIntoView']);
 
 /**
- * Decide, per step, how a call runs it. A step with a recipe runs over HTTP. A step that only fills a field is
- * preparatory when a later recipe takes its value (the Variable is bound in it) or it has no Variable: its effect
- * is carried by that request, so it is skipped, and replayed on the page only if a later step needs the browser.
- * Everything else (a click or a submit without recipe, a secret, a pop-up switch) is Level 2.
+ * The plan before the mixed-workflow rule: a step with a recipe is http. A step that only fills a field is
+ * preparatory when a later recipe takes its value (the Variable is bound in it) or it has no Variable: its
+ * effect is carried by that request, so it is skipped. Everything else (a click or a submit without recipe,
+ * a secret, a TOTP step, a pop-up switch) is Level 2.
  */
-export function planSteps(steps: readonly PlanStepLike[]): StepMode[] {
+function rawPlan(steps: readonly PlanStepLike[]): StepMode[] {
   return steps.map((step, index) => {
     if (step.http !== undefined) return 'http';
     if (!PREPARATORY.has(step.actionType) || step.secretRef !== undefined || step.totp === true) return 'ui';
@@ -686,6 +686,32 @@ export function planSteps(steps: readonly PlanStepLike[]): StepMode[] {
   });
 }
 
+/**
+ * Decide, per step, how a call runs it (see rawPlan for the per-step choice).
+ *
+ * Mixed workflows: Node fetch() runs outside the browser, so it moves neither the page to the next screen nor
+ * the cookies of the browser. Therefore no http or prep step may precede a ui step: every step up to and
+ * including the last ui step runs in the browser. Only the final suffix (after the last ui step) keeps its mode.
+ * Within a plan that has a ui step, a recipe with `auth === 'storageState'` depends on the browser cookies
+ * (the response may rotate them, and CSRF state is paired with the page), so it is a ui step too, together
+ * with everything before it. A recipe without `auth`, or with `none` or `env:NAME`, stays independent.
+ * A workflow with no ui step (HTTP only) is unchanged.
+ */
+export function planSteps(steps: readonly PlanStepLike[]): StepMode[] {
+  const plan = rawPlan(steps);
+  if (!plan.includes('ui')) return plan;
+  plan.forEach((mode, i) => {
+    if (mode === 'http' && steps[i].http?.auth === 'storageState') plan[i] = 'ui';
+  });
+  const lastUi = plan.lastIndexOf('ui');
+  return plan.map((mode, i) => (i <= lastUi ? 'ui' : mode));
+}
+
+/** True when the recipe changes state on the server (anything but GET and HEAD): it must never run twice. */
+export function recipeMutates(recipe: { method: string }): boolean {
+  const method = recipe.method.toUpperCase();
+  return method !== 'GET' && method !== 'HEAD';
+}
 /** True when no step needs the browser. */
 export function isHttpOnly(plan: readonly StepMode[]): boolean {
   return plan.length > 0 && plan.every((mode) => mode !== 'ui');

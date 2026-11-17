@@ -238,6 +238,16 @@ describe('CLI: record → compile → merge', () => {
     await expect(readFile(out, 'utf-8')).rejects.toThrow(/ENOENT/);
   }, 60000);
 
+  it('starts the Studio, like `studio --open`, when run without a subcommand (it used to print the help)', async () => {
+    const started: unknown[][] = [];
+    const handle = { close: async () => undefined };
+    await buildProgram({
+      studio: (async (...args: unknown[]) => { started.push(args); return handle; }) as never,
+      untilInterrupted: (async () => undefined) as never,
+    }).parseAsync(['node', 'daemonize']);
+    expect(started).toEqual([['daemonize-out', { workflows: 'daemonize.workflows.json', host: '127.0.0.1', allowRemote: false, open: true, sample: false }]]);
+  });
+
   it('rejects arguments the record command cannot use', async () => {
     const program = buildProgram();
     program.exitOverride();

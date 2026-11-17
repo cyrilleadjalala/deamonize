@@ -58,3 +58,31 @@ export async function studio(dir: string, options: StudioCommandOptions): Promis
   if (options.open === true) openInBrowser(handle.url);
   return handle;
 }
+
+const SHUTDOWN_DEADLINE_MS = 4500;
+
+/**
+ * Keep the process alive until SIGINT or SIGTERM, then close the Studio (at most 4.5 s, so the exit stays within 5 s even
+ * when an active recording takes longer to stop: the browser dies with its parent). With `exit` (default) the process
+ * then exits with code 0; the `studio` subcommand passes `exit: false` and simply returns.
+ */
+export async function untilInterrupted(handle: Pick<StudioHandle, 'close'>, options: { exit?: boolean; deadlineMs?: number } = {}): Promise<void> {
+  await new Promise<void>((done) => {
+    let stopping = false;
+    const stop = (): void => {
+      if (stopping) return;
+      stopping = true;
+      let timer: NodeJS.Timeout | undefined;
+      const deadline = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, options.deadlineMs ?? SHUTDOWN_DEADLINE_MS);
+      });
+      void Promise.race([handle.close().catch(() => undefined), deadline]).then(() => {
+        if (timer !== undefined) clearTimeout(timer);
+        done();
+      });
+    };
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+  });
+  if (options.exit !== false) process.exit(0);
+}

@@ -9,7 +9,7 @@ import { compile, parseHttpMode } from './commands/compile.js';
 import { parseSuggestMode } from '../suggest/model-suggester.js';
 import { merge } from './commands/merge.js';
 import { serve } from './commands/serve.js';
-import { studio, parsePort } from './commands/studio.js';
+import { studio, parsePort, untilInterrupted } from './commands/studio.js';
 import { buildSandboxImage } from './commands/sandbox.js';
 import { validateSandboxSpec } from '../sandbox/dockerfile.js';
 import type { SandboxSpec } from '../types.js';
@@ -46,11 +46,27 @@ function suggestOptions(options: { suggest?: string | boolean; suggestForce?: bo
   const mode = parseSuggestMode(options.suggest);
   return mode === undefined ? undefined : { mode, force: options.suggestForce === true, graphFile: options.suggestGraph };
 }
-export function buildProgram(): Command {
+/** What the default launch needs; tests replace it to avoid starting a server. */
+export interface CliDeps {
+  studio: typeof studio;
+  untilInterrupted: typeof untilInterrupted;
+}
+const defaultDeps: CliDeps = { studio, untilInterrupted };
+
+export function buildProgram(deps: CliDeps = defaultDeps): Command {
   const program = new Command();
   program
     .name('daemonize')
-    .description('Wrap a web application behind a generated MCP server and OpenAPI spec');
+    .description('Wrap a web application behind a generated MCP server and OpenAPI spec. Run it without a command to open the Studio.');
+
+  // No subcommand: the same as `daemonize studio --open`
+  program.action(async (_options: unknown, command: Command) => {
+    if (command.args.length > 0) {
+      throw new Error(`Unknown argument "${command.args[0]}". Run "daemonize --help" to see the commands.`);
+    }
+    const handle = await deps.studio(DEFAULT_OUTPUT_DIR, { workflows: DEFAULT_WORKFLOWS_FILE, host: '127.0.0.1', allowRemote: false, open: true, sample: false });
+    await deps.untilInterrupted(handle);
+  });
 
   program
     .command('record <target...>')
@@ -277,7 +293,7 @@ export function buildProgram(): Command {
     .option('--open', 'open the address in your browser')
     .option('--sample', 'show built-in fictitious sample data instead of your files')
     .action(async (dir: string | undefined, options) => {
-      const handle = await studio(dir ?? DEFAULT_OUTPUT_DIR, {
+      const handle = await deps.studio(dir ?? DEFAULT_OUTPUT_DIR, {
         workflows: options.workflows,
         port: options.port,
         host: options.host,
@@ -287,13 +303,7 @@ export function buildProgram(): Command {
         graph: options.graph,
       });
       // Stay up until interrupted
-      await new Promise<void>((done) => {
-        const stop = (): void => {
-          void handle.close().then(done);
-        };
-        process.once('SIGINT', stop);
-        process.once('SIGTERM', stop);
-      });
+      await deps.untilInterrupted(handle, { exit: false });
     });
 
   program

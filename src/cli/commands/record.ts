@@ -2,8 +2,9 @@ import { createInterface } from 'node:readline/promises';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chromium, type Page } from 'playwright';
-import { LiveRecorder, type NetworkStepReport } from '../../recorder/live-recorder.js';
+import type { Browser, Page } from 'playwright';
+import { launchBrowser, type LaunchFn } from '../../recorder/browser-launcher.js';
+import { LiveRecorder, type EndReason, type NetworkStepReport } from '../../recorder/live-recorder.js';
 import { WorkflowRecorder } from '../../recorder/workflow-recorder.js';
 import { saveWorkflow } from './save-workflow.js';
 import type { SandboxSpec } from '../../types.js';
@@ -34,6 +35,23 @@ export interface RecordOptions {
    * page is still open. A Studio-driven recording uses it, or calls `live.requestEnd('api')` from `drive`.
    */
   signal?: AbortSignal;
+  /** Test seam of the Browser_Launcher: replaces chromium.launch. */
+  launch?: LaunchFn;
+  /**
+   * Path of a Playwright storage state used only to start the browser context (a persistent session). It is never copied
+   * into the Workflow_File or the recovery file, unlike storageState.
+   */
+  sessionStorageState?: string;
+  /** After a successful save and before the browser closes, receives context.storageState(); it stays in memory. */
+  captureSessionState?: (state: unknown) => void | Promise<void>;
+  /** terminal (default) waits for Enter or the window; studio never reads stdin and a closed window takes the recovery path. */
+  windowMode?: 'terminal' | 'studio';
+  /** Called right after the live recorder is attached. */
+  onLive?: (live: LiveRecorder) => void;
+  /** Called with the launched browser. */
+  onBrowser?: (browser: Browser) => void;
+  /** Called when the session ends, before the end of the recording is completed. */
+  onEnding?: (reason: EndReason | 'closed') => void;
 }
 
 export interface RecordSummary {
@@ -52,6 +70,8 @@ export interface RecordSummary {
   thumbnails: number;
   /** The Result_Zone stored with the workflow, when there is one. */
   resultZone?: { selector?: string; rect?: { row: number; col: number; rows: number; cols: number }; kind: string };
+  /** Present only when captureSessionState was given: whether the session state was captured. */
+  sessionCaptured?: boolean;
 }
 
 /**
@@ -59,10 +79,9 @@ export interface RecordSummary {
  * Workflow set file (created when missing, merged when it already exists).
  */
 export async function record(options: RecordOptions): Promise<RecordSummary> {
-  const browser = await chromium.launch({
-    headless: options.headless ?? false,
-    executablePath: process.env.DAEMONIZE_CHROMIUM_PATH || undefined,
-  });
+  // A launcher failure propagates here, before anything is written
+  const { browser } = await launchBrowser({ headless: options.headless ?? false, launch: options.launch });
+  options.onBrowser?.(browser);
 
   // The browser going away on its own (crash, killed) is not the user ending the session
   let closing = false;
@@ -80,10 +99,16 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
   let recorder: WorkflowRecorder | undefined;
   let live: LiveRecorder | undefined;
   const target = { targetType: 'web' as const, name: options.name, startUrl: options.url, storageState: options.storageState, sandbox: options.sandbox };
+  let ending = false;
+  const notifyEnding = (reason: EndReason | 'closed'): void => {
+    if (ending) return;
+    ending = true;
+    try { options.onEnding?.(reason); } catch { /* a hook never breaks the recording */ }
+  };
 
   try {
     const context = await browser.newContext(
-      options.storageState ? { storageState: options.storageState } : {}
+      options.sessionStorageState ? { storageState: options.sessionStorageState } : options.storageState ? { storageState: options.storageState } : {}
     );
     const page = await context.newPage();
     page.on('crash', () => signalStopped('the page crashed'));
@@ -95,6 +120,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
       ...(options.visual === false ? {} : { visual: { workflowFile: options.out } }),
     });
     await live.attach();
+    options.onLive?.(live);
 
     // Popups and new tabs get the same capture; each opening is recorded as a switch_page step
     context.on('page', (opened) => {
@@ -109,10 +135,30 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     if (options.signal?.aborted === true) stop();
     else options.signal?.addEventListener('abort', stop, { once: true });
 
-    const session = options.drive ? options.drive(page, live) : waitForUser(page, live.ended);
-    await Promise.race([session, stopped, live.ended]);
+    if (options.windowMode === 'studio') page.on('close', () => signalStopped('the browser window was closed'));
+    const session: Promise<void> = options.drive
+      ? options.drive(page, live)
+      : options.windowMode === 'studio'
+        ? new Promise<void>(() => { })
+        : waitForUser(page, live.ended);
+    const reason = await Promise.race([
+      session.then((): EndReason | 'closed' => (options.drive ? 'api' : 'closed')),
+      stopped,
+      live.ended,
+    ]);
+    notifyEnding(reason);
 
     const { workflow, totalWorkflows, network } = await completeRecording({ options, page, live, recorder, target });
+
+    let sessionCaptured: boolean | undefined;
+    if (options.captureSessionState !== undefined) {
+      try {
+        await options.captureSessionState(await context.storageState());
+        sessionCaptured = true;
+      } catch {
+        sessionCaptured = false;
+      }
+    }
 
     return {
       out: options.out,
@@ -122,6 +168,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
       totalWorkflows,
       thumbnails: live.thumbnailCount,
       network,
+      ...(sessionCaptured === undefined ? {} : { sessionCaptured }),
       ...secretSummary(workflow),
       ...(workflow.resultZone === undefined
         ? {}
@@ -131,6 +178,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     if (closing || !(err instanceof BrowserStoppedError)) {
       throw err;
     }
+    notifyEnding('closed');
     throw await interrupted((err as Error).message, options, target, recorder, live);
   } finally {
     closing = true;

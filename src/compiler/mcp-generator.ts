@@ -226,9 +226,9 @@ const WEB_SHARED = [
 // One web step. A server compiled without --heal-support has no heal code: asking for heal mode is reported as
 // unavailable on the step where heal would have been needed, and the strict path is otherwise untouched.
 const WEB_STEP_STRICT = [
-  `async function runStep(webRun: WebRun, step: Step, _index: number, args: Record<string, unknown>, timeoutMs: number, _track: HealTrack, _final: Final): Promise<void> {`,
+  `async function runStep(webRun: WebRun, step: Step, _index: number, args: Record<string, unknown>, timeoutMs: number, _track: HealTrack, _final: Final, env: Record<string, string | undefined>): Promise<void> {`,
   `  try {`,
-  `    await executeWebStep(webRun, step, args, { timeoutMs });`,
+  `    await executeWebStep(webRun, step, args, { timeoutMs, env });`,
   `  } catch (err) {`,
   `    if (err instanceof StepExecutionError && err.healable && healEligible(step, MODE)) {`,
   `      throw new HealUnavailableError(err.tried, "heal mode was requested but this server was compiled without --heal-support (recompile with: daemonize compile --heal-support). The deterministic locators had failed: " + err.reason);`,
@@ -242,9 +242,9 @@ const WEB_STEP_STRICT = [
 // With --heal-support: when every deterministic locator of an eligible step failed, the heal modules are loaded
 // (a dynamic import, only now) and look for the element: cached locator, recorded coordinates, then the model.
 const WEB_STEP_HEAL = [
-  `async function runStep(webRun: WebRun, step: Step, index: number, args: Record<string, unknown>, timeoutMs: number, track: HealTrack, final: Final): Promise<void> {`,
+  `async function runStep(webRun: WebRun, step: Step, index: number, args: Record<string, unknown>, timeoutMs: number, track: HealTrack, final: Final, env: Record<string, string | undefined>): Promise<void> {`,
   `  try {`,
-  `    await executeWebStep(webRun, step, args, { timeoutMs });`,
+  `    await executeWebStep(webRun, step, args, { timeoutMs, env });`,
   `  } catch (err) {`,
   `    if (!(err instanceof StepExecutionError) || !err.healable || !healEligible(step, MODE)) throw err;`,
   `    const page = webRun.pages[webRun.current];`,
@@ -263,7 +263,7 @@ const WEB_STEP_HEAL = [
   `    }`,
   `    let value: string | undefined;`,
   `    try {`,
-  `      value = resolveStepValue(step, args, process.env);`,
+  `      value = resolveStepValue(step, args, env);`,
   `    } catch {`,
   `      value = undefined;`,
   `    }`,
@@ -288,7 +288,8 @@ const WEB_RUNTIME = [
   `  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });`,
   `  const deadline = startedAt + TIMEOUT_MS;`,
   `  // A secret that is not set fails the call before any step runs; only the name of its variable is reported`,
-  `  const missing = missingSecrets(steps, process.env);`,
+  `  const env = await withResolvedSecrets(process.env, [...secretVariables(steps)]);`,
+  `  const missing = missingSecrets(steps, env);`,
   `  if (missing.length > 0) {`,
   `    return { success: false, error: "missing_secret", failure: { missingSecret: missing[0], missing }, elapsedMs: Date.now() - startedAt };`,
   `  }`,
@@ -309,7 +310,7 @@ const WEB_RUNTIME = [
   `    const page = await context.newPage();`,
   `    const webRun = createWebRun(context, page);`,
   `    // Passwords and TOTP seeds are removed from everything this call reports, whichever step fails`,
-  `    webRun.secrets.push(...secretValues(steps, process.env));`,
+  `    webRun.secrets.push(...secretValues(steps, env));`,
   `    const run = async () => {`,
   `      await page.goto(overrides.url ?? START_URL, { timeout: TIMEOUT_MS });`,
   `      await waitForEffect(page as unknown as SettlePage, { timeoutMs: boundStepTimeoutMs(STEP_TIMEOUT_MS, deadline - Date.now()) });`,
@@ -317,7 +318,7 @@ const WEB_RUNTIME = [
   `      const outcome = await runStepsStrict(steps, async (step, index) => {`,
   `        // A step never waits longer than what is left of the whole replay`,
   `        const timeoutMs = boundStepTimeoutMs(resolveStepTimeoutMs({ step: step.timeoutMs, env: process.env.DAEMONIZE_STEP_TIMEOUT_MS }), deadline - Date.now());`,
-  `        await runStep(webRun, step, index, args, timeoutMs, track, final);`,
+  `        await runStep(webRun, step, index, args, timeoutMs, track, final, env);`,
   `      });`,
   `      if (!outcome.ok) return await stepFailureResult(webRun, outcome, startedAt);`,
   `      return await finishWeb(webRun, page, final, startedAt, deadline);`,
@@ -350,7 +351,9 @@ const WEB_RUNTIME_HTTP = [
   `  // A step kept on the page never reads its recorded {"$secret":NAME} references: only the steps run over HTTP need them`,
   `  const plan = planSteps(steps);`,
   `  const httpSteps = steps.filter((_, index) => plan[index] === "http");`,
-  `  const missing = [...new Set([...missingSecrets(steps, process.env), ...missingHttpSecrets(httpSteps, process.env)])];`,
+  `  const httpVariables = httpSteps.flatMap((step) => httpSecretNames(step.http).map(secretVariable));`,
+  `  const env = await withResolvedSecrets(process.env, [...secretVariables(steps), ...httpVariables]);`,
+  `  const missing = [...new Set([...missingSecrets(steps, env), ...missingHttpSecrets(httpSteps, env)])];`,
   `  if (missing.length > 0) {`,
   `    return { success: false, error: "missing_secret", failure: { missingSecret: missing[0], missing }, elapsedMs: Date.now() - startedAt };`,
   `  }`,
@@ -362,7 +365,7 @@ const WEB_RUNTIME_HTTP = [
   `  const variables = withRecordedDefaults(steps, args);`,
   `  // The level each step ran at; a field-filling step that only fed a request counts as http`,
   `  const levels: string[] = plan.map((mode) => (mode === "ui" ? "accessibility" : "http"));`,
-  `  const secrets: string[] = [...secretValues(steps, process.env), ...httpSecretValues(httpSteps, process.env)];`,
+  `  const secrets: string[] = [...secretValues(steps, env), ...httpSecretValues(httpSteps, env)];`,
   `  let levelFallback = false;`,
   `  let session: { browser: Browser; context: BrowserContext; page: Page; webRun: WebRun } | undefined;`,
   `  let timer: NodeJS.Timeout | undefined;`,
@@ -400,7 +403,7 @@ const WEB_RUNTIME_HTTP = [
   `      const ui = async (index: number): Promise<Record<string, unknown> | undefined> => {`,
   `        const open = await openBrowser();`,
   `        try {`,
-  `          await runStep(open.webRun, steps[index], index, variables, stepTimeout(steps[index]), track, final);`,
+  `          await runStep(open.webRun, steps[index], index, variables, stepTimeout(steps[index]), track, final, env);`,
   `          return undefined;`,
   `        } catch (err) {`,
   `          return await stepFailureResult(open.webRun, { stepIndex: index, step: steps[index], ...errorParts(err), cause: err }, startedAt, { levels, ...(levelFallback ? { levelFallback: true } : {}) });`,
@@ -417,7 +420,7 @@ const WEB_RUNTIME_HTTP = [
   `          const recipe = { ...step.http, url: rebaseOrigin(step.http.url, START_URL, overrides.url) };`,
   `          // With a browser open, its current cookies are the login; else the saved login file`,
   `          const state = session !== undefined ? await session.context.storageState() : storagePath;`,
-  `          const outcome = await runHttpStep(recipe, variables, process.env, { timeoutMs: stepTimeout(step), storageState: state });`,
+  `          const outcome = await runHttpStep(recipe, variables, env, { timeoutMs: stepTimeout(step), storageState: state });`,
   `          secrets.push(...outcome.secrets.filter((s) => !secrets.includes(s)));`,
   `          if (session !== undefined) session.webRun.secrets.push(...outcome.secrets.filter((s) => !session!.webRun.secrets.includes(s)));`,
   `          if (outcome.ok) {`,
@@ -803,7 +806,9 @@ const DOCKER_RUNTIME = [
   `  const fail = (error: string) => ({ success: false, error, elapsedMs: Date.now() - startedAt });`,
   ``,
   `  // A secret that is not set fails the call before the container starts; the container receives the values from this environment, never on the command line`,
-  `  const missing = [...new Set([...missingSecrets(steps, process.env), ...HTTP_MISSING_SECRETS(steps)])];`,
+  `  // Resolved once per call: the environment first, then the vault of the application, then the generic vault`,
+  `  const env = await withResolvedSecrets(process.env, [...secretVariables(steps), ...HTTP_SECRET_VARIABLES(steps)]);`,
+  `  const missing = [...new Set([...missingSecrets(steps, env), ...HTTP_MISSING_SECRETS(steps, env)])];`,
   `  if (missing.length > 0) {`,
   `    return { success: false, error: "missing_secret", failure: { missingSecret: missing[0], missing }, elapsedMs: Date.now() - startedAt };`,
   `  }`,
@@ -838,7 +843,7 @@ const DOCKER_RUNTIME = [
   `  const dockerArgs = buildDockerArgs({ name, timeoutEnv, steps, storagePath, mode, heal });`,
   ``,
   `  return new Promise<Record<string, unknown>>((resolve) => {`,
-  `    const child = spawn(DOCKER, dockerArgs, { stdio: ["pipe", "pipe", "pipe"] });`,
+  `    const child = spawn(DOCKER, dockerArgs, { stdio: ["pipe", "pipe", "pipe"], env });`,
   `    let stdout = "";`,
   `    let stderr = "";`,
   `    let settled = false;`,
@@ -970,9 +975,10 @@ export class McpGenerator {
           `import { waitForEffect, resolveTimeoutMs, resolveStepTimeoutMs, boundStepTimeoutMs, type SettlePage } from "./settle.js";`,
           `import { createWebRun, executeWebStep, captureFailure, captureFinal, extractWebZone, type WebRun } from "./web-steps.js";`,
           `import { boundText, redactDeep, zoneFailureResult, type ExtractorLike } from "./extract.js";`,
-          `import { missingSecrets, secretValues, redactSecrets, runStepsStrict, describeFailure, failureResult, StepExecutionError, HealUnavailableError, HealFailedError, healEligible, hasNoDomTarget, parseMode, resolveStepValue, type ReplayMode } from "./step-plan.js";`,
+          `import { missingSecrets, secretValues, redactSecrets, runStepsStrict, describeFailure, failureResult, StepExecutionError, HealUnavailableError, HealFailedError, healEligible, hasNoDomTarget, parseMode, resolveStepValue, secretVariables, type ReplayMode } from "./step-plan.js";`,
+          `import { withResolvedSecrets } from "./vault-reader.js";`,
           ...(http
-            ? [`import { planSteps, recipeMutates, runHttpStep, withRecordedDefaults, rebaseOrigin, missingHttpSecrets, httpSecretValues, buildHttpResult, httpFailureResult, scrub } from "./http-replay.js";`]
+            ? [`import { planSteps, recipeMutates, runHttpStep, withRecordedDefaults, rebaseOrigin, missingHttpSecrets, httpSecretValues, httpSecretNames, secretVariable, buildHttpResult, httpFailureResult, scrub } from "./http-replay.js";`]
             : []),
         ]
         : [
@@ -1028,7 +1034,8 @@ export class McpGenerator {
       `import { fileURLToPath } from "node:url";`,
       `import type { Step, Final, Limits } from "./replay.js";`,
       `import { resolveTimeoutMs } from "./settle.js";`,
-      `import { missingSecrets, secretEnvName } from "./step-plan.js";`,
+      `import { missingSecrets, secretEnvName, secretVariables } from "./step-plan.js";`,
+      `import { withResolvedSecrets } from "./vault-reader.js";`,
       ...(http ? [`import { planSteps, httpSecretNames, missingHttpSecrets, secretVariable, COOKIE_HEADER_VARIABLE } from "./http-replay.js";`] : []),
       ``,
       http
@@ -1039,8 +1046,8 @@ export class McpGenerator {
         `const HTTP_SECRET_VARIABLES = (steps: Step[]): string[] => [...httpStepsOf(steps).flatMap((s) => httpSecretNames(s.http).map(secretVariable)), ...(process.env[COOKIE_HEADER_VARIABLE] ? [COOKIE_HEADER_VARIABLE] : [])];`
         : `const HTTP_SECRET_VARIABLES = (_steps: Step[]): string[] => [];`,
       http
-        ? `const HTTP_MISSING_SECRETS = (steps: Step[]): string[] => missingHttpSecrets(httpStepsOf(steps), process.env);`
-        : `const HTTP_MISSING_SECRETS = (_steps: Step[]): string[] => [];`,
+        ? `const HTTP_MISSING_SECRETS = (steps: Step[], env: Record<string, string | undefined> = process.env): string[] => missingHttpSecrets(httpStepsOf(steps), env);`
+        : `const HTTP_MISSING_SECRETS = (_steps: Step[], _env?: Record<string, string | undefined>): string[] => [];`,
       ``,
       healEnabled(set, options)
         ? `// Heal mode (compiled with --heal-support): the settings of the model are forwarded by name, like the secrets.`
@@ -1087,7 +1094,7 @@ export class McpGenerator {
       'replay.js', 'screen-hash.js', 'settle.js', 'extract.js',
       ...(terminal
         ? ['pattern-wait.js']
-        : ['row-resolver.js', 'step-plan.js', 'totp.js', 'web-steps.js', ...(http ? ['http-replay.js'] : []), ...(healEnabled(set, options) ? ['heal'] : [])]),
+        : ['row-resolver.js', 'step-plan.js', 'totp.js', 'vault-format.js', 'vault-reader.js', 'web-steps.js', ...(http ? ['http-replay.js'] : []), ...(healEnabled(set, options) ? ['heal'] : [])]),
     ];
     const dockerfile = renderDockerfile({ targetType: set.targetType, copy, sandbox: set.sandbox, playwrightVersion: PLAYWRIGHT_VERSION });
     return {

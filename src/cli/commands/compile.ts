@@ -25,6 +25,8 @@ export interface CompileOptions {
    * with `--heal`. Off by default: the server then contains no model code at all.
    */
   healSupport?: boolean;
+  /** Name of the generated Power, set by Studio only. The CLI never sets it, so its output is unchanged. */
+  powerName?: string;
   /** `--sandbox-*` flags: added to the `sandbox` block of the workflow file (which is rewritten), so the compiled project is self-describing. */
   sandbox?: SandboxSpec;
   /**
@@ -80,6 +82,7 @@ export async function compile(
     healSupport: options.healSupport === true,
     workflowFile: file,
     toolNameOverrides,
+    ...(options.powerName === undefined ? {} : { powerName: options.powerName }),
     ...(options.onPhase === undefined ? {} : { onPhase: options.onPhase }),
   });
   if (options.healSupport === true && set.targetType === 'web') {

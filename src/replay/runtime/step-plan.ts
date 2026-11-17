@@ -250,6 +250,17 @@ export function secretEnvName(name: string): string {
   return `DAEMONIZE_SECRET_${name}`;
 }
 
+/** Names of the variables of the secrets the steps use (one per distinct secretRef, in step order), to resolve in one call. */
+export function secretVariables(steps: readonly StepLike[]): string[] {
+  const variables: string[] = [];
+  for (const step of steps) {
+    if (step.secretRef === undefined) continue;
+    const variable = secretEnvName(step.secretRef);
+    if (!variables.includes(variable)) variables.push(variable);
+  }
+  return variables;
+}
+
 /** The raw values (passwords, TOTP seeds) of the secrets the steps use, to be removed from every diagnostic. */
 export function secretValues(steps: StepLike[], env: Record<string, string | undefined>): string[] {
   const values: string[] = [];

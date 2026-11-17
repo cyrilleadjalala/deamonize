@@ -176,7 +176,7 @@ describe('Phantom HTTP secrets', () => {
     expect(replay).not.toContain('missingHttpSecrets');
     expect(replay).not.toContain('httpSecretValues');
     const { missing, variables, source } = await dockerHelpers(workflow, 'off');
-    expect(source).toMatch(/const HTTP_MISSING_SECRETS = \(_steps: Step\[\]\): string\[\] => \[\];/);
+    expect(source).toMatch(/const HTTP_MISSING_SECRETS = \(_steps: Step\[\], _env\?: Record<string, string \| undefined>\): string\[\] => \[\];/);
     expect(missing(workflow.steps)).toEqual([]);
     expect(variables(workflow.steps)).toEqual([]);
   });

@@ -92,6 +92,11 @@ const RUNTIME_TOTP = join(
   'totp.ts'
 );
 
+const RUNTIME_VAULT_FORMAT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'replay', 'runtime', 'vault-format.ts');
+
+// The reader of the vault of Studio: standalone, imports only node:* and ./vault-format.js
+const RUNTIME_VAULT_READER = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'replay', 'runtime', 'vault-reader.ts');
+
 const RUNTIME_PATTERN_WAIT = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -139,6 +144,8 @@ export interface CompileOptions extends GenerateOptions {
   toolNameOverrides?: Record<string, string>;
   /** Called with `'writing'` immediately before the first file system write. Never called when the compile fails before it. */
   onPhase?: (phase: 'writing') => void;
+  /** Name of the generated Power (plugin, server key, skill folder). Set by Studio only; the CLI leaves it out. */
+  powerName?: string;
 }
 
 /** Every `.ts` file under a folder, as paths relative to it (forward slashes). */
@@ -199,6 +206,8 @@ export class Compiler {
     const rowResolverSource = await readFile(RUNTIME_ROW_RESOLVER, 'utf-8');
     const stepPlanSource = await readFile(RUNTIME_STEP_PLAN, 'utf-8');
     const totpSource = await readFile(RUNTIME_TOTP, 'utf-8');
+    const vaultFormatSource = await readFile(RUNTIME_VAULT_FORMAT, 'utf-8');
+    const vaultReaderSource = await readFile(RUNTIME_VAULT_READER, 'utf-8');
     // Waiting for a pattern of the rendered screen: only a terminal target replays a pty
     const patternWaitSource = set.targetType === 'tui' ? await readFile(RUNTIME_PATTERN_WAIT, 'utf-8') : undefined;
     // Strict Level 2 execution with Playwright: only a web target replays a browser
@@ -253,6 +262,10 @@ export class Compiler {
       stepPlan: join(outputDir, 'step-plan.js'),
       totpSource: join(outputDir, 'totp.ts'),
       totp: join(outputDir, 'totp.js'),
+      vaultFormatSource: join(outputDir, 'vault-format.ts'),
+      vaultFormat: join(outputDir, 'vault-format.js'),
+      vaultReaderSource: join(outputDir, 'vault-reader.ts'),
+      vaultReader: join(outputDir, 'vault-reader.js'),
       ...(patternWaitSource === undefined ? {} : { patternWaitSource: join(outputDir, 'pattern-wait.ts'), patternWait: join(outputDir, 'pattern-wait.js') }),
       ...(webStepsSource === undefined ? {} : { webStepsSource: join(outputDir, 'web-steps.ts'), webSteps: join(outputDir, 'web-steps.js') }),
       ...(httpReplaySource === undefined ? {} : { httpReplaySource: join(outputDir, 'http-replay.ts'), httpReplay: join(outputDir, 'http-replay.js') }),
@@ -282,6 +295,10 @@ export class Compiler {
       writeFile(files.stepPlan, this.toJavaScript(stepPlanSource)),
       writeFile(files.totpSource, totpSource),
       writeFile(files.totp, this.toJavaScript(totpSource)),
+      writeFile(files.vaultFormatSource, vaultFormatSource),
+      writeFile(files.vaultFormat, this.toJavaScript(vaultFormatSource)),
+      writeFile(files.vaultReaderSource, vaultReaderSource),
+      writeFile(files.vaultReader, this.toJavaScript(vaultReaderSource)),
       ...(patternWaitSource === undefined ? [] : [
         writeFile(join(outputDir, 'pattern-wait.ts'), patternWaitSource),
         writeFile(join(outputDir, 'pattern-wait.js'), this.toJavaScript(patternWaitSource)),

@@ -246,7 +246,7 @@ describe('secrets listed by mode', () => {
     expect(without).not.toContain('missingHttpSecrets');
     const docker = generator.generateDockerReplay(web, 'img', { http: 'auto' });
     expect(docker).toContain('missingHttpSecrets(httpStepsOf(steps)');
-    expect(generator.generateDockerReplay(web, 'img', {})).toContain('const HTTP_MISSING_SECRETS = (_steps: Step[]): string[] => [];');
+    expect(generator.generateDockerReplay(web, 'img', {})).toContain('const HTTP_MISSING_SECRETS = (_steps: Step[], _env?: Record<string, string | undefined>): string[] => [];');
   });
 });
 

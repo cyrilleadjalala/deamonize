@@ -1,0 +1,284 @@
+{
+  "pbtResults": {
+    "1. Write bug condition exploration test for settle": {
+      "status": "passed",
+      "failingExample": "pending(LONG_LIVED_MS+extra) returned 0 for a single request; waitForEffect returned 'response' before the SPA nav; after framenavigated returned immediately (0 ms) with no 250 ms quiet; integration: heading #clients absent when waitForEffect returned (~2.1 s)",
+      "lastRunTimestamp": 1794877587603
+    },
+    "2. Write preservation property tests for settle (BEFORE implementing the fix)": {
+      "status": "passed",
+      "lastRunTimestamp": 1794877600631
+    },
+    "7. Write bug condition exploration test for recipe selection and dev URLs": {
+      "status": "passed",
+      "failingExample": "Counterexample: [[{\"idx\":0,\"bound\":[\"c\"],\"recipe\":{\"method\":\"GET\"}},{\"idx\":1,\"bound\":[],\"recipe\":{\"method\":\"PATCH\"}}]] (submit step kept the GET); isDevInternalUrl(\"http://localhost:3000/_next/webpack-hmr\") returned false; [POST verify, GET settings] gave GET",
+      "lastRunTimestamp": 1794877687701
+    },
+    "9.3 Verify the bug condition exploration test now passes": {
+      "status": "passed",
+      "lastRunTimestamp": 1794877688344
+    },
+    "4. Write bug condition exploration test for `planSteps`": {
+      "status": "passed",
+      "failingExample": "planSteps([type email, type password, click POST /api/auth/login/credentials, type TOTP, click POST verify (storageState)]) = ['ui','prep','http','ui','http']; fast-check shrunk: [{type, http GET}, {type}] -> ['http','ui']. Integration: all levels 'http', verify got 401 (no browser cookies), browser never left screen 1.",
+      "lastRunTimestamp": 1794877822043
+    },
+    "5. Write preservation property tests for `planSteps` (BEFORE implementing the fix)": {
+      "status": "passed",
+      "lastRunTimestamp": 1794877822288
+    }
+  },
+  "executionHistory": {
+    "1. Write bug condition exploration test for settle": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794877376390
+      },
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794878315853
+      }
+    ],
+    "4. Write bug condition exploration test for `planSteps`": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794877376613
+      },
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794878316138
+      }
+    ],
+    "7. Write bug condition exploration test for recipe selection and dev URLs": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794877377671
+      },
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794878316269
+      }
+    ],
+    "10. Write bug condition exploration test for generated ids": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794877378184
+      },
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794878316467
+      }
+    ],
+    "2. Write preservation property tests for settle (BEFORE implementing the fix)": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879549068
+      }
+    ],
+    "5. Write preservation property tests for `planSteps` (BEFORE implementing the fix)": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879550147
+      }
+    ],
+    "8. Write preservation property tests for recipe selection (BEFORE implementing the fix)": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879551282
+      }
+    ],
+    "11. Write preservation property tests for selectors (BEFORE implementing the fix)": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879552102
+      }
+    ],
+    "3.1 Implement the fix in `src/replay/runtime/settle.ts`": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879605444
+      }
+    ],
+    "3.2 Rewrite the test that encodes the bug in `tests/unit/settle.test.ts`": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879606665
+      }
+    ],
+    "3.3 Verify the bug condition exploration test now passes": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879607450
+      }
+    ],
+    "3.4 Verify preservation tests still pass": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879608646
+      }
+    ],
+    "3. Fix `waitForEffect` for slow requests, SPA navigation and hydration": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879608694
+      }
+    ],
+    "6.1 Implement the fix in `src/replay/runtime/http-replay.ts` (and `src/compiler/mcp-generator.ts` only if needed)": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879609633
+      }
+    ],
+    "6.2 Update the existing tests that encode the bug": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879610683
+      }
+    ],
+    "6.3 Verify the bug condition exploration test now passes": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879611729
+      }
+    ],
+    "6.4 Verify preservation tests still pass": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879612688
+      }
+    ],
+    "6. Fix for `--http` plan on mixed workflows": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879612758
+      }
+    ],
+    "9.1 Implement the fix in `src/recorder/network-capture.ts`, `src/recorder/live-recorder.ts` (and `src/recorder/workflow-recorder.ts` only if `setHttp` needs it)": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879613935
+      }
+    ],
+    "9.2 Add and adjust tests": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879615018
+      }
+    ],
+    "9.3 Verify the bug condition exploration test now passes": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879616007
+      }
+    ],
+    "9.4 Verify preservation tests still pass": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879617011
+      }
+    ],
+    "9. Fix for recipe selection, dev/HMR capture and recipe risk": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879617092
+      }
+    ],
+    "12.1 Implement the fix in `src/recorder/selector-builder.ts`": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879618225
+      }
+    ],
+    "12.2 Add unit tests in `tests/unit/generated-ids.test.ts`": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879618689
+      }
+    ],
+    "12.3 Verify the bug condition exploration test now passes": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879619937
+      }
+    ],
+    "12.4 Verify preservation tests still pass": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879621269
+      }
+    ],
+    "12. Fix for generated ids in `selector-builder.ts`": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879621319
+      }
+    ],
+    "13.1 Run `npm run build > \"$env:TEMP\\nextjs-fix-build.txt\" 2>&1`": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879621696
+      }
+    ],
+    "13.2 Run `npm run check:secrets > \"$env:TEMP\\nextjs-fix-secrets.txt\" 2>&1`": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879623134
+      }
+    ],
+    "13.3 Run `npm test > \"$env:TEMP\\nextjs-fix-test.txt\" 2>&1` (`DAEMONIZE_DOCKER_TESTS` unset is fine)": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879624384
+      }
+    ],
+    "13.4 When Docker is up, run `$env:DAEMONIZE_DOCKER_TESTS='1'; npx vitest run tests/integration/docker-sandbox.test.ts tests/integration/http-replay-e2e.test.ts > \"$env:TEMP\\nextjs-fix-docker.txt\" 2>&1`": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879624917
+      }
+    ],
+    "13. Checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "ac6eff00-6ee0-49f4-9f89-acb52fc5dc63",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794879624984
+      }
+    ]
+  }
+}

@@ -32,7 +32,11 @@ export interface CompileOptions {
    * entries of an existing suggestions file are still applied).
    */
   suggest?: SuggestOptions;
+  /** Progress callback (the Studio shows it). The CLI passes none and its output does not change. */
+  onPhase?: (phase: CompilePhase) => void;
 }
+
+export type CompilePhase = 'generating' | 'writing' | 'installing';
 
 export interface SuggestOptions extends CreateSuggesterOptions {
   mode: SuggestMode;
@@ -59,6 +63,7 @@ export async function compile(
   outDir: string,
   options: CompileOptions = {}
 ): Promise<CompileResult> {
+  options.onPhase?.('generating');
   const set = deserializeWorkflowSet(await readFile(file, 'utf-8'));
   await persistSandboxFlags(file, set, options.sandbox);
   if (options.suggest !== undefined) await writeSuggestions(file, set, options.suggest);
@@ -75,6 +80,7 @@ export async function compile(
     healSupport: options.healSupport === true,
     workflowFile: file,
     toolNameOverrides,
+    ...(options.onPhase === undefined ? {} : { onPhase: options.onPhase }),
   });
   if (options.healSupport === true && set.targetType === 'web') {
     console.log(`Heal support compiled in: run with "daemonize serve ${outDir} --heal" and the DAEMONIZE_MODEL_* variables. Recorded thumbnails were copied to ${join(outDir, '.daemonize', 'anchors')}.`);
@@ -87,6 +93,7 @@ export async function compile(
   }
 
   if (options.install) {
+    options.onPhase?.('installing');
     await (options.installer ?? npmInstall)(outDir);
   } else {
     // Nothing is downloaded unless the user asked for it

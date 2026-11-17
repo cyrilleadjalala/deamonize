@@ -137,6 +137,8 @@ export interface CompileOptions extends GenerateOptions {
   workflowFile?: string;
   /** Tool names accepted from a suggestions file, by workflow id. They are made unique like any derived name. */
   toolNameOverrides?: Record<string, string>;
+  /** Called with `'writing'` immediately before the first file system write. Never called when the compile fails before it. */
+  onPhase?: (phase: 'writing') => void;
 }
 
 /** Every `.ts` file under a folder, as paths relative to it (forward slashes). */
@@ -162,8 +164,15 @@ export class Compiler {
    */
   async compile(recorded: WorkflowSet, outputDir: string, options: CompileOptions = {}): Promise<CompileResult> {
     const heal = healEnabled(recorded, options);
+    let wrote = false;
+    const markWriting = (): void => {
+      if (wrote) return;
+      wrote = true;
+      options.onPhase?.('writing');
+    };
     // Thumbnails stay next to the Workflow file: artifacts keep only the rect and the intent of a Visual_Anchor.
     // With --heal-support, the thumbnails are copied to <out>/.daemonize/anchors/ and the steps keep that relative path.
+    if (heal) markWriting(); // withAnchorThumbnails writes first
     const set = heal ? await withAnchorThumbnails(recorded, outputDir, options.workflowFile) : withoutThumbnails(recorded);
     const http = httpEnabled(set, options);
     // A literal secret (typed value, credential header or cookie) would be copied into every artifact:
@@ -221,6 +230,7 @@ export class Compiler {
 
     // 4. Write to disk. The manifest runs `node ./mcp-server.js`, so the
     // TypeScript sources are also emitted as JavaScript.
+    markWriting();
     await mkdir(join(outputDir, 'sandbox'), { recursive: true });
     await mkdir(join(outputDir, 'skills', powerName), { recursive: true });
     const files = {

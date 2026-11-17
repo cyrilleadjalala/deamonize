@@ -1,4 +1,43 @@
-/** Group G4 owns this file. Stub. */
-export function buildSnippetText(_serverName: string, _entry: Record<string, unknown>): string {
-  return '{}';
+/**
+ * Group G4: the MCP server entry that the Studio writes or shows. It is rebuilt from the compiled `mcp.json`, never
+ * copied: only placeholder names survive, so no secret value can reach the output.
+ */
+const SECRET_NAME = /^DAEMONIZE_SECRET_[A-Za-z0-9_]+$/;
+const MODEL_NAME = /^DAEMONIZE_MODEL_(PROVIDER|NAME|API_KEY|BASE_URL)$/;
+
+export interface ServerEntry extends Record<string, unknown> {
+  type: 'stdio';
+  command: 'node';
+  args: string[];
+  env: Record<string, string>;
+}
+
+/** The environment keys of a source entry that may be carried over, as `${KEY}` placeholders. */
+export function placeholderEnv(sourceEnv: unknown): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (typeof sourceEnv === 'object' && sourceEnv !== null && !Array.isArray(sourceEnv)) {
+    for (const key of Object.keys(sourceEnv)) {
+      if (SECRET_NAME.test(key) || MODEL_NAME.test(key)) env[key] = '${' + key + '}';
+    }
+  }
+  env.DAEMONIZE_MODE = 'strict';
+  return env;
+}
+
+/** Rebuilds the entry: fixed shape, absolute server path, placeholders only. */
+export function buildServerEntry(source: unknown, serverJsPath: string): ServerEntry {
+  const sourceEnv = typeof source === 'object' && source !== null ? (source as { env?: unknown }).env : undefined;
+  return { type: 'stdio', command: 'node', args: [serverJsPath], env: placeholderEnv(sourceEnv) };
+}
+
+/** `DAEMONIZE_SECRET_*` names held by an entry. */
+export function secretPlaceholders(entry: Record<string, unknown>): string[] {
+  const env = entry.env;
+  if (typeof env !== 'object' || env === null) return [];
+  return Object.keys(env).filter((k) => SECRET_NAME.test(k)).sort();
+}
+
+/** The text shown for copy and paste into another client. */
+export function buildSnippetText(serverName: string, entry: Record<string, unknown>): string {
+  return JSON.stringify({ mcpServers: { [serverName]: entry } }, null, 2);
 }

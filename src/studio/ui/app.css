@@ -618,6 +618,19 @@ select.input {
   overflow-wrap: anywhere;
 }
 
+/* A variable name is one token: it never breaks over several lines (the table scrolls instead) */
+.vars-table td:first-child,
+.vars-table th:first-child,
+.vars-table td:last-child {
+  white-space: nowrap;
+}
+
+.vars-table .chip.variable {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
 .chip.variable {
   font-family: var(--mono);
   background: #2c1848;
@@ -1045,7 +1058,7 @@ select.input {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 26rem);
   gap: 22px;
   align-items: start;
 }
@@ -2078,3 +2091,14 @@ select.input {
     max-height: none;
   }
 }
+/* Write-step note of the workflow view and the confirmation dialog */
+.write-note {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--warn, #b45309);
+  font-size: 0.9rem;
+}
+.write-note p { margin: 0 0 0.25rem; }
+.write-note ul, .pg-dialog #pg-confirm-writes ul { margin: 0.25rem 0 0; }
+.pg-dialog #pg-confirm-writes { margin: 0.5rem 0; font-size: 0.9rem; }
+.secrets-section .secrets-unused { margin-top: 0.5rem; }

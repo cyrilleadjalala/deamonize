@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 // The UI modules are plain browser JavaScript; the pure ones run in Node too
 // @ts-expect-error no type declarations for the browser modules
 import { layoutGraph, pathForWorkflow } from '../../src/studio/ui/js/layout.js';
@@ -76,5 +78,27 @@ describe('Studio UI schema table', () => {
   it('returns no rows for an empty object schema', () => {
     expect(flattenSchema({ type: 'object' })).toEqual([]);
     expect(flattenSchema(undefined)).toEqual([]);
+  });
+});
+
+describe('Studio UI preservation (write note and chips)', () => {
+  const ui = resolve(import.meta.dirname, '../../src/studio/ui');
+  const css = readFileSync(join(ui, 'app.css'), 'utf8');
+  const ruleBody = (selector: string): string => {
+    const match = css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`));
+    return match?.[1] ?? '';
+  };
+
+  // Feature: studio-first-recording-fixes, Property 11: Preservation - Read-only tools and the confirmation flow are unchanged (UI)
+  it('keeps the general .chip rule wrapping, so other chips (names, parents, secrets) still wrap', () => {
+    const body = ruleBody('.chip');
+    expect(body).toMatch(/white-space:\s*normal/);
+    expect(body).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+
+  it('keeps the generic confirmation sentence and the risk gate in the playground view', () => {
+    const source = readFileSync(join(ui, 'js/views/playground.js'), 'utf8');
+    expect(source).toContain('This tool can ${verb} data in the real application.');
+    expect(source).toContain("tool.risk !== 'read' && !confirmed");
   });
 });

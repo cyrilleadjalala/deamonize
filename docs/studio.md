@@ -24,6 +24,12 @@ the server's CSP is `default-src 'self'`.
 | `#/tests` | Property-test results, shrunk counterexamples, **Run tests** (disabled in sample mode) |
 | `#/playground` | Placeholder until the MCP playground is enabled |
 
+Workflow view details:
+- A note under the header lists the steps that write (`write` or `delete`): "The only write is the login form: step N, ..." for a login-only workflow, or "Writes data in N steps:" with "Step N: label (write)" for the others. Read-only workflows show no note. Step numbers start at 1.
+- The playground confirmation dialog for a write or delete tool lists the same steps (numbers and labels only, no argument or secret value). Without that data it keeps the generic sentence.
+- Variable names (`{{name}}` chips of the Variables table) stay on one line; the table scrolls sideways when the column is narrow.
+- Secrets show names with a `configured` or `missing` chip; names recorded in HTTP recipes but not read by the compiled server sit in a collapsed list.
+
 Keyboard: Tab / Shift+Tab, Enter on a workflow or screen, arrows in the workflow list, arrows/`+`/`-`/`0` on the graph canvas.
 The footer's **Print view** button prints a light, control-free version.
 

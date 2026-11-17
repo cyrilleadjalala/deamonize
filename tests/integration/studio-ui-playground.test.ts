@@ -349,3 +349,66 @@ describe('Studio playground UI, sample mode (simulated server)', () => {
     expect(problems).toEqual({ console: [], pageErrors: [], failedRequests: [], badResponses: [] });
   });
 });
+
+describe('Studio playground confirmation dialog lists the write steps (sample mode)', () => {
+  let browser: Browser;
+  let page: Page;
+  let sample: StudioHandle;
+  let base: string;
+  let writeInfo: Record<string, unknown> | undefined;
+
+  const askConfirmation = async (): Promise<string> => {
+    await open(page, base);
+    await page.click('button.pg-tool[data-tool="create_customer"]');
+    await page.fill('#pg-f-login', 'ada');
+    await page.fill('#pg-f-name', 'Ada');
+    await page.click('#pg-call');
+    const dialog = page.getByRole('dialog', { name: 'Run create_customer?' });
+    await see(dialog).toBeVisible();
+    return ((await dialog.textContent()) ?? '').replace(/\s+/g, ' ');
+  };
+
+  beforeAll(async () => {
+    sample = await startStudio({ sampleData: true });
+    base = sample.origin;
+    browser = await chromium.launch();
+    page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+    await page.route('**/api/playground', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      const res = await route.fetch();
+      const body = await res.json();
+      for (const tool of body.tools ?? []) if (tool.name === 'create_customer' && writeInfo !== undefined) Object.assign(tool, writeInfo);
+      await route.fulfill({ response: res, json: body });
+    });
+    await page.goto(sample.url);
+    await page.waitForSelector('main h1, main h2');
+  }, 120000);
+
+  afterAll(async () => {
+    await browser?.close();
+    await sample?.close();
+  });
+
+  // Feature: studio-first-recording-fixes, Property 10: Bug Condition - Studio names the write steps and keeps variable names on one line (rendering)
+  it('says the only write is the login form for a login-only tool', async () => {
+    writeInfo = { writeSummary: 'login-only', writeSteps: [{ index: 3, label: 'Submit sign-in', risk: 'write', kind: 'login' }] };
+    const text = await askConfirmation();
+    expect(text).toContain('login form');
+    expect(text).toContain('Step 4');
+    expect(text).toContain('Submit sign-in');
+  });
+
+  it('lists each write step of a tool with actions', async () => {
+    writeInfo = {
+      writeSummary: 'actions',
+      writeSteps: [
+        { index: 3, label: 'Submit sign-in', risk: 'write', kind: 'login' },
+        { index: 6, label: 'Remove record', risk: 'delete', kind: 'action' },
+      ],
+    };
+    const text = await askConfirmation();
+    expect(text).toContain('Step 4: Submit sign-in');
+    expect(text).toContain('Step 7: Remove record');
+    expect(text).toContain('login form');
+  });
+});

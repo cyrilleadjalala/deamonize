@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { chip, emptyState, levelBadge, levelLegend, panel, riskBadge, toolName, varChip } from '../components.js';
 import { WEB_LEVELS } from '../levels.js';
 import { href } from '../router.js';
+import { secretsSection } from '../secrets-view.js';
 
 /** The distinct primary levels of a workflow, in replay order. */
 function primaryLevels(wf) {
@@ -104,23 +105,46 @@ function stepItem(step, wf) {
   );
 }
 
+/**
+ * Which steps write. Nothing for a read-only workflow or when the server sent no `writeSteps`.
+ * Step numbers (index + 1) and labels only.
+ * @param {any} wf
+ */
+function writeNote(wf) {
+  const steps = Array.isArray(wf.writeSteps) ? wf.writeSteps : [];
+  if (steps.length === 0 || wf.writeSummary === 'none') return null;
+  return h('div', { class: 'write-note', role: 'note', dataset: { writeSummary: wf.writeSummary === 'login-only' ? 'login-only' : 'actions' } },
+    h('p', { text: wf.writeSummary === 'login-only'
+      ? `The only write is the login form: step ${steps[0].index + 1}, \u201C${steps[0].label}\u201D. The other steps only read.`
+      : `Writes data in ${steps.length} step${steps.length === 1 ? '' : 's'}:` }),
+    h('ul', { class: 'plain-list' },
+      ...steps.map((s) =>
+        h('li', { dataset: { writeStep: s.index } },
+          `Step ${s.index + 1}: ${s.label} (${s.risk})`,
+          s.kind === 'login' ? h('span', { class: 'muted', text: ' \u00B7 login form' }) : null))));
+}
 /** @param {any} wf */
 function detail(wf) {
   const vars = wf.variables.length
-    ? h(
-        'table',
-        { class: 'table compact' },
-        h('caption', { class: 'sr-only', text: 'Variables' }),
-        h('thead', null, h('tr', null, ...['Name', 'Type', 'Description', 'Required'].map((t) => h('th', { scope: 'col', text: t })))),
-        h('tbody', null,
-          ...wf.variables.map((v) =>
-            h('tr', null, h('td', null, varChip(v.name)), h('td', null, h('code', { text: v.type })), h('td', { text: v.description ?? '\u2013' }), h('td', { text: v.optional ? 'optional' : 'required' }))
-          ))
-      )
+    ? h('div', { class: 'table-wrap' },
+        h(
+          'table',
+          { class: 'table compact vars-table' },
+          h('caption', { class: 'sr-only', text: 'Variables' }),
+          h('thead', null, h('tr', null, ...['Name', 'Type', 'Description', 'Required'].map((t) => h('th', { scope: 'col', text: t })))),
+          h('tbody', null,
+            ...wf.variables.map((v) =>
+              h('tr', null, h('td', null, varChip(v.name)), h('td', null, h('code', { text: v.type })), h('td', { text: v.description ?? '\u2013' }), h('td', { text: v.optional ? 'optional' : 'required' }))
+            ))
+        ))
     : h('p', { class: 'muted', text: 'This workflow takes no input.' });
-  const secrets = wf.secrets.length
-    ? h('ul', { class: 'plain-list' }, ...wf.secrets.map((x) => h('li', null, chip(x.name, 'secret'), x.kind ? h('span', { class: 'muted', text: ` ${x.kind}` }) : null)))
-    : h('p', { class: 'muted', text: 'No secret needed.' });
+  const secretList = Array.isArray(wf.secrets) ? wf.secrets : [];
+  const hasSecretModel = wf.secretsBasis !== undefined || Array.isArray(wf.unusedSecrets);
+  const secrets = hasSecretModel
+    ? secretsSection(secretList, wf.unusedSecrets, { basis: wf.secretsBasis, variant: 'workflow' })
+    : secretList.length
+      ? h('ul', { class: 'plain-list' }, ...secretList.map((x) => h('li', null, chip(x.name, 'secret'), x.kind ? h('span', { class: 'muted', text: ` ${x.kind}` }) : null)))
+      : h('p', { class: 'muted', text: 'No secret needed.' });
   const facts = h(
     'dl',
     { class: 'facts' },
@@ -142,6 +166,7 @@ function detail(wf) {
         riskBadge(wf.risk.highest),
         h('a', { class: 'btn btn-small', href: href('graph', undefined, { wf: wf.id }), text: 'Show in graph' }),
         h('a', { class: 'btn btn-small', href: href('schemas', wf.id), text: 'Schemas' })),
+      writeNote(wf),
       wf.description ? h('p', { class: 'view-lead', text: wf.description }) : null
     ),
     levelLegend(),

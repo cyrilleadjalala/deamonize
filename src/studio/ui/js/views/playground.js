@@ -2,6 +2,7 @@
 import { h, clear } from '../dom.js';
 import { api, ApiError } from '../api.js';
 import { announce, chip, copyButton, emptyState, levelBadge, pill, riskBadge, toolName as toolNameChip } from '../components.js';
+import { secretsSection } from '../secrets-view.js';
 import { buildArguments, describeField, fieldsFromSchema, formatElapsed, initialValues, parseTimeout } from '../schema-form.js';
 
 /**
@@ -359,7 +360,10 @@ function mount(root, info) {
     });
 
     const secrets = tool.secrets ?? [];
-    const secretsBlock = secrets.length
+    const hasSecretModel = tool.secretsBasis !== undefined || Array.isArray(tool.unusedSecrets);
+    const secretsBlock = hasSecretModel
+      ? h('div', { class: 'pg-secrets' }, secretsSection(secrets, tool.unusedSecrets, { basis: tool.secretsBasis, variant: 'playground' }))
+      : secrets.length
       ? h('section', { class: 'pg-secrets', 'aria-label': 'Secrets provided by the environment' },
           h('h4', { class: 'mini-title', text: 'Provided by env' }),
           h('ul', { class: 'plain-list' }, ...secrets.map((s) => h('li', null, h('span', { class: 'chip secret', text: s.name }), h('span', { class: 'muted', text: ` read from DAEMONIZE_SECRET_${s.name} in the Studio\u2019s environment. Its value is never shown.` })))))
@@ -468,9 +472,24 @@ function mount(root, info) {
   const confirmDialog = (tool, onConfirm) => {
     clear(dialogHost);
     const verb = tool.risk === 'delete' ? 'delete' : 'change';
+    const writeSteps = Array.isArray(tool.writeSteps) ? tool.writeSteps : [];
+    /** Step numbers and labels only: no argument or secret value. */
+    const writeList =
+      writeSteps.length === 0 || tool.writeSummary === 'none'
+        ? null
+        : h('div', { id: 'pg-confirm-writes', dataset: { writeSummary: tool.writeSummary === 'login-only' ? 'login-only' : 'actions' } },
+            h('p', { text: tool.writeSummary === 'login-only'
+              ? 'The only write is the login form. The other steps only read.'
+              : `Writes data in ${writeSteps.length} step${writeSteps.length === 1 ? '' : 's'}:` }),
+            h('ul', { class: 'plain-list' },
+              ...writeSteps.map((s) =>
+                h('li', { dataset: { writeStep: s.index } },
+                  `Step ${s.index + 1}: ${s.label} (${s.risk})`,
+                  s.kind === 'login' ? h('span', { class: 'muted', text: ' \u00B7 login form' }) : null))));
     const dialog = /** @type {HTMLDialogElement} */ (h('dialog', { class: 'pg-dialog', 'aria-labelledby': 'pg-confirm-title', 'aria-describedby': 'pg-confirm-text', dataset: { risk: tool.risk } },
       h('h3', { id: 'pg-confirm-title', class: 'panel-title', text: `Run ${tool.name}?` }),
       h('p', { id: 'pg-confirm-text' }, riskBadge(tool.risk), ` This tool can ${verb} data in the real application. It will run against whatever the server is pointed at.`),
+      writeList,
       h('div', { class: 'run-bar' },
         h('button', { type: 'button', class: 'btn btn-quiet', id: 'pg-confirm-cancel', text: 'Cancel', onclick: () => dialog.close('cancel') }),
         h('button', { type: 'button', class: 'btn btn-primary', id: 'pg-confirm-ok', text: `Run ${tool.name}`, onclick: () => dialog.close('confirm') }))));

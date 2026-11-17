@@ -209,6 +209,76 @@ describe('Studio UI (real Chromium, sample data)', () => {
     await see(page.getByRole('button', { name: 'Copy tool name count_customers_in_a_table' })).toBeVisible();
   });
 
+  // Feature: studio-first-recording-fixes, Property 10: Bug Condition - Studio names the write steps and keeps variable names on one line (rendering)
+  it('keeps every variable name of the VARIABLES table on one line, at 1280 px and 700 px', async () => {
+    // Longer names than the sample ones, to hit the narrow name column of the real recordings
+    await page.route('**/api/workflows', async (route) => {
+      const res = await route.fetch();
+      const body = await res.json();
+      for (const wf of body.workflows) {
+        if (wf.id === CREATE) {
+          wf.variables.push({ name: 'query', type: 'string', description: 'Search text' }, { name: 'merchant_search_query', type: 'string', description: 'Long name' });
+        }
+      }
+      await route.fulfill({ response: res, json: body });
+    });
+    try {
+      for (const width of [1280, 700]) {
+        await page.setViewportSize({ width, height: 800 });
+        await go(page, base, `#/workflows/${CREATE}`);
+        const chips = page.locator('section[aria-labelledby="p-vars"] .chip.variable');
+        await see(chips).toContainText('{{merchant_search_query}}');
+        const lines = await chips.evaluateAll((els) =>
+          els.map((el) => {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const tops = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+            return { text: el.textContent, lines: tops.size };
+          })
+        );
+        expect(lines.filter((l) => l.lines !== 1), `chips on more than one line at ${width}px`).toEqual([]);
+      }
+    } finally {
+      await page.unroute('**/api/workflows');
+      await page.setViewportSize({ width: 1280, height: 720 });
+    }
+  });
+
+  // Feature: studio-first-recording-fixes, Property 10: Bug Condition - Studio names the write steps and keeps variable names on one line (rendering)
+  it('shows the write note and the secrets section from the new view fields, and nothing for read-only', async () => {
+    let fields: Record<string, unknown> = {};
+    await page.route('**/api/workflows', async (route) => {
+      const res = await route.fetch();
+      const body = await res.json();
+      for (const wf of body.workflows) if (wf.id === CREATE) Object.assign(wf, fields);
+      await route.fulfill({ response: res, json: body });
+    });
+    try {
+      fields = { writeSummary: 'login-only', writeSteps: [{ index: 2, label: 'Sign in', risk: 'write', kind: 'login' }] };
+      await go(page, base, `#/workflows/${CREATE}`);
+      await see(page.locator('.write-note')).toContainText('The only write is the login form: step 3');
+      fields = {
+        writeSummary: 'actions',
+        writeSteps: [
+          { index: 2, label: 'Sign in', risk: 'write', kind: 'login' },
+          { index: 5, label: 'Save', risk: 'write', kind: 'action' },
+        ],
+        secretsBasis: 'http',
+        secrets: [{ name: 'TOTP', envVariable: 'DAEMONIZE_SECRET_TOTP', status: 'missing' }],
+        unusedSecrets: [{ name: 'OLD', envVariable: 'DAEMONIZE_SECRET_OLD' }],
+      };
+      await go(page, base, `#/workflows/${CREATE}`);
+      await see(page.locator('.write-note')).toContainText('Step 6: Save (write)');
+      await see(page.locator('.secrets-section .chip.fail')).toHaveText('missing');
+      await see(page.locator('.secrets-unused summary')).toContainText('not read by this server');
+      fields = { writeSummary: 'none', writeSteps: [] };
+      await go(page, base, `#/workflows/${CREATE}`);
+      expect(await page.locator('.write-note').count()).toBe(0);
+    } finally {
+      await page.unroute('**/api/workflows');
+    }
+  });
+
   it('draws the graph with the expected nodes and highlights the path of a workflow', async () => {
     await go(page, base, '#/graph');
     await see(page.locator('.graph-svg .node')).toHaveCount(5);

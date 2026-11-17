@@ -43,13 +43,16 @@ export function collectEnvSecretValues(env: Record<string, string | undefined> =
   return values;
 }
 
-/** Every string leaf of a Playwright storage state (cookie values, local storage values), which must never be shown. */
+/**
+ * The cookie values and local-storage values of a Playwright storage state, which must never be shown.
+ * Only `value` leaves are taken: a cookie's domain, path and name, and an origin, are not secret, and
+ * scrubbing them would mangle every response that names the application (for example `127.0.0.1`).
+ */
 export function storageStateValues(state: unknown): string[] {
   const values = new Set<string>();
   const visit = (node: unknown, key?: string): void => {
     if (typeof node === 'string') {
-      // Names of cookies and origins are not secret; values are. Keeping every leaf longer than the minimum is the safe side.
-      if (node.length >= MIN_SECRET_LENGTH && key !== 'sameSite') values.add(node);
+      if (key === 'value' && node.length >= MIN_SECRET_LENGTH) values.add(node);
     } else if (Array.isArray(node)) node.forEach((item) => visit(item, key));
     else if (node !== null && typeof node === 'object') {
       for (const [k, v] of Object.entries(node)) visit(v, k);

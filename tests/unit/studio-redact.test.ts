@@ -34,10 +34,16 @@ describe('redactForStudio', () => {
     expect(values.sort()).toEqual(['key-value-1', 'pw-value-1']);
   });
 
-  it('collects every string leaf of a storage state as a value to hide', () => {
-    const values = storageStateValues({ cookies: [{ name: 'sid', value: 'cookie-value-9', sameSite: 'Lax' }], origins: [{ origin: 'https://a.test', localStorage: [{ name: 'k', value: 'ls-value-7' }] }] });
-    expect(values).toEqual(expect.arrayContaining(['cookie-value-9', 'ls-value-7']));
-    expect(values).not.toContain('Lax');
+  it('collects the cookie and local-storage values of a storage state, and nothing else', () => {
+    const values = storageStateValues({
+      cookies: [{ name: 'sid', value: 'cookie-value-9', domain: '127.0.0.1', path: '/app', sameSite: 'Lax' }],
+      origins: [{ origin: 'https://a.test', localStorage: [{ name: 'k', value: 'ls-value-7' }] }],
+    });
+    expect(values.sort()).toEqual(['cookie-value-9', 'ls-value-7']);
+    // Regression: the domain of a saved session's cookie was treated as a secret, so every Studio
+    // response that named the application (http://127.0.0.1:port) came out as http://***:port.
+    expect(values).not.toContain('127.0.0.1');
+    expect(values).not.toContain('https://a.test');
   });
 
   it('removes planted env secrets and cookie values from any nested structure', () => {

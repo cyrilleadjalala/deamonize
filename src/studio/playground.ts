@@ -20,7 +20,7 @@ import { basename, join, resolve, sep } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { Validator } from '../validator/validator.js';
-import type { SecretVault } from './contracts.js';
+import { VaultUnreadableError, type SecretVault } from './contracts.js';
 import { clipText } from './pbt-result.js';
 import { collectEnvSecretValues, makeScrubber, redactForStudio, REDACTED } from './redact.js';
 
@@ -626,12 +626,12 @@ export class PlaygroundSession {
   }
 
   private scrubber(extra: readonly string[] = []): (text: string) => string {
-    return makeScrubber([...collectEnvSecretValues(this.studioEnv), ...(this.options.secretValues?.() ?? []), ...extra]);
+    return makeScrubber([...collectEnvSecretValues(this.studioEnv), ...(this.options.secretValues?.() ?? []), ...(this.options.vault?.values() ?? []), ...extra]);
   }
 
   /** A deep copy without credential keys and secret values. */
   redact<T>(value: T, extra: readonly string[] = []): T {
-    return redactForStudio(value, { env: this.studioEnv, secretValues: [...(this.options.secretValues?.() ?? []), ...extra] });
+    return redactForStudio(value, { env: this.studioEnv, secretValues: [...(this.options.secretValues?.() ?? []), ...(this.options.vault?.values() ?? []), ...extra] });
   }
 
   /** Whether a server can be started at all, and why not. */
@@ -679,7 +679,13 @@ export class PlaygroundSession {
 
   // --- lifecycle ------------------------------------------------------------
 
-  private async launchSpec(): Promise<LaunchSpec> {
+  /**
+   * The server to start. With `strictVault` an unreadable vault throws VaultUnreadableError (no process may start with
+   * half of its credentials); otherwise the vault values are skipped. Vault values win over any other source of the
+   * same name, only the `DAEMONIZE_SECRET_<NAME>` key form is created, and neither `process.env` nor the Studio
+   * environment object is changed.
+   */
+  private async launchSpec(options: { strictVault?: boolean } = {}): Promise<LaunchSpec> {
     const launch = await (this.options.launch ?? (() => readLaunch(this.options.outDir)))();
     const env = buildChildEnv({
       processEnv: this.options.processEnv ?? process.env,
@@ -688,31 +694,57 @@ export class PlaygroundSession {
       mode: this.currentMode,
       preview: this.currentPreview,
     });
+    const vault = this.options.vault;
+    if (vault !== undefined) {
+      let snapshot: Record<string, string> = {};
+      try {
+        snapshot = await vault.snapshot();
+      } catch (err) {
+        if (options.strictVault === true || !(err instanceof VaultUnreadableError)) throw err;
+      }
+      const required = this.options.requiredSecretNames === undefined ? Object.keys(snapshot) : await this.options.requiredSecretNames().catch(() => Object.keys(snapshot));
+      for (const name of required) {
+        const value = snapshot[name];
+        if (typeof value !== 'string' || value === '') continue;
+        const key = `DAEMONIZE_SECRET_${name}`;
+        for (const existing of Object.keys(env)) if (existing.toUpperCase() === key.toUpperCase()) delete env[existing];
+        env[key] = value;
+      }
+    }
     return { command: launch.command, args: launch.args, env, cwd: launch.cwd };
   }
 
   /**
    * Upper-case names of the `DAEMONIZE_SECRET_*` variables that are non-empty in the environment this session passes
-   * to the server (allow-listed names of the Studio and process environment, and the literal entries of the
-   * `mcp.json` env). Names only: no value leaves this method.
+   * to the server (allow-listed names of the Studio and process environment, the literal entries of the `mcp.json`
+   * env, and the names held by the Secret_Vault). Names only: no value leaves this method.
    */
   async configuredSecretVariables(): Promise<Set<string>> {
     const env =
-      (await this.launchSpec().catch(() => undefined))?.env ??
+      (await this.launchSpec({ strictVault: false }).catch(() => undefined))?.env ??
       buildChildEnv({ processEnv: this.options.processEnv ?? process.env, studioEnv: this.studioEnv, mode: this.currentMode });
-    return new Set(
+    const names = new Set(
       Object.entries(env)
         .filter(([name, value]) => value !== '' && /^DAEMONIZE_SECRET_/i.test(name))
         .map(([name]) => name.toUpperCase())
     );
+    for (const name of (await this.options.vault?.names().catch(() => undefined)) ?? []) names.add(`DAEMONIZE_SECRET_${name.toUpperCase()}`);
+    return names;
   }
-
   private async ensureConn(): Promise<McpConnection> {
     if (this.closed) throw new PlaygroundUnavailable('the playground is closed', 'closed');
     if (this.conn !== undefined) return this.conn;
     if (this.starting !== undefined) return this.starting;
     this.starting = (async () => {
-      const spec = await this.launchSpec();
+      let spec: LaunchSpec;
+      try {
+        spec = await this.launchSpec({ strictVault: true });
+      } catch (err) {
+        if (err instanceof VaultUnreadableError) {
+          throw new PlaygroundUnavailable('Your saved credentials could not be read. Enter them again in the Credentials panel.', 'vault_unreadable');
+        }
+        throw err;
+      }
       let conn: McpConnection;
       try {
         conn = await this.connectFn(spec);
@@ -747,6 +779,15 @@ export class PlaygroundSession {
     this.conn = undefined;
     this.tools = undefined;
     if (conn !== undefined) await conn.close().catch(() => undefined);
+  }
+
+  /**
+   * Stop the server at once, without waiting behind the queue (a call in flight ends with the usual server_crashed
+   * answer). Used when a credential changed, so the next call starts a server with the new environment.
+   */
+  async stopNow(): Promise<void> {
+    await this.starting?.catch(() => undefined);
+    await this.stopConn();
   }
 
   /** Stop the server (and keep the log); the next call starts it again. */

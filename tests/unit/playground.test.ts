@@ -175,6 +175,42 @@ describe('PlaygroundSession', () => {
     expect([...configured].sort()).toEqual(['DAEMONIZE_SECRET_CRM', 'DAEMONIZE_SECRET_FROM_ENV', 'DAEMONIZE_SECRET_LITERAL']);
     expect(JSON.stringify([...configured])).not.toContain('pw-123');
   });
+  it('also reports the names held by the vault (names only), even without an mcp.json env', async () => {
+    const { connect } = fakeServer();
+    const vault = { snapshot: async () => ({ CRM: 'vault-pw-1' }), names: async () => new Set(['CRM', 'lower']), values: () => ['vault-pw-1'] };
+    const session = makeSession(connect, { env: { DAEMONIZE_SECRET_FROM_ENV: 'x' }, vault, requiredSecretNames: async () => ['CRM'] });
+    const configured = await session.configuredSecretVariables();
+    expect([...configured].sort()).toEqual(['DAEMONIZE_SECRET_CRM', 'DAEMONIZE_SECRET_FROM_ENV', 'DAEMONIZE_SECRET_LOWER']);
+    expect(JSON.stringify([...configured])).not.toContain('vault-pw-1');
+  });
+
+  it('puts a vault value in the child environment, over the Studio value of the same name', async () => {
+    const { state, connect } = fakeServer();
+    const vault = { snapshot: async () => ({ CRM: 'vault-pw-1' }), names: async () => new Set(['CRM']), values: () => ['vault-pw-1'] };
+    const env = { DAEMONIZE_SECRET_CRM: 'studio-pw' };
+    const session = makeSession(connect, { env, vault, requiredSecretNames: async () => ['CRM'] });
+    await session.listTools();
+    expect(state.specs[0].env.DAEMONIZE_SECRET_CRM).toBe('vault-pw-1');
+    expect(state.specs[0].args).toEqual(['server.js']);
+    expect(env.DAEMONIZE_SECRET_CRM).toBe('studio-pw');
+  });
+
+  it('starts no process when the vault cannot be read', async () => {
+    const { state, connect } = fakeServer();
+    const { VaultUnreadableError } = await import('../../src/studio/contracts.js');
+    const vault = {
+      snapshot: async (): Promise<Record<string, string>> => {
+        throw new VaultUnreadableError('x');
+      },
+      names: async () => new Set<string>(),
+      values: () => [],
+    };
+    const session = makeSession(connect, { vault });
+    const outcome = await session.call({ tool: 'search', arguments: { q: 'a' } });
+    expect(outcome.status).toBe(503);
+    expect(state.connects).toBe(0);
+  });
+
   it('starts lazily, lists the tools once and caches them', async () => {
     const { state, connect } = fakeServer();
     const session = makeSession(connect);

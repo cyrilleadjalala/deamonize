@@ -51,11 +51,11 @@ export class KiroPowerGenerator {
    * @param toolNames - Map from workflowId to snake_case tool name
    * @param outputDir - Directory where mcp-server.js is written
    */
-  generate(set: WorkflowSet, toolNames: Map<string, string>, outputDir: string, options: { http?: 'off' | 'auto'; healSupport?: boolean } = {}): KiroPower {
+  generate(set: WorkflowSet, toolNames: Map<string, string>, outputDir: string, options: { http?: 'off' | 'auto'; healSupport?: boolean; powerName?: string } = {}): KiroPower {
     const http = set.targetType === 'web' && options.http === 'auto';
     const healSupport = set.targetType === 'web' && options.healSupport === true;
     const targetName = set.targetName || 'Generated Application';
-    const name = toKebabCase(set.targetName);
+    const name = options.powerName ?? toKebabCase(set.targetName);
     const description = `Generated MCP server for ${targetName} by Daemonize`;
 
     const tools = set.workflows.map((workflow) => ({
@@ -144,13 +144,13 @@ export class KiroPowerGenerator {
       ...toolSections,
       ...(secretVariables.length > 0
         ? [
-          '## Secrets',
+          '## Passwords',
           '',
-          'These environment variables must be set for the server (the `env` entry of `mcp.json` reads them from the environment Kiro runs in). Only their names are written here, never their values:',
+          'The password is read from the Daemonize vault of your account on this computer. Enter it once in the Daemonize Studio, on the Credentials screen. Nothing secret is written in this file. A value set in the environment where Kiro runs is used first when it exists. Names used by this tool (names only, never values):',
           '',
           ...secretVariables.map((v) => `- \`${v}\``),
           '',
-          'A variable that is not set makes the call fail with `missing_secret` naming it, before any step runs. A variable used for a one-time code holds the base32 TOTP seed; the current code is computed at each call.',
+          'A name with no value anywhere makes the call fail with `missing_secret` naming it, before any step runs. A variable used for a one-time code holds the base32 TOTP seed; the current code is computed at each call.',
           '',
         ]
         : []),

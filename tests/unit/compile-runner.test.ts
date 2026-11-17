@@ -21,7 +21,7 @@ describe('Compile_Runner', () => {
   const make = (compile: Fake, extra: Partial<ConstructorParameters<typeof StudioCompileRunner>[0]> = {}, stop = vi.fn(async () => undefined)) => {
     const runner = new StudioCompileRunner({
       workflowFile: join(dir, 'daemonize.workflows.json'),
-      outDir: join(dir, 'out'),
+      target: async () => ({ outDir: join(dir, 'out'), slug: 'app' }),
       playground: () => ({ stop }) as never,
       scrub: (t) => t,
       paths: [dir],
@@ -32,6 +32,9 @@ describe('Compile_Runner', () => {
   };
   const settle = async (): Promise<void> => {
     for (let i = 0; i < 200; i += 1) await new Promise((r) => setImmediate(r));
+    // The runner now reads the folder (real file system I/O) before it compiles: give that I/O time, also on a loaded machine
+    // (Only setImmediate and Date are used: timers may be faked by the test)
+    for (const end = Date.now() + 100; Date.now() < end; ) await new Promise((r) => setImmediate(r));
   };
 
   it('passes install: true only when node_modules is absent, with the default options', async () => {
@@ -129,7 +132,7 @@ describe('Compile_Runner', () => {
   it('close() stops a real install through the quiet installer', async () => {
     const runner = createCompileRunner({
       workflowFile: join(dir, 'w.json'),
-      outDir: join(dir, 'out'),
+      target: async () => ({ outDir: join(dir, 'out'), slug: 'app' }),
       playground: () => undefined,
       scrub: (t) => t,
       paths: [],

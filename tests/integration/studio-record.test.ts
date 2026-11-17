@@ -57,7 +57,7 @@ describe('Studio recording with a real browser, record() and the Compile_Runner'
     const env = { DAEMONIZE_DATA_DIR: join(base, 'appdata') };
     const appData = createAppData({ cwd: process.cwd(), outDir: out, env });
     const sessions = createSessionStore({ appData });
-    const compiler = createCompileRunner({ workflowFile, outDir: out, playground: () => undefined, scrub: (t) => t, paths: [base] });
+    const compiler = createCompileRunner({ workflowFile, target: async () => ({ outDir: out, slug: 'app' }), playground: () => undefined, scrub: (t) => t, paths: [base] });
     // The real record(), seen through its hooks so the test can drive the page like a user
     const record: RecordFn = (options) =>
       defaultRecord({

@@ -4,6 +4,7 @@ export const COMPILE_FAILED_INCOMPLETE =
     'The tool could not be built, and the output folder may be incomplete. You can run Recompile again.';
 export const COMPILE_INSTALL_TIMEOUT = 'Installing the tool\u2019s packages took too long and was stopped. You can run Recompile again.';
 export const COMPILE_INSTALL_STOPPED = 'Installing the tool\u2019s packages was stopped because the Studio is closing.';
+export const APP_NAME_NOT_SAVED = 'The name of this application could not be saved, so nothing was built. Nothing was changed.';
 export const COMPILE_BUSY = 'A build is already running.';
 export const COMPILE_BODY_MUST_BE_EMPTY = 'This request takes no fields.';
 

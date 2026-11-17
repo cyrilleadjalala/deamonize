@@ -4,7 +4,9 @@ import { stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { compile as realCompile, type CompilePhase } from '../cli/commands/compile.js';
 import type { CompileOutcome, CompilePhaseView, CompileRunner, CompileStatus } from './contracts.js';
+import { AppNamesError } from './app-names.js';
 import {
+  APP_NAME_NOT_SAVED,
   COMPILE_FAILED_INCOMPLETE,
   COMPILE_FAILED_UNCHANGED,
   COMPILE_INSTALL_STOPPED,
@@ -17,7 +19,8 @@ type CompileFn = typeof realCompile;
 export interface CompileRunnerDeps {
   /** Absolute paths. */
   workflowFile: string;
-  outDir: string;
+  /** Where to write: creates the Name_Map entry first and answers the per-application folder. Throws AppNamesError. */
+  target: () => Promise<{ outDir: string; slug: string }>;
   /** The playground is created after the services: read it lazily. */
   playground: () => PlaygroundSession | undefined;
   /** Removes known secret values and paths from a text. */
@@ -130,10 +133,15 @@ export class StudioCompileRunner implements CompileRunner {
 
   private async run(): Promise<CompileOutcome> {
     let wrote = false;
+    let outDir = '';
     try {
-      const hasModules = await isDirectory(join(this.deps.outDir, 'node_modules'));
-      await this.compileFn(this.deps.workflowFile, this.deps.outDir, {
-        http: 'off',
+      const target = await this.deps.target();
+      outDir = target.outDir;
+      const hasModules = await isDirectory(join(outDir, 'node_modules'));
+      // powerName is read by the compiler (CompileOptions.powerName); the options are typed loosely until the CLI command forwards it
+      const options = {
+        powerName: target.slug,
+        http: 'off' as const,
         healSupport: false,
         ...(hasModules ? {} : { install: true }),
         installer: this.deps.installer ?? ((dir) => this.quietInstaller(dir)),
@@ -141,13 +149,14 @@ export class StudioCompileRunner implements CompileRunner {
           if (phase === 'writing') wrote = true;
           else this.setPhase(phase);
         },
-      });
+      };
+      await this.compileFn(this.deps.workflowFile, outDir, options);
       this.current = { state: 'done', phase: null };
       await this.stopPlayground();
       return { ok: true };
     } catch (error) {
       if (wrote) await this.stopPlayground();
-      const message = this.failureMessage(error, wrote);
+      const message = this.failureMessage(error, wrote, outDir);
       this.current = { state: 'error', phase: null, error: message };
       return { ok: false, message, outputMayBeIncomplete: wrote };
     }
@@ -161,14 +170,15 @@ export class StudioCompileRunner implements CompileRunner {
     }
   }
 
-  private failureMessage(error: unknown, wrote: boolean): string {
+  private failureMessage(error: unknown, wrote: boolean, outDir: string): string {
+    if (error instanceof AppNamesError) return APP_NAME_NOT_SAVED;
     let base = wrote ? COMPILE_FAILED_INCOMPLETE : COMPILE_FAILED_UNCHANGED;
     if (error instanceof InstallTimeout) return COMPILE_INSTALL_TIMEOUT;
     if (error instanceof InstallStopped) return COMPILE_INSTALL_STOPPED;
     const raw = error instanceof Error ? error.message : '';
     const first = raw.split(/\r?\n/)[0]?.trim() ?? '';
     if (first.length > 0) {
-      const detail = scrubMessage(this.deps.scrub(first), [...this.deps.paths, this.deps.outDir, dirname(this.deps.workflowFile)]);
+      const detail = scrubMessage(this.deps.scrub(first), [...this.deps.paths, outDir, dirname(this.deps.workflowFile)]);
       base = `${base} Cause: ${detail}`;
     }
     return this.deps.scrub(base.length > MAX_MESSAGE * 2 ? base.slice(0, MAX_MESSAGE * 2) : base);

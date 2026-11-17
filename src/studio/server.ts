@@ -37,7 +37,7 @@ import { SAMPLE_PNG, sampleStudioData } from './sample-data.js';
 import type { PbtRunResult } from './pbt-result.js';
 import { MAX_TIMEOUT_MS, PlaygroundSession, SHOT_ID, type CallRequest, type ToolMeta } from './playground.js';
 import { sampleConnect, sampleLaunch } from './sample-playground.js';
-import type { StudioServices } from './contracts.js';
+import type { ActiveApplication, AutoAddOutcome, CompileRunner, StudioServices } from './contracts.js';
 import { createServices } from './services.js';
 import { requiredSecrets } from './required-secrets.js';
 import { DEFAULT_ROUTES } from './routes/index.js';
@@ -74,6 +74,8 @@ export interface StudioOptions {
   playgroundCallTimeoutMs?: number;
   /** Test seam: replace any of the services (no CLI flag or environment variable reaches it). */
   services?: Partial<StudioServices>;
+  /** Test seam: the home folder used by the Power_Installer (default the account's home). */
+  home?: string;
   /** Test seam: replace the default route registry. */
   routes?: RouteFactory[];
 }
@@ -329,6 +331,10 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
   const staticDir = resolve(options.staticDir ?? join(dirname(fileURLToPath(import.meta.url)), 'ui'));
   const pbtTimeoutMs = options.pbtTimeoutMs ?? DEFAULT_PBT_TIMEOUT_MS;
 
+  /** The output folder of the active application. Synchronous reads use it; it is refreshed from the locator. */
+  let activeOutDir = resolve(outDir);
+  /** Application_Key of the active application, refreshed with ctiveOutDir. */
+  let activeAppKey: string | undefined;
   let allowedHosts = new Set<string>();
   let pbtRun: Promise<PbtRunResult> | undefined;
 
@@ -341,14 +347,60 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     cwd: process.cwd(),
     sample,
     env,
+    ...(options.home === undefined ? {} : { home: options.home }),
+    loadSet: async () => {
+      try {
+        return { set: (await loadLive({ workflowFile, outDir: activeOutDir, graphFile: options.graphFile })).targets[0]?.set };
+      } catch {
+        return { set: undefined };
+      }
+    },
     playground: () => playground,
     loadedSecretValues: () => knownSecretValues,
   });
+  /** Re-reads the active application from the locator. Never throws. */
+  const refreshActive = async (): Promise<void> => {
+    if (sample) return;
+    try {
+      const current = await services.locator.current();
+      activeOutDir = resolve(current.outDir);
+      activeAppKey = current.applicationKey;
+    } catch {
+      // Keep the last known folder
+    }
+  };
+  // A finished compile can change the active folder: refresh when one ends
+  const baseCompiler: CompileRunner = services.compiler;
+  let compileWasRunning = false;
+  services.compiler = {
+    status: () => {
+      const status = baseCompiler.status();
+      const running = status.state === 'running';
+      if (compileWasRunning && !running) void refreshActive();
+      compileWasRunning = running;
+      return status;
+    },
+    tryStart: () => {
+      const started = baseCompiler.tryStart();
+      if (started) compileWasRunning = true;
+      return started;
+    },
+    runExclusive: async () => {
+      try {
+        return await baseCompiler.runExclusive();
+      } finally {
+        await refreshActive();
+      }
+    },
+    close: () => baseCompiler.close(),
+  };
+  await refreshActive();
   const loopbackListener = isLoopbackHost(host);
   /** Every value the Redactor must remove from a response, besides the environment ones. */
   const knownValues = (extra: readonly string[] = []): string[] => [...extra, ...knownSecretValues, ...services.vault.values(), ...services.sessions.knownValues()];
   const load = async (): Promise<Loaded> => {
-    const data = sample ? loadSample() : await loadLive({ workflowFile, outDir, graphFile: options.graphFile });
+    await refreshActive();
+    const data = sample ? loadSample() : await loadLive({ workflowFile, outDir: activeOutDir, graphFile: options.graphFile });
     knownSecretValues = data.secretValues;
     if (!sample) await services.sessions.refresh().catch(() => undefined);
     return data;
@@ -377,7 +429,8 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     options.playground === false
       ? undefined
       : new PlaygroundSession({
-        outDir: resolve(outDir),
+        outDir: () => activeOutDir,
+        applicationKey: () => activeAppKey,
         env,
         idleMs: options.playgroundIdleMs,
         callTimeoutMs: options.playgroundCallTimeoutMs,
@@ -410,6 +463,7 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     workflowFile: resolve(workflowFile),
     outDir: resolve(outDir),
     sample,
+    activeApplication: async (): Promise<ActiveApplication> => services.locator.current(),
     loadSet,
     configuredSecretVariables,
     studioEnv: env,
@@ -625,7 +679,13 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     });
     const outcome = await session.call(call, abort.signal);
     if (res.destroyed) return;
-    return sendJson(res, outcome.status, outcome.body, knownSecretValues);
+    let answer: unknown = outcome.body;
+    // A successful call lets the remembered consent add the tool to Kiro; a disabled consent leaves the body as it is
+    if (!sample && outcome.status === 200 && (outcome.body as { success?: unknown } | undefined)?.success === true) {
+      const autoAdd = await services.power.runAutoAdd().catch((): AutoAddOutcome => ({ status: 'failed' }));
+      if (autoAdd.status !== 'disabled') answer = { ...(outcome.body as object), autoAdd };
+    }
+    return sendJson(res, outcome.status, answer, knownSecretValues);
   }
 
   async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: string, body: BodyReader): Promise<void> {
@@ -641,7 +701,7 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
       } catch (err) {
         return sendJson(res, 500, { error: (err as Error).message });
       }
-      const run = runPbtSuite(resolve(outDir), { timeoutMs: pbtTimeoutMs });
+      const run = runPbtSuite(activeOutDir, { timeoutMs: pbtTimeoutMs });
       pbtRun = run;
       try {
         const result = await run;

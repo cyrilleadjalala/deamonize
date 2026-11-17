@@ -2,7 +2,7 @@
 import type { WorkflowSet } from '../../types.js';
 import type { StudioOutputs } from '../model.js';
 import type { PlaygroundSession } from '../playground.js';
-import type { StudioServices } from '../contracts.js';
+import type { ActiveApplication, StudioServices } from '../contracts.js';
 
 export type RouteMethod = 'GET' | 'POST';
 
@@ -33,12 +33,15 @@ export interface RouteContext {
   services: StudioServices;
   playground: PlaygroundSession | undefined;
   workflowFile: string;
+  /** The base output folder (the Studio's configured one). The active application's folder comes from ctiveApplication(). */
   outDir: string;
   sample: boolean;
   /** Tolerant load: set is undefined when the Workflow_File does not exist. Throws LoadError otherwise. */
   loadSet(): Promise<{ set: WorkflowSet | undefined; outputs: StudioOutputs }>;
   /** Upper-case `DAEMONIZE_SECRET_<NAME>` names non-empty in the vault, Studio env or mcp.json env. */
   configuredSecretVariables(): Promise<ReadonlySet<string>>;
+  /** The application the Studio currently shows: key, slug and output folder. */
+  activeApplication(): Promise<ActiveApplication>;
   studioEnv: Record<string, string | undefined>;
 }
 export type RouteFactory = (ctx: RouteContext) => RouteDef[];

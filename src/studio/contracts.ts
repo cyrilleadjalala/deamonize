@@ -17,9 +17,9 @@ export interface AppData {
 
 // ---- secrets ----------------------------------------------------------------
 /** OS protection or App_Data_Dir unusable: the routes answer 503. */
-export class VaultUnavailableError extends Error {}
+export class VaultUnavailableError extends Error { }
 /** The file exists but the key is missing or decryption failed. */
-export class VaultUnreadableError extends Error {}
+export class VaultUnreadableError extends Error { }
 export interface SecretVault {
   /** Names with a non-empty value. Unreadable vault -> empty set, never throws. */
   names(): Promise<ReadonlySet<string>>;
@@ -32,6 +32,15 @@ export interface SecretVault {
   has(name: string): Promise<boolean>;
   /** Name to value, for the Child_Server only. {} when no vault file. Throws VaultUnreadableError. */
   snapshot(): Promise<Record<string, string>>;
+
+  /** Replaces the scoped value of (applicationKey, name). Throws VaultUnavailableError. */
+  setFor(applicationKey: string, name: string, value: string): Promise<void>;
+  /** Deletes only the scoped entry. true when it existed. */
+  removeFor(applicationKey: string, name: string): Promise<boolean>;
+  /** Names with a non-empty scoped or generic value. Unreadable vault -> empty set. Never returns a value. */
+  namesFor(applicationKey: string): Promise<ReadonlySet<string>>;
+  /** name -> value, scoped over generic, only non-empty values. For the Child_Server. Throws VaultUnreadableError. */
+  snapshotFor(applicationKey: string): Promise<Record<string, string>>;
 }
 
 export interface RequiredSecret {
@@ -40,7 +49,7 @@ export interface RequiredSecret {
 }
 
 // ---- sessions ---------------------------------------------------------------
-export class SessionSaveError extends Error {}
+export class SessionSaveError extends Error { }
 export interface SessionStore {
   /** Application_Key (normalized origin) for a URL, or undefined when it is not http(s). Pure. */
   keyFor(url: string): string | undefined;
@@ -117,16 +126,50 @@ export interface PowerFilePlan {
   path: string;
   outcome: 'create' | 'merge' | 'replace';
 }
+export type InstallScope = 'global' | 'project';
+export interface InstallSummary {
+  scope: InstallScope;
+  slug: string;
+  kiroPath: string;
+}
+export interface PowerInfo {
+  available: boolean;
+  defaultWorkspace: string;
+  outputPath: string;
+  /** The slug. */
+  serverName?: string;
+  /** Absolute path of <home>/.kiro. */
+  kiroHome: string;
+  kiroHomeExists: boolean;
+  /** For "Remove from Kiro". */
+  installs: InstallSummary[];
+}
 export interface PowerPreview {
   confirmationId: string;
+  scope: InstallScope;
   /** Absolute, exactly what the UI shows. */
   kiroPath: string;
   files: PowerFilePlan[];
   /** settings/mcp.json already holds this server key. */
   replacesEntry: boolean;
   serverName: string;
-  /** DAEMONIZE_SECRET_* names that will be written. */
+  /** Variables that will be written as ${...}. */
   placeholders: string[];
+  /** Secret_Names with no value yet, for the warning. */
+  missingSecrets: string[];
+  /** True when settings/mcp.json exists and will be copied. */
+  backup: boolean;
+  otherScopeInstalled?: InstallScope;
+}
+export interface AutoAddOutcome {
+  status: 'disabled' | 'added' | 'unchanged' | 'failed';
+  message?: string;
+}
+export interface AutoAddState {
+  enabled: boolean;
+  scope?: InstallScope;
+  writable: boolean;
+  last?: AutoAddOutcome;
 }
 export class PowerError extends Error {
   constructor(readonly status: 400 | 409 | 500, message: string) {
@@ -134,14 +177,42 @@ export class PowerError extends Error {
   }
 }
 export interface PowerInstaller {
-  info(): Promise<{ available: boolean; defaultWorkspace: string; outputPath: string; serverName?: string }>;
+  info(): Promise<PowerInfo>;
   /** Throws PowerError. */
-  preview(workspacePath: unknown): Promise<PowerPreview>;
-  install(request: { confirmationId: unknown; kiroPath: unknown }): Promise<{ written: string[]; placeholders: string[] }>;
+  preview(request: { scope: unknown; workspacePath?: unknown }): Promise<PowerPreview>;
+  install(request: { confirmationId: unknown; kiroPath: unknown; scope: unknown; autoAdd?: unknown }): Promise<{
+    written: string[];
+    placeholders: string[];
+    missingSecrets: string[];
+    scope: InstallScope;
+    /** Only when `autoAdd` was requested: false when the consent could not be stored. */
+    autoAddSaved?: boolean;
+  }>;
+  remove(request: { scope: unknown }): Promise<{ removed: string[] }>;
   /** JSON text, placeholders only. */
   snippet(): Promise<string>;
+  getAutoAdd(): Promise<AutoAddState>;
+  disableAutoAdd(): Promise<AutoAddState>;
+  /** Called by the server after a successful Playground call. Never throws. */
+  runAutoAdd(): Promise<AutoAddOutcome>;
 }
 
+// ---- application location ---------------------------------------------------
+export interface ActiveApplication {
+  /** Application_Key, undefined for a non-http target. */
+  applicationKey?: string;
+  slug: string;
+  /** Absolute, where the compiled tool is or will be. */
+  outDir: string;
+  /** True while the base folder (daemonize-out) is the one in use. */
+  legacy: boolean;
+}
+export interface ApplicationLocator {
+  /** Reads only. Compiled Name_Map folder, else compiled base folder (legacy), else the peeked slug. */
+  current(): Promise<ActiveApplication>;
+  /** Called by the compile runner before writing: creates the Name_Map entry and returns the target. Throws AppNamesError. */
+  prepareCompile(): Promise<ActiveApplication>;
+}
 export interface StudioServices {
   appData: AppData;
   vault: SecretVault;
@@ -149,4 +220,5 @@ export interface StudioServices {
   recording: RecordingManager;
   compiler: CompileRunner;
   power: PowerInstaller;
+  locator: ApplicationLocator;
 }

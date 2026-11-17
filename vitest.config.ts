@@ -11,6 +11,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'fast',
+          setupFiles: ['./tests/setup/clean-env.ts'],
           include: ['tests/unit/**/*.test.ts', 'tests/property/**/*.test.ts'],
           // Some unit files start a real browser (capture-script): closing it can be slow under load
           testTimeout: 30000,
@@ -22,6 +23,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'integration',
+          setupFiles: ['./tests/setup/clean-env.ts'],
           include: ['tests/integration/**/*.test.ts'],
           maxWorkers: 2,
           // After the fast group: the heavy files do not compete with it

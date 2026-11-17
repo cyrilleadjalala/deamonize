@@ -90,11 +90,23 @@ describe('RequestTracker', () => {
     expect(tracker.responded(1000)).toBe(false);
   });
 
-  it('stops waiting for a request that stays pending (long poll)', () => {
+  it('keeps counting a single slow request until it finishes', () => {
     const tracker = new RequestTracker();
-    tracker.start('p', 'http://x/poll', 'fetch', {}, 0);
+    tracker.start('p', 'http://x/slow?_rsc=1', 'fetch', {}, 0);
     expect(tracker.pending(100)).toBe(1);
-    expect(tracker.pending(LONG_LIVED_MS + 1)).toBe(0);
+    expect(tracker.pending(LONG_LIVED_MS + 1)).toBe(1);
+    expect(tracker.pending(8000)).toBe(1);
+    tracker.finish('p', 8100);
+    expect(tracker.pending(8101)).toBe(0);
+  });
+
+  it('keeps the long-poll protection for a repeated key', () => {
+    const tracker = new RequestTracker();
+    tracker.start('e1', 'http://x/events', 'fetch', {}, 0);
+    tracker.start('e2', 'http://x/events', 'fetch', {}, 700);
+    expect(tracker.pending(1000)).toBe(2);
+    expect(tracker.pending(LONG_LIVED_MS + 1)).toBe(1); // only the one younger than 2 s
+    expect(tracker.pending(LONG_LIVED_MS + 701)).toBe(0);
   });
 
   it('ignores requests that repeat on a fixed interval', () => {
@@ -166,6 +178,102 @@ describe('waitForEffect with a fake page', () => {
     const started = Date.now();
     await expect(waitForEffect(page, { timeoutMs: 300 })).resolves.toBe('bound');
     expect(Date.now() - started).toBeGreaterThanOrEqual(280);
+  });
+
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const request = (url: string) => ({ url: () => url, resourceType: () => 'fetch', headers: () => ({}) });
+
+  it('answers "response" only once the DOM was quiet for quietMs after the last finish', async () => {
+    const page = fakePage(() => ({ count: 0, pageNow: 0, times: [] }));
+    let finishedAt = 0;
+    const reason = await waitForEffect(page, {
+      timeoutMs: 3000,
+      quietMs: 200,
+      action: async () => {
+        const r = request('http://x/api');
+        page.handlers.get('request')!(r);
+        await sleep(30);
+        finishedAt = Date.now();
+        page.handlers.get('requestfinished')!(r);
+      },
+    });
+    expect(reason).toBe('response');
+    expect(Date.now() - finishedAt).toBeGreaterThanOrEqual(190);
+    expect(Date.now() - finishedAt).toBeLessThan(1000);
+  });
+
+  it('sees an SPA navigation through nav, then returns after 250 ms of quiet', async () => {
+    const t0 = Date.now();
+    const page = fakePage(() => ({ count: 0, pageNow: 0, times: [], nav: Date.now() - t0 > 300 ? 1 : 0 }));
+    const reason = await waitForEffect(page, {
+      timeoutMs: 4000,
+      quietMs: 50,
+      // A pending request keeps the wait open until the navigation shows up
+      action: async () => page.handlers.get('request')!(request('http://x/rsc')),
+    });
+    const elapsed = Date.now() - t0;
+    expect(reason).toBe('navigation');
+    expect(elapsed).toBeGreaterThanOrEqual(300 + 250 - 40);
+  });
+
+  it('sees an SPA navigation through href only', async () => {
+    const t0 = Date.now();
+    const page = fakePage(() => ({
+      count: 0,
+      pageNow: 0,
+      times: [],
+      href: Date.now() - t0 > 300 ? 'http://x/clients' : 'http://x/',
+    }));
+    const started = Date.now();
+    const reason = await waitForEffect(page, {
+      timeoutMs: 4000,
+      quietMs: 50,
+      action: async () => page.handlers.get('request')!(request('http://x/rsc')),
+    });
+    expect(reason).toBe('navigation');
+    expect(Date.now() - started).toBeGreaterThanOrEqual(300 + 250 - 40);
+  });
+
+  it('after framenavigated returns once the mutations stopped for 250 ms', async () => {
+    const t0 = Date.now();
+    const page = Object.assign(
+      fakePage(() => {
+        const e = Date.now() - t0;
+        const last = Math.min(e, 200);
+        return { count: Math.floor(last / 20), pageNow: e, times: [last - 17, last - 9, last - 4, last - 1, last] };
+      }),
+      { mainFrame: () => 'main' }
+    );
+    const reason = await waitForEffect(page, {
+      timeoutMs: 4000,
+      action: async () => page.handlers.get('framenavigated')!('main'),
+    });
+    expect(reason).toBe('navigation');
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(200 + 250 - 60);
+  });
+
+  it('after framenavigated returns at the bound when the mutations never stop', async () => {
+    let n = 0;
+    const page = Object.assign(
+      fakePage(() => {
+        n++;
+        return { count: n, pageNow: n, times: [n - 40, n - 30, n - 5, n - 3, n] };
+      }),
+      { mainFrame: () => 'main' }
+    );
+    const started = Date.now();
+    const reason = await waitForEffect(page, {
+      timeoutMs: 600,
+      action: async () => page.handlers.get('framenavigated')!('main'),
+    });
+    expect(reason).toBe('navigation');
+    expect(Date.now() - started).toBeGreaterThanOrEqual(550);
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+
+  it('works with samples that carry no nav and href', async () => {
+    const page = fakePage(() => ({ count: 0, pageNow: 0, times: [] }));
+    expect(await waitForEffect(page, { timeoutMs: 2000, quietMs: 50 })).toBe('quiet');
   });
 
   it('passes the error of the action on', async () => {

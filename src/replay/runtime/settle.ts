@@ -20,8 +20,10 @@ export const DEFAULT_QUIET_MS = 150;
 export const DEFAULT_STEP_TIMEOUT_MS = 8000;
 export const DEFAULT_WORKFLOW_TIMEOUT_MS = 30000;
 export const MAX_TIMEOUT_MS = 600000;
-/** A request still pending after this long is a long poll or a stream: it is not waited for. */
+/** A URL started twice or more in one wait and still pending after this long is a long poll: it is not waited for (repeated requests only). */
 export const LONG_LIVED_MS = 2000;
+/** DOM quiet period required after a navigation (full or SPA) before the wait returns. */
+export const NAV_QUIET_MS = 250;
 /** Time left to the page to render a response once the last counted request completed. */
 export const RESPONSE_GRACE_MS = 50;
 const POLL_MS = 20;
@@ -107,6 +109,10 @@ export interface DomSample {
   count: number;
   pageNow: number;
   times: number[];
+  /** Counter of history.pushState / replaceState / popstate / hashchange events (optional). */
+  nav?: number;
+  /** location.href of the page (optional). */
+  href?: string;
 }
 
 /** Tracks DOM mutations observed by polling the page; time is injected, so it needs no browser. */
@@ -140,8 +146,17 @@ export class QuietTracker {
     }
   }
 
+  /** Counts `now` as a change (a navigation, a finished request). */
+  touch(now: number): void {
+    this.lastChangeAt = Math.max(this.lastChangeAt, now);
+  }
+
   isQuiet(now: number): boolean {
-    return this.ambient || now - this.lastChangeAt >= this.quietMs;
+    return this.isQuietFor(now, this.quietMs);
+  }
+
+  isQuietFor(now: number, ms: number): boolean {
+    return this.ambient || now - this.lastChangeAt >= ms;
   }
 }
 
@@ -150,6 +165,8 @@ interface RequestEntry {
   startedAt: number;
   finishedAt?: number;
   ignorable: boolean;
+  /** Counted when it finished: stays a response even if the key later turns out periodic. */
+  countedAtFinish?: boolean;
 }
 
 /** Tracks the requests started during a wait; time is injected, so it needs no browser. */
@@ -166,18 +183,29 @@ export class RequestTracker {
     this.starts.set(key, list);
   }
 
-  finish(id: unknown, now: number): void {
+  /** Returns true when a counted request finished. */
+  finish(id: unknown, now: number): boolean {
     const entry = this.entries.get(id);
     if (entry !== undefined && entry.finishedAt === undefined) {
       entry.finishedAt = now;
-      this.lastFinishAt = now;
+      const counted = this.counts(entry, now);
+      // Only a counted request moves the grace period: a poll or a stream must not postpone "response"
+      if (counted) {
+        this.lastFinishAt = now;
+        entry.countedAtFinish = true;
+      }
+      return counted;
     }
+    return false;
   }
 
   private counts(entry: RequestEntry, now: number): boolean {
     if (entry.ignorable) return false;
-    if (isPeriodic(this.starts.get(entry.key) ?? [], 3)) return false;
-    return entry.finishedAt !== undefined || now - entry.startedAt < LONG_LIVED_MS;
+    const starts = this.starts.get(entry.key) ?? [];
+    if (isPeriodic(starts, 3)) return false;
+    if (entry.finishedAt !== undefined) return true;
+    // A single request counts until it ends; the age guard is for a URL repeated in this wait
+    return !(starts.length >= 2 && now - entry.startedAt >= LONG_LIVED_MS);
   }
 
   /** Counted requests still waiting for their response. */
@@ -193,7 +221,7 @@ export class RequestTracker {
   responded(now: number, graceMs: number = RESPONSE_GRACE_MS): boolean {
     let counted = 0;
     for (const entry of this.entries.values()) {
-      if (this.counts(entry, now)) counted++;
+      if (entry.countedAtFinish === true || this.counts(entry, now)) counted++;
     }
     return counted > 0 && this.pending(now) === 0 && now - this.lastFinishAt >= graceMs;
   }
@@ -232,16 +260,23 @@ export interface EffectOptions {
 const OBSERVE_EXPRESSION = `(() => {
   const g = globalThis;
   if (!g.__daemonizeFx && typeof MutationObserver !== "undefined" && document) {
-    const state = { count: 0, times: [] };
+    const state = { count: 0, times: [], nav: 0 };
     g.__daemonizeFx = state;
+    const bump = () => { state.nav++; };
+    for (const m of ['pushState', 'replaceState']) {
+      const orig = history[m];
+      history[m] = function () { const r = orig.apply(this, arguments); bump(); return r; };
+    }
+    addEventListener('popstate', bump);
+    addEventListener('hashchange', bump);
     new MutationObserver(() => {
       state.count++;
       state.times.push(performance.now());
       if (state.times.length > 8) state.times.shift();
     }).observe(document, { childList: true, attributes: true, characterData: true, subtree: true });
   }
-  const s = g.__daemonizeFx || { count: 0, times: [] };
-  return { count: s.count, pageNow: performance.now(), times: s.times.slice() };
+  const s = g.__daemonizeFx || { count: 0, times: [], nav: 0 };
+  return { count: s.count, pageNow: performance.now(), times: s.times.slice(), nav: s.nav, href: location.href };
 })()`;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
@@ -256,6 +291,9 @@ export async function waitForEffect(page: SettlePage, opts: EffectOptions = {}):
   const requests = new RequestTracker();
   const quiet = new QuietTracker(quietMs, Date.now());
   let navigated = false;
+  let spaNavigated = false;
+  let baseNav: number | undefined;
+  let baseHref: string | undefined;
 
   const onRequest = (req: SettleRequest) => {
     try {
@@ -264,14 +302,38 @@ export async function waitForEffect(page: SettlePage, opts: EffectOptions = {}):
       // A request that cannot be described is not waited for
     }
   };
-  const onDone = (req: SettleRequest) => requests.finish(req, Date.now());
+  const onDone = (req: SettleRequest) => {
+    const now = Date.now();
+    if (requests.finish(req, now)) quiet.touch(now);
+  };
   const onNavigated = (frame: unknown) => {
-    if (page.mainFrame === undefined || frame === page.mainFrame()) navigated = true;
+    if (page.mainFrame === undefined || frame === page.mainFrame()) {
+      navigated = true;
+      quiet.touch(Date.now());
+    }
   };
 
   const sample = async (): Promise<void> => {
     try {
-      quiet.observe((await page.evaluate(OBSERVE_EXPRESSION)) as DomSample, Date.now());
+      const s = (await page.evaluate(OBSERVE_EXPRESSION)) as DomSample;
+      const now = Date.now();
+      quiet.observe(s, now);
+      if (typeof s.nav === 'number') {
+        if (baseNav === undefined) baseNav = s.nav;
+        else if (s.nav > baseNav) {
+          baseNav = s.nav;
+          spaNavigated = true;
+          quiet.touch(now);
+        }
+      }
+      if (typeof s.href === 'string') {
+        if (baseHref === undefined) baseHref = s.href;
+        else if (s.href !== baseHref) {
+          baseHref = s.href;
+          spaNavigated = true;
+          quiet.touch(now);
+        }
+      }
     } catch {
       // The document is being replaced (a navigation) or is gone: nothing to read
     }
@@ -286,19 +348,30 @@ export async function waitForEffect(page: SettlePage, opts: EffectOptions = {}):
     if (opts.action !== undefined) await opts.action();
 
     const boundAt = Date.now() + timeoutMs;
+    let dclWaited = false;
     for (; ;) {
       const now = Date.now();
-      if (navigated) {
-        try {
-          await page.waitForLoadState?.('domcontentloaded', { timeout: Math.max(1, boundAt - now) });
-        } catch {
-          // Bounded: the next locator decides
+      if (navigated || spaNavigated) {
+        if (navigated && !dclWaited) {
+          dclWaited = true;
+          try {
+            await page.waitForLoadState?.('domcontentloaded', { timeout: Math.max(1, boundAt - now) });
+          } catch {
+            // Bounded: the next locator decides
+          }
         }
-        return 'navigation';
+        await sample();
+        const t = Date.now();
+        if (quiet.isQuietFor(t, NAV_QUIET_MS) || t >= boundAt) return 'navigation';
+        await sleep(Math.min(POLL_MS, boundAt - t));
+        continue;
       }
       await sample();
       const t = Date.now();
-      if (requests.responded(t)) return 'response';
+      if (navigated || spaNavigated) continue;
+      // Grace of quietMs after the last finish: the page gets time to commit the response (SPA navigation
+      // shows up as nav/href in that window). Not a DOM quiet check: a page with live tickers never is quiet.
+      if (requests.responded(t, Math.max(RESPONSE_GRACE_MS, quietMs))) return 'response';
       if (quiet.isQuiet(t) && requests.pending(t) === 0) return 'quiet';
       if (t >= boundAt) return 'bound';
       await sleep(Math.min(POLL_MS, boundAt - t));

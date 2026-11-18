@@ -604,6 +604,11 @@
         "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
         "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
         "timestamp": 1795024758977
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795024909705
       }
     ],
     "1. P0 regression fixture and snapshot (serial, first, no change under `src/`)": [
@@ -1108,6 +1113,13 @@
         "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
         "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
         "timestamp": 1795023180656
+      }
+    ],
+    "15. Checkpoint C - verification and commits (serial, last)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795024910071
       }
     ]
   }

@@ -547,7 +547,7 @@ The implementation language is TypeScript for `src/`, `kiro-extension/` and the 
     - Files: `tests/extension/static/manifest.test.ts`, `tests/extension/static/plain-language.test.ts`. The command, its inline entry for `viewItem == action` only, hidden from the palette, titles in `package.nls.json`, and every new string passes the Plain_Language rule with no path and no token.
     - _Requirements: 17.1, 17.11, 17.12_
 
-- [ ] 15. Checkpoint C - verification and commits (serial, last)
+- [x] 15. Checkpoint C - verification and commits (serial, last)
   - Do not push. Nothing in this group changes a feature file except to fix a failing check or to record a documented deviation.
 
   - [x] 15.1 Run the verification suite and report exact results
@@ -557,7 +557,7 @@ The implementation language is TypeScript for `src/`, `kiro-extension/` and the 
     - Reconcile `docs/studio.md` and `docs/replay-model.md` with the delivered routes and options, check RC-1 to RC-5 against the implementation and the amended `requirements.md`, and list every deviation from the design.
     - _Requirements: 24.4, 24.5, 24.6, 24.8_
 
-  - [-] 15.2 Build the nine feature commits
+  - [x] 15.2 Build the nine feature commits
     - Create `git worktree add ..\uji-commits HEAD`. For k = 1 to 9 copy, for every group and file, the newest snapshot of `%TEMP%\uji-snapshots\<group>\F<k>` with index at most k, run `npx tsc --noEmit` and the tests of that feature, and commit once per feature group with the tests in the same commit: F1 Requirements 1 to 4 (the message cites the P0 `git rev-parse HEAD`), F2 5 and 6, F3 7 to 9, F4 10 to 12, F5 13 to 17, F6 18, F7 19 and 20, F8 21, F9 22 and 23.
     - A file whose earlier snapshot does not typecheck with the other groups' snapshot of the same feature moves to the earliest commit whose build needs it; record every move in the report.
     - The tree after commit 9 must equal the finished working tree (`git diff --no-index` empty). After the last commit run the checks of 15.1 again in the worktree: they must all pass.

@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { LiveRecorder } from '../../src/recorder/live-recorder.js';
 import { WorkflowRecorder } from '../../src/recorder/workflow-recorder.js';
+import { createWebRun, executeWebStep } from '../../src/replay/runtime/web-steps.js';
+import type { StepLike } from '../../src/replay/runtime/step-plan.js';
 
 const PAGE = readFileSync(new URL('../fixtures/web/recorder-controls.html', import.meta.url), 'utf8');
 
@@ -165,5 +167,54 @@ describe('recorder: check, radio and file capture', () => {
     expect(await live.ended).toBe('panel');
     expect(live.finishIntent).toBe('kiro');
     expect(live.finishScope).toBe('project');
+  });
+
+  it('shows the radio group label in Review fields, refreshes the End Sheet pill, and replays the <fieldset><legend> radio variable', async () => {
+    const { live, recorder } = await attach();
+    await page.locator('#full').click();
+    await page.keyboard.type('Ada');
+    await page.getByLabel('Pro').check();
+    await expect.poll(() => live.stepCount).toBe(2);
+
+    // Suggested variable name from the "Make variable" bar comes from the <legend> "Plan"
+    await page.getByRole('button', { name: 'Make variable' }).click();
+    expect(await action('variable-name').inputValue()).toBe('plan');
+    await action('variable-optional').check();
+    await action('confirm-variable').click();
+    await expect.poll(() => recorder.variableList().length).toBe(1);
+
+    // End Sheet opens with "Variable: plan", user selects "Only this project", then opens Review fields
+    await page.getByRole('button', { name: 'Finish and save' }).click();
+    await expect.poll(async () => (await action('sheet-facts').textContent()) ?? '').toContain('Variable: plan');
+    await page.getByRole('radio', { name: 'Only this project' }).check();
+
+    await action('review-fields').click();
+    await action('field-drawer').waitFor();
+    const labels = await action('review-field').allInnerTexts();
+    expect(labels).toEqual(['type Full name', 'choose Plan']);
+
+    // Adding a variable in Review fields refreshes the End Sheet summary pill and keeps the chosen scope
+    await action('review-field').first().click();
+    await action('variable-name').fill('customer');
+    await action('confirm-variable').click();
+    await expect.poll(async () => (await action('sheet-facts').textContent()) ?? '').toContain('2 variables');
+
+    await action('close-drawer').click();
+    expect(await action('sheet-facts').textContent()).toContain('2 variables');
+    expect(await page.getByRole('radio', { name: 'Only this project' }).isChecked()).toBe(true);
+
+    // Replay the recorded radio step inside <fieldset><legend>Plan</legend> with a different value
+    const workflow = recorder.finish();
+    const replayPage = await browser.newPage();
+    try {
+      await replayPage.goto(baseUrl);
+      const run = createWebRun(replayPage.context(), replayPage);
+      await executeWebStep(run, workflow.steps[1] as unknown as StepLike, { plan: 'Team' }, { timeoutMs: 2000 });
+      expect(await replayPage.getByLabel('Team').isChecked()).toBe(true);
+      await executeWebStep(run, workflow.steps[1] as unknown as StepLike, { plan: 'Free' }, { timeoutMs: 2000 });
+      expect(await replayPage.getByLabel('Free').isChecked()).toBe(true);
+    } finally {
+      await replayPage.close();
+    }
   });
 });

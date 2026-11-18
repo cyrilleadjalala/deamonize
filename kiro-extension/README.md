@@ -70,7 +70,7 @@ On Windows, the extension never starts a `.cmd` file. It reads the `daemonize.cm
 
 ## Known limits
 
-- **Orphan Studio.** The extension stops the Daemonize program when Kiro closes or the extension is turned off. If Kiro's extension process is killed without a clean shutdown (a crash or a forced kill), the program keeps running in the background. It listens on this computer only and its key is lost, so it is harmless but uses a port and some memory. End the `node` process (Task Manager on Windows) or run **Daemonize: Restart** after the next start. The extension does not restart a crashed program by itself.
+- **Orphan Studio.** The extension stops the Daemonize program when Kiro closes or the extension is turned off, and `studio --machine` also shuts itself down if its parent extension process exits abruptly. If an OS kill leaves any child window or process behind, end the `node` process (Task Manager on Windows) or run **Daemonize: Restart** after the next start. The extension does not restart a crashed program by itself.
 - One Studio per window, for the first open folder only. With several folders open, the extension asks you to choose one.
 - Generated tools need a browser to replay. Chrome or Edge is used if Chromium is not installed for Playwright.
 

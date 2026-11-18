@@ -280,6 +280,26 @@ describe('the fields answer (6.3 to 6.6)', () => {
     expect(field.label).not.toContain('Name');
     expect(field.label.length).toBeLessThanOrEqual(200);
   });
+
+  it('uses the radio group label in panelFields before and after marking as a variable, while never repeating the clicked value', () => {
+    const { live } = setup();
+    live.handle({
+      ...radio('Pro'),
+      anchor: { role: 'radio', name: 'Pro', parent: { kind: 'heading', name: 'Plan' }, frame: [] },
+      radioGroup: 'Plan',
+    });
+    expect(live.panelFields().fields[0].label).toBe('choose Plan');
+    expect(live.handleMarkVariable({ stepIndex: 0, name: 'plan', type: 'string' })).toEqual({ ok: true });
+    expect(live.panelFields().fields[0].label).toBe('choose Plan');
+
+    // Even if a radio group label contains the clicked value, safeFieldLabel still suppresses it
+    live.handle({
+      ...radio('Pro'),
+      radioGroup: 'Pro Plan',
+    });
+    expect(live.handleMarkVariable({ stepIndex: 1, name: 'plan2', type: 'string' })).toEqual({ ok: true });
+    expect(live.panelFields().fields[1].label).not.toContain('Pro');
+  });
 });
 
 describe('the panel binding: file signal and finish scope (9.5, 9.6, 19.5, 19.6)', () => {
@@ -349,5 +369,20 @@ describe('the panel binding: file signal and finish scope (9.5, 9.6, 19.5, 19.6)
   it('answers the state with kiroHomeExists from the options', async () => {
     const { panel } = await attached();
     expect(await panel({ type: 'state' })).toMatchObject({ kiroHomeExists: true });
+  });
+
+  it('clears a marked result zone on { type: "clearZone" }', async () => {
+    const { live, panel } = await attached();
+    expect(live.handleMarkResult({ info: { id: 'results', css: '#results' }, kind: 'list' })).toEqual({
+      ok: true,
+      selector: '#results',
+      kind: 'list',
+    });
+    expect(live.resultZone?.selector).toBe('#results');
+    expect(live.panelState().zone).toEqual({ kind: 'list' });
+
+    expect(await panel({ type: 'clearZone' })).toEqual({ ok: true });
+    expect(live.resultZone).toBeUndefined();
+    expect(live.panelState().zone).toBeUndefined();
   });
 });

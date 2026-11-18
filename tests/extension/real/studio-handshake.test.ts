@@ -162,4 +162,48 @@ describe.skipIf(!HAS_CLI)('real Studio process with --machine', () => {
     expect(code).not.toBe(0);
     expect(run.stdout).toBe('');
   }, 60000);
+
+  it('stops studio --machine automatically when its parent process exits abruptly without deactivate', async () => {
+    // Spawn a separate parent node process that launches `studio --machine` detached, prints its handshake, and exits abruptly.
+    const launcherScript = `
+      const { spawn } = require('node:child_process');
+      const child = spawn(process.execPath, [${JSON.stringify(CLI)}, 'studio', ${JSON.stringify(dir)}, '--workflows', ${JSON.stringify(workflows)}, '--machine'], {
+        cwd: ${JSON.stringify(dir)},
+        detached: true,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: { ...process.env, HOME: ${JSON.stringify(home)}, USERPROFILE: ${JSON.stringify(home)} },
+      });
+      let buf = '';
+      child.stdout.on('data', (chunk) => {
+        buf += chunk.toString('utf8');
+        const nl = buf.indexOf('\\n');
+        if (nl >= 0) {
+          process.stdout.write(buf.slice(0, nl + 1));
+          child.stdout.destroy();
+          child.unref();
+          process.exit(1);
+        }
+      });
+    `;
+    const parent = spawn(process.execPath, ['-e', launcherScript], {
+      cwd: dir,
+      shell: false,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, HOME: home, USERPROFILE: home },
+    });
+    let out = '';
+    parent.stdout?.on('data', (b: Buffer) => { out += b.toString('utf8'); });
+    const parentCode = await new Promise<number | null>((resolve) => parent.on('exit', resolve));
+    expect(parentCode).toBe(1);
+
+    const hs = JSON.parse(out.trim()) as { pid: number; origin: string; token: string };
+    expect(typeof hs.pid).toBe('number');
+    try {
+      expect(await until(() => !alive(hs.pid), 10000)).toBe(true);
+    } finally {
+      if (alive(hs.pid)) await killTree(hs.pid);
+    }
+  }, 60000);
 });

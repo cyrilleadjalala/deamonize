@@ -278,7 +278,7 @@ export const CAPTURE_SCRIPT = `
   function headingOf(section) {
     if (section.tagName === 'FIELDSET') {
       const legend = Array.from(section.children).find((c) => c.tagName === 'LEGEND');
-      if (legend) return clean(legend.textContent);
+      if (legend && !isHidden(legend)) return clean(contentOf(legend, {}));
     }
     const heading = section.querySelector('h1, h2, h3, h4, h5, h6, [role=heading]');
     return heading ? clean(heading.textContent) : '';
@@ -414,13 +414,13 @@ export const CAPTURE_SCRIPT = `
       if (name) return { kind: 'region', name };
     }
 
-    let section = up.closest('section, fieldset, [role=region], [role=group]');
+    let section = up.closest('section, fieldset, [role=region], [role=group], [role=radiogroup]');
     while (section) {
       const name = hasLabelAttribute(section) ? accessibleNameOf(section) : '';
       if (name) return { kind: 'region', name };
       const heading = headingOf(section);
       if (heading) return { kind: 'heading', name: heading };
-      section = section.parentElement ? section.parentElement.closest('section, fieldset, [role=region], [role=group]') : null;
+      section = section.parentElement ? section.parentElement.closest('section, fieldset, [role=region], [role=group], [role=radiogroup]') : null;
     }
 
     const previous = el.previousElementSibling;
@@ -558,12 +558,149 @@ export const CAPTURE_SCRIPT = `
 
   const RESULT_KINDS = ['text', 'table', 'list', 'fields', 'json', 'attribute'];
   const RESULT_CONTAINERS = 'table, [role=table], [role=grid], ul, ol, [role=list], dl, pre, code, input, select, textarea';
+  const MAX_TRAIL_DEPTH = 24;
+  const MAX_PREVIEW_ITEMS = 12;
   let markingResult = false;
 
   // The element holding a result: the table, list, definition list, pre or field around the click
   function resultZoneElement(target) {
     if (!(target instanceof Element)) return document.body;
     return target.closest(RESULT_CONTAINERS) || target;
+  }
+
+  function zoneText(el) {
+    return (el.innerText !== undefined && el.innerText !== null ? el.innerText : el.textContent) || '';
+  }
+
+  function zoneWithin(el, selector) {
+    return el.matches(selector) ? el : el.querySelector(selector);
+  }
+
+  function elLabel(el) {
+    if (!el || !el.tagName) return 'element';
+    const tag = el.tagName.toLowerCase();
+    if (el.id && el.id.length <= 24) return tag + '#' + el.id;
+    const cls = Array.from(el.classList || []).find((c) => /^[a-z][a-z0-9_-]{1,22}$/i.test(c));
+    return cls ? tag + '.' + cls : tag;
+  }
+
+  // Ancestor chain from the pointed element up to the top container inside <body>, with initial cursor on the snapped result box
+  function buildMarkTrail(rawEl) {
+    if (!(rawEl instanceof Element)) return { trail: [document.body], cursor: 0 };
+    const snapped = resultZoneElement(rawEl);
+    const trail = [];
+    let node = rawEl;
+    while (node && node.nodeType === 1 && node !== document.documentElement && trail.length < MAX_TRAIL_DEPTH) {
+      if (node === document.body && trail.length > 0) break;
+      trail.push(node);
+      node = node.parentElement;
+    }
+    if (trail.length === 0) trail.push(document.body);
+    const idx = trail.indexOf(snapped);
+    return { trail, cursor: idx >= 0 ? idx : 0 };
+  }
+
+  function clipLine(text, max) {
+    const s = collapse(text);
+    return s.length > max ? s.slice(0, max - 1) + '\u2026' : s;
+  }
+
+  // Live preview + matching sub-element rects aligned with WEB_ZONE_FUNCTION in extract.ts
+  function analyzeZone(el, kind) {
+    if (!(el instanceof Element)) return { ok: false, badge: 'nothing selected', lines: [], rects: [] };
+    if (kind === 'table') {
+      const TABLE = 'table, [role=table], [role=grid], [role=treegrid]';
+      const CELL = 'th, td, [role=cell], [role=gridcell], [role=columnheader], [role=rowheader]';
+      const table = zoneWithin(el, TABLE);
+      if (!table) return { ok: false, badge: 'no table here', lines: ['Try "list" or "text", or click Wider.'], rects: [] };
+      const rows = Array.from(table.querySelectorAll('tr, [role=row]')).filter((row) => row.closest(TABLE) === table);
+      const nonEmpty = [];
+      for (let i = 0; i < rows.length; i++) {
+        const cells = Array.from(rows[i].querySelectorAll(CELL)).filter((cell) => cell.closest('tr, [role=row]') === rows[i]).map((c) => collapse(zoneText(c)));
+        if (cells.some(Boolean)) nonEmpty.push({ row: rows[i], cells });
+      }
+      const cols = nonEmpty.reduce((m, r) => Math.max(m, r.cells.length), 0);
+      const lines = nonEmpty.slice(0, 3).map((r) => clipLine(r.cells.slice(0, 4).join(' \u00b7 '), 68));
+      if (nonEmpty.length > 3) lines.push('+' + (nonEmpty.length - 3) + ' more rows');
+      return {
+        ok: nonEmpty.length > 0,
+        badge: nonEmpty.length + (nonEmpty.length === 1 ? ' row' : ' rows') + (cols ? ' \u00d7 ' + cols + ' cols' : ''),
+        lines: lines.length ? lines : ['(empty table)'],
+        rects: nonEmpty.slice(0, MAX_PREVIEW_ITEMS).map((r) => r.row.getBoundingClientRect()),
+      };
+    }
+    if (kind === 'list') {
+      const LIST = 'ul, ol, [role=list]';
+      const list = zoneWithin(el, LIST);
+      if (!list) return { ok: false, badge: 'no list here', lines: ['Try "text", or click Wider to wrap a list.'], rects: [] };
+      const allItems = Array.from(list.querySelectorAll('li, [role=listitem]')).filter((it) => it.closest(LIST) === list);
+      const items = allItems.map((it) => ({ el: it, text: collapse(zoneText(it)) })).filter((x) => x.text.length > 0);
+      const lines = items.slice(0, 3).map((x) => '\u2022 ' + clipLine(x.text, 64));
+      if (items.length > 3) lines.push('+' + (items.length - 3) + ' more items');
+      return {
+        ok: items.length > 0,
+        badge: items.length + (items.length === 1 ? ' item' : ' items'),
+        lines: lines.length ? lines : ['(empty list)'],
+        rects: items.slice(0, MAX_PREVIEW_ITEMS).map((x) => x.el.getBoundingClientRect()),
+      };
+    }
+    if (kind === 'fields') {
+      const pairs = [];
+      const rects = [];
+      const dl = zoneWithin(el, 'dl');
+      if (dl) {
+        let lbl = null;
+        Array.from(dl.children).forEach((child) => {
+          const nodes = child.tagName === 'DIV' ? Array.from(child.children) : [child];
+          nodes.forEach((n) => {
+            if (n.tagName === 'DT') lbl = collapse(zoneText(n));
+            else if (n.tagName === 'DD' && lbl !== null) { pairs.push([lbl, collapse(zoneText(n))]); rects.push(n.getBoundingClientRect()); }
+          });
+        });
+      }
+      if (pairs.length === 0) {
+        Array.from(el.matches('label') ? [el] : el.querySelectorAll('label')).forEach((lab) => {
+          const ctl = lab.control || (lab.htmlFor ? document.getElementById(lab.htmlFor) : null);
+          const val = ctl ? (ctl.value !== undefined ? String(ctl.value) : collapse(zoneText(ctl))) : (lab.nextElementSibling ? collapse(zoneText(lab.nextElementSibling)) : null);
+          if (val !== null) { pairs.push([collapse(zoneText(lab)), val]); rects.push(lab.getBoundingClientRect()); }
+        });
+      }
+      if (pairs.length === 0) {
+        Array.from(el.children).forEach((child) => {
+          if (child.children.length === 2) { pairs.push([collapse(zoneText(child.children[0])), collapse(zoneText(child.children[1]))]); rects.push(child.getBoundingClientRect()); }
+        });
+      }
+      if (pairs.length === 0) return { ok: false, badge: 'no pairs found', lines: ['Try "text" or "table", or click Wider.'], rects: [] };
+      const lines = pairs.slice(0, 3).map((p) => clipLine(p[0] + ': ' + p[1], 68));
+      if (pairs.length > 3) lines.push('+' + (pairs.length - 3) + ' more fields');
+      return { ok: true, badge: pairs.length + (pairs.length === 1 ? ' field' : ' fields'), lines, rects: rects.slice(0, MAX_PREVIEW_ITEMS) };
+    }
+    if (kind === 'json') {
+      try {
+        const parsed = JSON.parse((el.textContent || '').trim());
+        const badge = Array.isArray(parsed) ? 'JSON array (' + parsed.length + ')' : parsed && typeof parsed === 'object' ? 'JSON (' + Object.keys(parsed).length + ' keys)' : 'valid JSON';
+        return { ok: true, badge, lines: [clipLine(JSON.stringify(parsed), 110)], rects: [] };
+      } catch (e) {
+        return { ok: false, badge: 'not JSON', lines: ['Switch to "text" to read plain text.'], rects: [] };
+      }
+    }
+    if (kind === 'attribute') {
+      const target = el.matches('input, select, textarea, output') ? el : (el.querySelector('input, select, textarea, output') || el);
+      let val = null;
+      if (target.tagName === 'INPUT' && (target.type === 'checkbox' || target.type === 'radio')) val = target.checked ? 'true' : 'false';
+      else if (target.tagName === 'SELECT') val = target.value;
+      else if (target.value !== undefined && target.value !== null) val = String(target.value);
+      return val === null
+        ? { ok: false, badge: 'no value attribute', lines: ['Pick a form field or switch to "text".'], rects: [] }
+        : { ok: true, badge: 'value', lines: [clipLine(val || '(empty)', 68)], rects: [] };
+    }
+    const text = collapse(zoneText(el));
+    return {
+      ok: text.length > 0,
+      badge: text.length + ' chars',
+      lines: [text ? clipLine(text, 120) : '(empty element)'],
+      rects: [],
+    };
   }
 
   // What the element looks like: table => table, ul/ol => list, dl => fields, pre/code with JSON => json
@@ -660,11 +797,18 @@ export const CAPTURE_SCRIPT = `
   let panelState = { steps: 0, last: [], collapsed: false, ending: false, studio: false, kiroHomeExists: false };
   let saving = false;
   let sheetOpen = false;
+  let sheetSummarySeq = 0;
   let drawerOpen = false;
   let editOpen = false;
   let fileNoticeUntil = 0;
   let rootLook = '';
   let lastMark = null;
+  let markTrail = [];
+  let markCursor = 0;
+  let markAdjusted = false;
+  let markEl = null;
+  let inspectHighlight = false;
+  let inspectTimer = null;
   let offerKey = null;
   let offerMode = 'none';
   let resultKey = null;
@@ -765,17 +909,36 @@ export const CAPTURE_SCRIPT = `
       ui.bubble.append(bubbleDot, ui.bubbleCount);
       ui.bubble.style.display = 'none';
       el.appendChild(ui.bubble);
-      // While the person picks the result: a bar at the top of the page, an outline on the element and what it is
-      ui.banner = uiEl('div', '', FLOAT + 'top:12px;left:50%;transform:translateX(-50%);display:none;align-items:center;gap:10px;border-radius:14px;padding:8px 10px 8px 14px;max-width:calc(100vw - 24px)', 'mark-banner');
+      // While the person picks the result: a slim single-row bar at the top, an interactive outline and live preview
+      ui.banner = uiEl('div', '', FLOAT + 'top:8px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 24px);display:none;align-items:center;gap:6px;white-space:nowrap;border-radius:12px;padding:4px 8px 4px 10px', 'mark-banner');
       ui.banner.setAttribute('role', 'status');
-      const bannerText = uiEl('span', 'Click the element that holds the result', 'font-weight:500');
-      const esc = uiEl('span', 'Esc', 'font:500 11px/1.5 ui-monospace,Consolas,monospace;background:' + K.line + ';border-radius:4px;padding:0 5px;color:' + K.text);
-      const target = uiIcon('target', 16);
+      const bannerText = uiEl('span', 'Click the element that holds the result', 'font-weight:500;font-size:12px');
+      ui.bannerWider = uiButton('\u2191', 'mark-wider', () => stepMarkDepth(1), 'icon');
+      ui.bannerWider.setAttribute('aria-label', 'Expand to parent');
+      ui.bannerWider.title = 'Expand to parent container (ArrowUp)';
+      ui.bannerNarrower = uiButton('\u2193', 'mark-narrower', () => stepMarkDepth(-1), 'icon');
+      ui.bannerNarrower.setAttribute('aria-label', 'Shrink to child');
+      ui.bannerNarrower.title = 'Shrink to child element (ArrowDown)';
+      ui.bannerPick = uiButton('Pick', 'mark-confirm', confirmHoveredMark, 'primary');
+      ui.bannerPick.style.width = 'auto';
+      ui.bannerPick.style.padding = '3px 9px';
+      ui.bannerPick.style.fontSize = '12px';
+      ui.bannerPick.title = 'Use highlighted zone (Enter)';
+      const esc = uiEl('span', 'Esc', 'font:500 11px/1.4 ui-monospace,Consolas,monospace;background:' + K.line + ';border-radius:4px;padding:0 5px;color:' + K.text);
+      const cancelBtn = uiButton('Cancel', 'cancel-mark-result', cancelMarkResult, 'quiet');
+      cancelBtn.style.padding = '3px 9px';
+      cancelBtn.style.fontSize = '12px';
+      const target = uiIcon('target', 15);
       target.style.color = K.violetSoft;
-      ui.banner.append(target, bannerText, esc, uiButton('Cancel', 'cancel-mark-result', cancelMarkResult, 'quiet'));
-      ui.hl = uiEl('div', '', 'position:fixed;box-sizing:border-box;display:none;pointer-events:none;border:2px solid ' + K.violet + ';border-radius:3px;background:rgba(145,71,255,.12)');
-      ui.tip = uiEl('div', '', FLOAT + 'display:none;pointer-events:none;border-radius:8px;padding:4px 9px;font-weight:500;font-size:12px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap');
-      el.append(ui.banner, ui.hl, ui.tip);
+      ui.banner.append(target, bannerText, ui.bannerWider, ui.bannerNarrower, ui.bannerPick, esc, cancelBtn);
+      ui.hl = uiEl('div', '', 'position:fixed;box-sizing:border-box;display:none;pointer-events:none;border:2px solid ' + K.violet + ';border-radius:4px;background:rgba(145,71,255,.12);transition:left .08s ease-out,top .08s ease-out,width .08s ease-out,height .08s ease-out');
+      ui.hlItems = uiEl('div', '', 'position:fixed;inset:0;display:none;pointer-events:none');
+      ui.tip = uiEl('div', '', FLOAT + 'display:none;pointer-events:none;border-radius:10px;padding:6px 10px;font-size:12px;max-width:340px;min-width:170px');
+      ui.tipHead = uiEl('div', '', 'font-weight:600;color:' + K.text + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis');
+      ui.tipBody = uiEl('div', '', 'margin-top:2px;font-size:11px;color:' + K.muted + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis');
+      ui.tipHint = uiEl('div', 'Click to select \u00b7 \u2191\u2193 resize \u00b7 Esc cancel', 'margin-top:3px;font-size:10px;color:' + K.violetSoft);
+      ui.tip.append(ui.tipHead, ui.tipBody, ui.tipHint);
+      el.append(ui.banner, ui.hl, ui.hlItems, ui.tip);
     }
     ui.body = uiEl('div', '', IS_TOP ? 'display:block;margin-top:10px' : 'display:block');
     if (IS_TOP) {
@@ -974,26 +1137,49 @@ export const CAPTURE_SCRIPT = `
     else finishWith('save');
   }
 
+  function renderSheetFacts(summary) {
+    if (!ui.sheetFacts) return;
+    const kind = lastMark ? lastMark.kind : panelState.zone ? panelState.zone.kind : '';
+    ui.sheetFacts.textContent = '';
+    const steps = summary && typeof summary.steps === 'number' ? summary.steps : panelState.steps;
+    ui.sheetFacts.appendChild(uiPill(steps + (steps === 1 ? ' step' : ' steps')));
+    const names = summary && Array.isArray(summary.variables) ? summary.variables : [];
+    if (names.length > 0) ui.sheetFacts.appendChild(uiPill(names.length === 1 ? 'Variable: ' + names[0] : names.length + ' variables', 'violet'));
+    if (kind) ui.sheetFacts.appendChild(uiPill('Result: ' + kind, 'green'));
+    else ui.sheetFacts.appendChild(uiPill('Result: full page'));
+  }
+
+  async function refreshSheetSummary() {
+    if (!sheetOpen || !ui.sheetFacts || !hasPanelBinding()) return;
+    const seq = ++sheetSummarySeq;
+    try {
+      const summary = await window.__daemonizePanel({ type: 'summary' });
+      if (seq === sheetSummarySeq && sheetOpen && ui.sheetFacts && summary) {
+        renderSheetFacts(summary);
+      }
+    } catch (e) {
+      // The page is going away
+    }
+  }
+
   async function openSheet() {
+    const seq = ++sheetSummarySeq;
     let summary = null;
     try {
       summary = await window.__daemonizePanel({ type: 'summary' });
     } catch (e) {
       // The page is going away
     }
+    if (seq !== sheetSummarySeq) return;
     const kind = lastMark ? lastMark.kind : panelState.zone ? panelState.zone.kind : '';
     ui.sheet.textContent = '';
     const head = uiEl('div', '', 'display:flex;align-items:center;gap:8px');
     const done = uiIcon('check', 16);
     done.style.color = K.green;
     head.append(done, uiEl('strong', 'Your tool is ready', 'font-weight:600;font-size:14px'));
-    const facts = uiEl('div', '', 'display:flex;flex-wrap:wrap;gap:6px');
-    const steps = summary && typeof summary.steps === 'number' ? summary.steps : panelState.steps;
-    facts.appendChild(uiPill(steps + (steps === 1 ? ' step' : ' steps')));
-    const names = summary && Array.isArray(summary.variables) ? summary.variables : [];
-    if (names.length > 0) facts.appendChild(uiPill(names.length === 1 ? 'Variable: ' + names[0] : names.length + ' variables', 'violet'));
-    if (kind) facts.appendChild(uiPill('Result: ' + kind, 'green'));
-    ui.sheet.append(head, facts);
+    ui.sheetFacts = uiEl('div', '', 'display:flex;flex-wrap:wrap;gap:6px', 'sheet-facts');
+    renderSheetFacts(summary);
+    ui.sheet.append(head, ui.sheetFacts);
     if (summary && summary.secrets > 0) {
       ui.sheet.appendChild(uiEl('p', summary.secrets === 1 ? '1 secret is kept out of the tool.' : summary.secrets + ' secrets are kept out of the tool.', 'font-size:12px;color:' + K.muted));
     }
@@ -1002,8 +1188,15 @@ export const CAPTURE_SCRIPT = `
       ui.sheet.appendChild(uiEl('p', files + ' not recorded: file upload is not supported yet.', 'font-size:12px;color:' + K.muted, 'file-count'));
     }
     if (!kind) {
-      const note = uiEl('p', 'No result chosen yet. ', 'font-size:12px;color:' + K.muted);
-      note.appendChild(uiButton('Choose one', 'sheet-choose', () => { closeSheet(); startMarkResult(); }, 'quiet'));
+      const note = uiEl('p', 'Captures the whole page text by default. ', 'font-size:12px;color:' + K.muted);
+      note.appendChild(uiButton('Pick specific area', 'sheet-choose', () => { closeSheet(); startMarkResult(); }, 'quiet'));
+      ui.sheet.appendChild(note);
+    } else {
+      const note = uiEl('p', 'Capturing ' + kind + ' zone. ', 'font-size:12px;color:' + K.muted + ';display:flex;align-items:center;gap:6px;flex-wrap:wrap');
+      note.append(
+        uiButton('Change', 'sheet-choose', () => { closeSheet(); startMarkResult(); }, 'quiet'),
+        uiButton('Use full page', 'sheet-clear-result', () => clearMarkResult().then(() => { if (sheetOpen) openSheet(); }), 'quiet'),
+      );
       ui.sheet.appendChild(note);
     }
     const row = uiEl('div', '', 'display:flex;gap:8px;flex-wrap:wrap');
@@ -1054,6 +1247,8 @@ export const CAPTURE_SCRIPT = `
     sheetOpen = false;
     drawerOpen = false;
     editOpen = false;
+    ++sheetSummarySeq;
+    ui.sheetFacts = null;
     ui.sheet.textContent = '';
     renderPanel();
     ui.finish.focus();
@@ -1359,6 +1554,7 @@ export const CAPTURE_SCRIPT = `
         closeFieldForm();
         setStatus('Variable "' + values.name + '" saved', false);
         refreshDrawer();
+        refreshSheetSummary();
       },
       cancel: () => {
         closeFieldForm();
@@ -1411,6 +1607,7 @@ export const CAPTURE_SCRIPT = `
     drawerOpen = false;
     closeFieldForm();
     renderPanel();
+    refreshSheetSummary();
     const again = ui.sheet.querySelector('[data-daemonize-action=review-fields]');
     if (again) again.focus();
   }
@@ -1426,28 +1623,81 @@ export const CAPTURE_SCRIPT = `
 
   // ---------------------------------------------------------------- result zone (panel part)
 
+  function miniButton(text, action, onClick) {
+    const btn = uiButton(text, action, onClick, 'quiet');
+    btn.style.padding = '2px 8px';
+    btn.style.fontSize = '11px';
+    btn.style.borderRadius = '8px';
+    return btn;
+  }
+
+  function syncBannerControls() {
+    if (!IS_TOP || !ui.bannerWider) return;
+    const hasEl = !!(markEl && markEl.isConnected);
+    const canWider = hasEl && markCursor < markTrail.length - 1;
+    const canNarrower = hasEl && markCursor > 0;
+    [ui.bannerWider, ui.pickWider].forEach((b) => { if (b) { b.disabled = !canWider; b.style.opacity = b.disabled ? '.45' : '1'; } });
+    [ui.bannerNarrower, ui.pickNarrower].forEach((b) => { if (b) { b.disabled = !canNarrower; b.style.opacity = b.disabled ? '.45' : '1'; } });
+    [ui.bannerPick, ui.pickConfirm].forEach((b) => { if (b) { b.disabled = !hasEl; b.style.opacity = b.disabled ? '.45' : '1'; } });
+    if (!hasEl && ui.pickInfo) {
+      ui.pickInfo.textContent = 'Hover any block on the page';
+    }
+  }
+
+  let panelInspectHover = false;
+
   function renderResult() {
     if (!root || !IS_TOP) return;
     const kind = lastMark ? lastMark.kind : panelState.zone ? panelState.zone.kind : '';
-    const key = [markingResult, kind, lastMark !== null].join('|');
+    const connected = lastMark && lastMark.el && lastMark.el.isConnected ? 1 : 0;
+    const key = [markingResult, kind, lastMark !== null, lastMark ? lastMark.cursor : -1, connected].join('|');
     if (key === resultKey) return;
     resultKey = key;
-    const hadFocus = ui.result.contains(document.activeElement);
+    const activeAction = ui.result.contains(document.activeElement) && document.activeElement
+      ? document.activeElement.getAttribute('data-daemonize-action')
+      : null;
     ui.result.textContent = '';
     ui.banner.style.display = markingResult ? 'flex' : 'none';
     if (markingResult) {
-      ui.result.appendChild(uiEl('span', 'Pick the result in the page.', 'color:' + K.muted));
+      const pickBox = uiEl('div', '', 'display:flex;flex-direction:column;gap:6px;max-width:300px', 'mark-panel-box');
+      ui.pickInfo = uiEl('span', 'Hover any block on the page', 'font:500 12px/1.4 ' + FONT + ';color:' + K.text + ';background:' + K.raised + ';border:1px solid ' + K.line + ';border-radius:8px;padding:5px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', 'mark-info');
+      const controls = uiEl('div', '', 'display:flex;align-items:center;gap:6px;flex-wrap:wrap');
+      ui.pickWider = miniButton('\u2191 Wider', 'panel-mark-wider', () => stepMarkDepth(1));
+      ui.pickNarrower = miniButton('\u2193 Narrower', 'panel-mark-narrower', () => stepMarkDepth(-1));
+      ui.pickConfirm = miniButton('Pick this', 'panel-mark-confirm', confirmHoveredMark);
+      controls.append(ui.pickWider, ui.pickNarrower, ui.pickConfirm);
+      pickBox.append(ui.pickInfo, controls, uiEl('span', 'Click a block on the page, or press \u2191\u2193 / Enter / Esc.', 'font-size:11px;color:' + K.muted));
+      ui.result.appendChild(pickBox);
+      syncBannerControls();
       return;
     }
     if (lastMark) {
-      ui.result.appendChild(uiEl('span', 'Result zone', 'font-size:12px;color:' + K.muted));
+      const card = uiEl('div', '', 'display:flex;flex-direction:column;gap:8px;max-width:320px', 'result-card');
+      const liveEl = lastMark.el && lastMark.el.isConnected ? lastMark.el : null;
+      const head = uiEl('div', '', 'display:flex;align-items:center;gap:6px;flex-wrap:wrap');
+      const title = uiEl('span', 'Result zone' + (liveEl ? ' \u00b7 ' + elLabel(liveEl) : ''), 'font-size:12px;color:' + K.muted + ';flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap');
+      head.appendChild(title);
+      if (liveEl) {
+        const wider = miniButton('\u2191 Wider', 'result-wider', () => adjustLastMark(1));
+        wider.disabled = lastMark.cursor >= lastMark.trail.length - 1;
+        wider.style.opacity = wider.disabled ? '.45' : '1';
+        const narrower = miniButton('\u2193 Narrower', 'result-narrower', () => adjustLastMark(-1));
+        narrower.disabled = lastMark.cursor <= 0;
+        narrower.style.opacity = narrower.disabled ? '.45' : '1';
+        head.append(wider, narrower);
+      }
+      head.appendChild(miniButton('Clear', 'clear-result', clearMarkResult));
+      card.appendChild(head);
+
       const tabs = uiEl('div', '', 'display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:' + K.tray + ';padding:4px;border-radius:12px', 'result-kind');
       tabs.setAttribute('role', 'group');
       tabs.setAttribute('aria-label', 'Result zone');
       RESULT_KINDS.forEach((k) => {
         const tab = uiButton(k, 'result-kind-' + k, async () => {
           lastMark.kind = k;
+          resultKey = null;
           await window.__daemonizeMarkResult({ info: lastMark.info, kind: lastMark.kind });
+          if (lastMark && lastMark.el && lastMark.el.isConnected) flashHighlight(lastMark.el, lastMark.kind);
           refreshState();
           renderPanel();
         }, 'tab', k);
@@ -1459,84 +1709,292 @@ export const CAPTURE_SCRIPT = `
         }
         tabs.appendChild(tab);
       });
-      ui.result.appendChild(tabs);
+      card.appendChild(tabs);
+
+      if (liveEl) {
+        const analysis = analyzeZone(liveEl, lastMark.kind);
+        const box = uiEl('div', '', 'background:' + K.raised + ';border:1px solid ' + (analysis.ok ? K.line : K.red) + ';border-radius:10px;padding:7px 9px;display:flex;flex-direction:column;gap:4px', 'result-preview');
+        const badgeRow = uiEl('div', '', 'display:flex;align-items:center;gap:6px;flex-wrap:wrap');
+        badgeRow.appendChild(uiPill(analysis.badge, analysis.ok ? 'green' : 'plain'));
+        badgeRow.appendChild(uiEl('span', analysis.ok ? 'Live preview' : 'Mismatch', 'font-size:11px;color:' + (analysis.ok ? K.muted : K.text)));
+        box.appendChild(badgeRow);
+        if (analysis.lines.length > 0) {
+          const linesEl = uiEl('div', analysis.lines.join('\\n'), 'font-size:11px;line-height:1.4;color:' + K.text + ';white-space:pre-wrap;word-break:break-word;max-height:76px;overflow:auto');
+          box.appendChild(linesEl);
+        }
+        card.appendChild(box);
+      }
+
+      card.addEventListener('mouseenter', () => {
+        panelInspectHover = true;
+        clearTimeout(inspectTimer);
+        if (!markingResult && lastMark && lastMark.el && lastMark.el.isConnected) {
+          inspectHighlight = true;
+          paintHighlight(lastMark.el, lastMark.kind, false);
+        }
+      });
+      card.addEventListener('mouseleave', () => {
+        panelInspectHover = false;
+        if (!markingResult) {
+          inspectHighlight = false;
+          hideHover();
+        }
+      });
+      ui.result.appendChild(card);
     } else if (kind) {
-      ui.result.appendChild(uiEl('span', 'Result zone: ' + kind, 'color:' + K.muted));
+      const row = uiEl('div', '', 'display:flex;align-items:center;gap:8px;flex-wrap:wrap');
+      row.append(uiEl('span', 'Result zone: ' + kind, 'color:' + K.muted), miniButton('Clear', 'clear-result', clearMarkResult));
+      ui.result.appendChild(row);
     }
     ui.result.appendChild(uiButton(kind ? 'Choose another result' : 'Choose the result to capture', 'mark-result', startMarkResult, 'quiet', 'target'));
-    if (hadFocus) {
-      const again = ui.result.querySelector('[aria-pressed=true]') || ui.result.querySelector('button');
+    if (!kind) {
+      ui.result.appendChild(uiEl('span', 'Optional \u2014 captures the whole page if skipped.', 'font-size:11px;color:' + K.muted));
+    }
+    if (activeAction !== null) {
+      const again = ui.result.querySelector('[data-daemonize-action="' + activeAction + '"]') || ui.result.querySelector('[aria-pressed=true]') || ui.result.querySelector('button');
       if (again) again.focus();
     }
   }
 
   function startMarkResult() {
     markingResult = true;
+    inspectHighlight = false;
+    panelInspectHover = false;
+    clearTimeout(inspectTimer);
+    markTrail = [];
+    markCursor = 0;
+    markAdjusted = false;
+    markEl = null;
     sheetOpen = false;
+    resultKey = null;
     ensureFrameRoot();
+    hideHover();
     renderPanel();
+    syncBannerControls();
     setStatus('Click the element that holds the result (Esc to cancel)', true);
   }
 
   function hideHover() {
     if (!IS_TOP || !ui.hl) return;
     ui.hl.style.display = 'none';
+    if (ui.hlItems) {
+      ui.hlItems.style.display = 'none';
+      ui.hlItems.textContent = '';
+    }
     ui.tip.style.display = 'none';
   }
 
   function cancelMarkResult() {
     markingResult = false;
+    inspectHighlight = false;
+    markEl = null;
+    markAdjusted = false;
     hideHover();
+    resultKey = null;
     renderPanel();
     setStatus('');
   }
 
-  // The element that would be chosen under the pointer, outlined, with the kind the tool would return
-  function showHover(target) {
-    if (!IS_TOP || !ui.hl) return;
-    const el = resultZoneElement(target);
+  function paintHighlight(el, kind, showTip) {
+    if (!IS_TOP || !ui.hl || !(el instanceof Element) || !el.isConnected) return;
     const rect = el.getBoundingClientRect();
-    const kind = suggestResultKind(el);
     ui.hl.style.left = rect.left + 'px';
     ui.hl.style.top = rect.top + 'px';
     ui.hl.style.width = rect.width + 'px';
     ui.hl.style.height = rect.height + 'px';
     ui.hl.style.display = 'block';
-    const snippet = collapse(el.textContent).slice(0, 40);
-    ui.tip.textContent = kind === 'text' && snippet ? kind + ' \u00b7 "' + snippet + '"' : kind;
-    ui.tip.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - 200)) + 'px';
-    ui.tip.style.top = (rect.top > 34 ? rect.top - 30 : rect.bottom + 6) + 'px';
-    ui.tip.style.display = 'block';
+
+    const analysis = analyzeZone(el, kind);
+    if (ui.hlItems) {
+      ui.hlItems.textContent = '';
+      if (analysis.rects.length > 0) {
+        analysis.rects.forEach((r) => {
+          if (r.width <= 0 || r.height <= 0) return;
+          const itemBox = uiEl('div', '', 'position:fixed;box-sizing:border-box;pointer-events:none;border:1px dashed ' + K.violetSoft + ';border-radius:3px;background:rgba(197,158,255,.07)');
+          itemBox.style.left = r.left + 'px';
+          itemBox.style.top = r.top + 'px';
+          itemBox.style.width = r.width + 'px';
+          itemBox.style.height = r.height + 'px';
+          ui.hlItems.appendChild(itemBox);
+        });
+        ui.hlItems.style.display = 'block';
+      } else {
+        ui.hlItems.style.display = 'none';
+      }
+    }
+
+    if (ui.pickInfo && markingResult) {
+      ui.pickInfo.textContent = elLabel(el) + ' \u00b7 ' + kind + ' \u00b7 ' + analysis.badge;
+    }
+
+    if (showTip) {
+      ui.tipHead.textContent = elLabel(el) + ' \u00b7 ' + kind + ' \u00b7 ' + analysis.badge;
+      ui.tipBody.textContent = analysis.lines[0] || '';
+      ui.tipBody.style.display = ui.tipBody.textContent ? 'block' : 'none';
+      ui.tip.style.display = 'block';
+      const tipW = Math.min(340, ui.tip.offsetWidth || 240);
+      const tipH = ui.tip.offsetHeight || 56;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - tipW - 8));
+      let top = rect.top > tipH + 12 ? rect.top - tipH - 6 : rect.bottom + 8;
+      if (top + tipH > window.innerHeight - 8) top = Math.max(64, Math.min(rect.top + 8, window.innerHeight - tipH - 8));
+      ui.tip.style.left = left + 'px';
+      ui.tip.style.top = top + 'px';
+    } else {
+      ui.tip.style.display = 'none';
+    }
+  }
+
+  function flashHighlight(el, kind) {
+    if (markingResult || !el || !el.isConnected) return;
+    clearTimeout(inspectTimer);
+    inspectHighlight = true;
+    paintHighlight(el, kind, false);
+    inspectTimer = setTimeout(() => {
+      if (!markingResult && !panelInspectHover) {
+        inspectHighlight = false;
+        hideHover();
+      }
+    }, 1100);
+  }
+
+  function stepMarkDepth(delta) {
+    if (!markingResult || markTrail.length === 0) return;
+    const next = Math.max(0, Math.min(markTrail.length - 1, markCursor + delta));
+    if (next === markCursor) return;
+    markCursor = next;
+    markAdjusted = true;
+    markEl = markTrail[markCursor];
+    paintHighlight(markEl, suggestResultKind(markEl), true);
+    syncBannerControls();
+  }
+
+  function confirmHoveredMark() {
+    if (!markingResult || !markEl || !markEl.isConnected) return;
+    finishMarkResult(markEl, true);
+  }
+
+  async function adjustLastMark(delta) {
+    if (!lastMark || !lastMark.trail || lastMark.trail.length === 0) return;
+    const next = Math.max(0, Math.min(lastMark.trail.length - 1, lastMark.cursor + delta));
+    if (next === lastMark.cursor) return;
+    const el = lastMark.trail[next];
+    if (!el || !el.isConnected) return;
+    const info = resultInfoOf(el);
+    const kind = suggestResultKind(el);
+    const result = await window.__daemonizeMarkResult({ info, kind });
+    if (!result || !result.ok) {
+      setStatus((result && result.error) || 'Could not update the result zone', false);
+      return;
+    }
+    lastMark = { el, info, kind, trail: lastMark.trail, cursor: next };
+    resultKey = null;
+    renderPanel();
+    flashHighlight(el, kind);
+    setStatus('Result zone: ' + elLabel(el) + ' (' + kind + ')', false);
+    refreshState();
+  }
+
+  async function clearMarkResult() {
+    clearTimeout(inspectTimer);
+    inspectHighlight = false;
+    panelInspectHover = false;
+    hideHover();
+    if (hasPanelBinding()) {
+      try { await window.__daemonizePanel({ type: 'clearZone' }); } catch (e) {}
+    }
+    lastMark = null;
+    if (panelState) panelState.zone = undefined;
+    resultKey = null;
+    renderPanel();
+    setStatus('Result set to full page', false);
+    refreshState();
+  }
+
+  function syncActiveHighlight() {
+    if (markingResult && markEl && markEl.isConnected) {
+      paintHighlight(markEl, suggestResultKind(markEl), true);
+    } else if (!markingResult && inspectHighlight && lastMark && lastMark.el && lastMark.el.isConnected) {
+      paintHighlight(lastMark.el, lastMark.kind, false);
+    }
+  }
+
+  window.addEventListener('scroll', syncActiveHighlight, true);
+  window.addEventListener('resize', syncActiveHighlight);
+
+  // The element that would be chosen under the pointer, outlined, with the kind the tool would return
+  function showHover(target) {
+    if (!IS_TOP || !ui.hl) return;
+    const built = buildMarkTrail(target);
+    markTrail = built.trail;
+    markCursor = built.cursor;
+    markAdjusted = false;
+    markEl = markTrail[markCursor];
+    paintHighlight(markEl, suggestResultKind(markEl), true);
+    syncBannerControls();
   }
 
   document.addEventListener('mousemove', (e) => {
     if (!markingResult || !e.isTrusted || inUi(e.target)) return;
+    if (markAdjusted && markEl && markEl.isConnected && markEl.contains(e.target)) return;
     showHover(e.target);
   }, true);
 
-  async function finishMarkResult(target) {
+  async function finishMarkResult(target, exactElement) {
     markingResult = false;
+    inspectHighlight = false;
+    panelInspectHover = false;
     hideHover();
-    const el = resultZoneElement(target);
+    const built = buildMarkTrail(target);
+    let cursor = built.cursor;
+    if (exactElement) {
+      const idx = built.trail.indexOf(target);
+      if (idx >= 0) cursor = idx;
+    }
+    const el = built.trail[cursor] || resultZoneElement(target);
     const info = resultInfoOf(el);
     const kind = suggestResultKind(el);
     const result = await window.__daemonizeMarkResult({ info, kind });
+    markTrail = [];
+    markEl = null;
+    markAdjusted = false;
+    resultKey = null;
     if (!result || !result.ok) {
       renderPanel();
       setStatus((result && result.error) || 'Could not set the result zone', false);
       return;
     }
-    lastMark = { info, kind };
+    lastMark = { el, info, kind, trail: built.trail, cursor };
     renderPanel();
-    setStatus('Result zone set', false);
+    flashHighlight(el, kind);
+    setStatus('Result zone set (' + kind + ')', false);
     refreshState();
   }
 
   document.addEventListener('keydown', (e) => {
     if (!e.isTrusted) return;
-    if (markingResult && e.key === 'Escape') {
-      cancelMarkResult();
-    } else if (e.altKey && e.shiftKey && e.code === 'KeyR') {
+    if (markingResult) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelMarkResult();
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        stepMarkDepth(1);
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        stepMarkDepth(-1);
+        return;
+      }
+      if (e.key === 'Enter' && markEl && markEl.isConnected && !inUi(e.target)) {
+        e.preventDefault();
+        confirmHoveredMark();
+        return;
+      }
+    }
+    if (e.altKey && e.shiftKey && e.code === 'KeyR') {
       startMarkResult();
     }
   }, true);
@@ -1611,7 +2069,7 @@ export const CAPTURE_SCRIPT = `
       const route = location.pathname;
       const seq = ++typedSeq;
       if (offerKind === 'text' || offerKind === 'choice') lastInputEl = el;
-      const label = info.name || info.nameAttr || info.id || 'value';
+      const label = (extra && extra.radioGroup) || info.name || info.nameAttr || info.id || 'value';
       Promise.resolve(pending)
         .then((index) => {
           if (typeof index !== 'number' || seq !== typedSeq) return;
@@ -1842,6 +2300,15 @@ export const CAPTURE_SCRIPT = `
     return { names: names.slice(0, 52), total: group.length, clicked: radioName(el), clickedDisabled: isDisabledControl(el) };
   }
 
+  function radioGroupLabel(el) {
+    const group = el.closest('[role=radiogroup], fieldset');
+    if (group) {
+      const name = accessibleNameOf(group) || headingOf(group);
+      if (name) return name;
+    }
+    return clean(el.getAttribute('name'));
+  }
+
   const fileFieldIds = new WeakMap();
   let fileFieldCount = 0;
 
@@ -1865,7 +2332,8 @@ export const CAPTURE_SCRIPT = `
       // The click chooses the result zone; the page must not act on it and no step is recorded
       e.preventDefault();
       e.stopPropagation();
-      finishMarkResult(e.target);
+      const kept = markAdjusted && markEl && markEl.isConnected && markEl.contains(e.target) ? markEl : null;
+      finishMarkResult(kept || e.target, kept !== null);
       return;
     }
     if (e.detail === 0 && performance.now() - enterPressedAt < 100) return;
@@ -1892,7 +2360,10 @@ export const CAPTURE_SCRIPT = `
     if (isRadioControl(target)) {
       // A radio inside a row, a card or a list item keeps its row binding and is not offered as a choice
       const context = parentContext(target);
-      if (!context || !context.rowBinding) extra = Object.assign({}, extra, { radio: radioInfoOf(target) });
+      if (!context || !context.rowBinding) {
+        const radioGroup = radioGroupLabel(target);
+        extra = Object.assign({}, extra, { radio: radioInfoOf(target) }, radioGroup ? { radioGroup } : undefined);
+      }
     }
     emit('click', target, undefined, extra);
   }, true);
@@ -2021,6 +2492,8 @@ export const CAPTURE_SCRIPT = `
     infoOf,
     startMarkResult,
     suggestResultKind,
+    analyzeZone,
+    buildMarkTrail,
     anchorOf: (el) => {
       const context = parentContext(el);
       return anchorOf(el, infoOf(el, context), context).anchor;

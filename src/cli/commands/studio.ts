@@ -71,6 +71,7 @@ export async function studio(dir: string, options: StudioCommandOptions): Promis
   });
   if (machine) {
     const write = options.stdout ?? ((text: string) => void process.stdout.write(text));
+    machineParents.set(handle, process.ppid);
     write(formatHandshakeLine({ origin: handle.origin, token: handle.token, pid: process.pid }));
     return handle;
   }
@@ -84,18 +85,47 @@ export async function studio(dir: string, options: StudioCommandOptions): Promis
 }
 
 const SHUTDOWN_DEADLINE_MS = 4500;
+const PARENT_POLL_MS = 1000;
+const machineParents = new WeakMap<Pick<StudioHandle, 'close'>, number>();
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/** True when the original parent process has exited or reparented this child. */
+export function isParentGone(initialParentPid: number): boolean {
+  if (initialParentPid <= 1) return false;
+  if (process.ppid !== initialParentPid) return true;
+  return !isPidAlive(initialParentPid);
+}
 
 /**
- * Keep the process alive until SIGINT or SIGTERM, then close the Studio (at most 4.5 s, so the exit stays within 5 s even
- * when an active recording takes longer to stop: the browser dies with its parent). With `exit` (default) the process
- * then exits with code 0; the `studio` subcommand passes `exit: false` and simply returns.
+ * Keep the process alive until SIGINT, SIGTERM, or (for `--machine`) the parent process exiting abruptly, then close
+ * the Studio (at most 4.5 s, so the exit stays within 5 s even when an active recording takes longer to stop: the
+ * browser dies with its parent). With `exit` (default) the process then exits with code 0; the `studio` subcommand
+ * passes `exit: false` and simply returns.
  */
-export async function untilInterrupted(handle: Pick<StudioHandle, 'close'>, options: { exit?: boolean; deadlineMs?: number } = {}): Promise<void> {
+export async function untilInterrupted(
+  handle: Pick<StudioHandle, 'close'>,
+  options: { exit?: boolean; deadlineMs?: number; parentPollMs?: number; watchParentPid?: number } = {},
+): Promise<void> {
   await new Promise<void>((done) => {
     let stopping = false;
+    let parentTimer: NodeJS.Timeout | undefined;
     const stop = (): void => {
       if (stopping) return;
       stopping = true;
+      process.off('SIGINT', stop);
+      process.off('SIGTERM', stop);
+      if (parentTimer !== undefined) {
+        clearInterval(parentTimer);
+        parentTimer = undefined;
+      }
       let timer: NodeJS.Timeout | undefined;
       const deadline = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, options.deadlineMs ?? SHUTDOWN_DEADLINE_MS);
@@ -107,6 +137,18 @@ export async function untilInterrupted(handle: Pick<StudioHandle, 'close'>, opti
     };
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
+
+    const watchedParent = options.watchParentPid ?? machineParents.get(handle);
+    if (watchedParent !== undefined && watchedParent > 1) {
+      if (isParentGone(watchedParent)) {
+        stop();
+        return;
+      }
+      parentTimer = setInterval(() => {
+        if (isParentGone(watchedParent)) stop();
+      }, options.parentPollMs ?? PARENT_POLL_MS);
+      parentTimer.unref?.();
+    }
   });
   if (options.exit !== false) process.exit(0);
 }

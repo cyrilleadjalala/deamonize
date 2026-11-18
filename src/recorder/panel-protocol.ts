@@ -8,6 +8,7 @@ export type PanelRequest =
   | { type: 'summary' }
   | { type: 'collapse'; collapsed: boolean }
   | { type: 'fields' }
+  | { type: 'clearZone' }
   | { type: 'file'; fieldId: string };
 
 export interface PanelFieldVariable {

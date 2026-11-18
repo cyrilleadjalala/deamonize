@@ -167,4 +167,38 @@ describe('recorder variables in the page (type, optional, earlier fields, edit)'
     await expect.poll(() => recorder.variableList().length).toBe(1);
     expect(recorder.variableList()[0]).toMatchObject({ name: 'who', type: 'string', optional: true, whenOmitted: 'useRecorded' });
   });
+
+  it('refreshes the End Sheet variable summary pill when variables are added or renamed in Review fields', async () => {
+    const { live } = await attach();
+    await typeIn('#full', 'Ada', live, 1);
+    await typeIn('#age', '42', live, 2);
+
+    await page.getByRole('button', { name: 'Finish and save' }).click();
+    await action('finish-sheet').waitFor();
+    expect(await action('sheet-facts').textContent()).not.toContain('Variable');
+
+    await action('review-fields').click();
+    await action('field-drawer').waitFor();
+
+    // Create first variable -> pill shows "Variable: customer"
+    await action('review-field').first().click();
+    await action('variable-name').fill('customer');
+    await action('confirm-variable').click();
+    await expect.poll(async () => (await action('sheet-facts').textContent()) ?? '').toContain('Variable: customer');
+
+    // Rename first variable -> pill updates to "Variable: buyer"
+    await action('review-field').first().click();
+    await action('variable-name').fill('buyer');
+    await action('confirm-variable').click();
+    await expect.poll(async () => (await action('sheet-facts').textContent()) ?? '').toContain('Variable: buyer');
+
+    // Create second variable -> pill updates to "2 variables"
+    await action('review-field').nth(1).click();
+    await action('variable-name').fill('years');
+    await action('confirm-variable').click();
+    await expect.poll(async () => (await action('sheet-facts').textContent()) ?? '').toContain('2 variables');
+
+    await action('close-drawer').click();
+    expect(await action('sheet-facts').textContent()).toContain('2 variables');
+  });
 });

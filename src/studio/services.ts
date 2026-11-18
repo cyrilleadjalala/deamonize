@@ -70,6 +70,6 @@ export function createServices(overrides: Partial<StudioServices> | undefined, i
         autoAdd: createAutoAddStore({ appData }),
       }));
   const recording =
-    overrides?.recording ?? (info.sample ? new InertRecordingManager() : createRecordingManager({ workflowFile: info.workflowFile, sessions, compiler, scrub, power }));
+    overrides?.recording ?? (info.sample ? new InertRecordingManager() : createRecordingManager({ workflowFile: info.workflowFile, workspacePath: info.cwd, sessions, compiler, scrub, power }));
   return { appData, vault, sessions, recording, compiler, power, locator };
 }

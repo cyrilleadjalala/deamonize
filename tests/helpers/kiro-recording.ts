@@ -14,12 +14,17 @@ export interface PowerOptions {
   infoFails?: 'always' | 'first';
   installAnswer?: unknown;
   installFails?: string;
+  previewFails?: string;
+  workspacePath?: string;
+  workflowFile?: string;
+  scrub?: (text: string) => string;
 }
 
 /** A recorder fake that also exposes `finishScope` (the shared FakeRecord helper has no such field). */
 export async function runKiroRecording(finishScope: unknown, over: PowerOptions = {}, intent: 'save' | 'test' | 'kiro' = 'kiro') {
   const fake = new FakeRecord();
   const previews: unknown[] = [];
+  const previewRequests: Array<{ scope: unknown; workspacePath?: unknown }> = [];
   const installs: unknown[] = [];
   let infoCalls = 0;
   const power: Pick<PowerInstaller, 'info' | 'preview' | 'install'> = {
@@ -30,6 +35,8 @@ export async function runKiroRecording(finishScope: unknown, over: PowerOptions 
     },
     preview: async (request) => {
       previews.push(request.scope);
+      previewRequests.push(request);
+      if (over.previewFails !== undefined) throw new Error(over.previewFails);
       return { confirmationId: 'c1', kiroPath: '/home/.kiro' } as never;
     },
     install: async (request) => {
@@ -50,10 +57,11 @@ export async function runKiroRecording(finishScope: unknown, over: PowerOptions 
         }),
     });
   const manager = createRecordingManager({
-    workflowFile: '/work/daemonize.workflows.json',
+    workflowFile: over.workflowFile ?? '/work/daemonize.workflows.json',
+    ...(over.workspacePath === undefined ? {} : { workspacePath: over.workspacePath }),
     sessions: new MemorySessions(),
     compiler: new FakeCompiler(),
-    scrub: (t) => t,
+    scrub: over.scrub ?? ((t) => t),
     record,
     power,
   });
@@ -64,5 +72,5 @@ export async function runKiroRecording(finishScope: unknown, over: PowerOptions 
   fake.end('panel');
   fake.succeed();
   await settled();
-  return { manager, fake, previews, installs, kiroHomeAtStart: fake.calls[0]?.kiroHomeExists };
+  return { manager, fake, previews, previewRequests, installs, kiroHomeAtStart: fake.calls[0]?.kiroHomeExists };
 }

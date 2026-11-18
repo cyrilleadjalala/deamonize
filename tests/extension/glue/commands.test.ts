@@ -378,3 +378,55 @@ describe('daemonize.deleteAction', () => {
     }
   });
 });
+
+describe('daemonize.newAction 409 handling', () => {
+  const promptNewAction = (): void => {
+    __script({
+      'window.showInputBox': ['Search Wikipedia', 'https://fr.wikipedia.org'],
+      'window.showQuickPick': [{ label: S.reuseNo, reuse: false }],
+    });
+  };
+
+  it('shows the URL/origin message instead of recordingAlready when 409 carries field "url"', async () => {
+    const h = createHarness({
+      recordStart: async () => ({
+        ok: false,
+        status: 409,
+        field: 'url',
+        error: 'This folder already holds actions for https://google.com. Another application needs another folder.',
+      }),
+    });
+    promptNewAction();
+    await h.run('daemonize.newAction');
+    const errs = messages('window.showErrorMessage');
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toContain('already holds actions for https://google.com');
+    expect(errs[0]).not.toBe(S.recordingAlready);
+  });
+
+  it('shows the sample-mode or non-busy 409 message instead of recordingAlready', async () => {
+    const h = createHarness({
+      recordStart: async () => ({
+        ok: false,
+        status: 409,
+        error: 'This Studio is running sample data.',
+      }),
+    });
+    promptNewAction();
+    await h.run('daemonize.newAction');
+    expect(messages('window.showErrorMessage')).toEqual([S.recordingFailed('This Studio is running sample data.')]);
+  });
+
+  it('still shows recordingAlready when a recording is genuinely in progress', async () => {
+    const h = createHarness({
+      recordStart: async () => ({
+        ok: false,
+        status: 409,
+        error: 'A recording is already in progress. Finish it before you start another.',
+      }),
+    });
+    promptNewAction();
+    await h.run('daemonize.newAction');
+    expect(messages('window.showErrorMessage')).toEqual([S.recordingAlready]);
+  });
+});

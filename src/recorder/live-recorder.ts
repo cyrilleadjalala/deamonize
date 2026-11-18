@@ -44,6 +44,7 @@ export interface CapturedEvent {
   replaces?: number;            // a `type` event: index of the previous flush of the same field (no other step since)
   continues?: boolean;          // the same, when that index is not known to the page yet: the last step is meant
   radio?: RadioInfo;            // a click on a radio that has no ancestor row: the group it belongs to
+  radioGroup?: string;          // accessible group name of a radio click (legend, radiogroup label, or name attribute)
 }
 
 /** Binding the panel of the page calls to read its state and to store its collapse state. */
@@ -197,6 +198,7 @@ export class LiveRecorder {
   private readonly lastUrls = new Map<number, string>();
   private readonly typedKeys = new Map<number, string>();
   private readonly radios = new Map<number, RadioInfo>();
+  private readonly radioLabels = new Map<number, string>();
   private readonly fileFields = new Set<string>();
   private readonly frameIds = new WeakMap<Frame, number>();
   private frameCount = 0;
@@ -357,7 +359,9 @@ export class LiveRecorder {
       else if (step.actionType === 'check') kind = 'check';
       else if (step.actionType === 'click' && this.radios.has(stepIndex)) kind = 'radio';
       else return;
-      const field: PanelField = { stepIndex, label: safeFieldLabel(step), kind };
+      const radioGroup = kind === 'radio' ? this.radioLabels.get(stepIndex) : undefined;
+      const fieldStep = radioGroup === undefined ? step : { ...step, label: `choose ${radioGroup}` };
+      const field: PanelField = { stepIndex, label: safeFieldLabel(fieldStep), kind };
       const variable = step.variable === undefined ? undefined : variables.get(step.variable);
       if (variable !== undefined) {
         field.variable = {
@@ -512,6 +516,7 @@ export class LiveRecorder {
       }
       if (request?.type === 'summary') return this.panelSummary();
       if (request?.type === 'fields') return this.panelFields();
+      if (request?.type === 'clearZone') return this.clearResultZone();
       if (request?.type === 'file') return this.noteFileField(source.frame, request.fieldId);
       return this.panelState();
     });
@@ -617,7 +622,11 @@ export class LiveRecorder {
     if (event.actionType === 'type') this.typedKeys.set(index, selectors.join('\n'));
     if (event.actionType === 'click' && event.radio !== undefined) {
       const radio = cleanRadio(event.radio);
-      if (radio !== undefined) this.radios.set(index, radio);
+      if (radio !== undefined) {
+        this.radios.set(index, radio);
+        const groupLabel = nonEmpty(event.radioGroup) ?? nonEmpty(event.info.nameAttr) ?? nonEmpty(event.anchor?.parent?.name);
+        if (groupLabel !== undefined) this.radioLabels.set(index, groupLabel);
+      }
     }
     if (ctx.actionId !== undefined) this.stepActions.set(index, ctx.actionId);
     if (event.rowBinding !== undefined) {
@@ -726,6 +735,12 @@ export class LiveRecorder {
     }
   }
 
+  /** Clear the Result_Zone marked so far so the workflow captures the whole page again. */
+  clearResultZone(): { ok: true } {
+    this.zone = undefined;
+    return { ok: true };
+  }
+
   /** Handle the element the user marked as the result in the page; never throws. */
   handleMarkResult(request: MarkResultRequest): MarkResultResult {
     const selector = buildZoneSelector(request.info);
@@ -820,6 +835,12 @@ function cleanRadio(radio: RadioInfo): RadioInfo | undefined {
   if (!Array.isArray(radio.names) || radio.names.length > 52 || !radio.names.every((name) => typeof name === 'string')) return undefined;
   if (typeof radio.total !== 'number' || typeof radio.clicked !== 'string') return undefined;
   return { names: [...radio.names], total: radio.total, clicked: radio.clicked, clickedDisabled: radio.clickedDisabled === true };
+}
+
+function nonEmpty(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.replace(/\s+/g, ' ').trim();
+  return trimmed === '' ? undefined : trimmed;
 }
 
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {

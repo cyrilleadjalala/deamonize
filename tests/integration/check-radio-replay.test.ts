@@ -101,4 +101,59 @@ describe('check and radio replay', () => {
     expect(await page.locator('input[value=m]').isChecked()).toBe(true);
     expect(await clicks()).toBe(0);
   });
+
+  it('replays a radio variable scoped by a <fieldset><legend> for both heading and region scopes', async () => {
+    await page.setContent(`
+      <fieldset><legend>Size</legend>
+        <label><input type="radio" name="size" value="s"> Small</label>
+        <label><input type="radio" name="size" value="m" checked> Medium</label>
+        <label><input type="radio" name="size" value="l"> Large</label>
+      </fieldset>
+      <fieldset><legend>Size B</legend>
+        <label><input type="radio" name="size_b" value="l" checked> Large</label>
+      </fieldset>
+      <label><input type="radio" name="extra" value="s"> Small</label>
+    `);
+    const headingScoped: StepLike = {
+      actionType: 'click',
+      selectors: [],
+      variable: 'size',
+      value: 'Small',
+      anchor: { role: 'radio', name: 'Small', parent: { kind: 'heading', name: 'Size' }, frame: [] },
+    };
+    await run(headingScoped, { size: 'Large' });
+    expect(await page.locator('input[name=size][value=l]').isChecked()).toBe(true);
+
+    const regionScoped: StepLike = {
+      actionType: 'click',
+      selectors: [],
+      variable: 'size',
+      value: 'Large',
+      anchor: { role: 'radio', name: 'Large', parent: { kind: 'region', name: 'Size' }, frame: [] },
+    };
+    await run(regionScoped, { size: 'Small' });
+    expect(await page.locator('input[name=size][value=s]').isChecked()).toBe(true);
+  });
+
+  it('replays a radio variable scoped by a <fieldset role="radiogroup"><legend>', async () => {
+    await page.setContent(`
+      <fieldset role="radiogroup"><legend>Plan</legend>
+        <label><input type="radio" name="plan" value="Basic" checked> Basic</label>
+        <label><input type="radio" name="plan" value="Pro"> Pro</label>
+      </fieldset>
+      <fieldset role="radiogroup"><legend>Backup</legend>
+        <label><input type="radio" name="backup" value="Pro"> Pro</label>
+      </fieldset>
+    `);
+    const step: StepLike = {
+      actionType: 'click',
+      selectors: [],
+      variable: 'plan',
+      value: 'Basic',
+      anchor: { role: 'radio', name: 'Basic', parent: { kind: 'heading', name: 'Plan' }, frame: [] },
+    };
+    await run(step, { plan: 'Pro' });
+    expect(await page.locator('input[name=plan][value=Pro]').isChecked()).toBe(true);
+    expect(await page.locator('input[name=backup][value=Pro]').isChecked()).toBe(false);
+  });
 });

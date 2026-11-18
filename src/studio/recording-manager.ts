@@ -2,6 +2,7 @@
  * Group G3: the Recording_Manager. One session at a time, driven by a six-state machine:
  * idle|done|error -> recording -> saving -> compiling -> done, with error reachable from the three active states.
  */
+import { dirname } from 'node:path';
 import { storageStateValues, makeScrubber } from './redact.js';
 import type { CompileRunner, PowerInstaller, RecordingManager, RecordingStatus, RecordingState, SessionStore, StartInput, StartOutcome, StopOutcome } from './contracts.js';
 import { InertRecordingManager } from './inert-services.js';
@@ -63,6 +64,8 @@ export const defaultRecord: RecordFn = async (options) => {
 export interface RecordingManagerDeps {
   /** Absolute path of the Workflow_File. */
   workflowFile: string;
+  /** Target workspace folder used when adding to Kiro at project scope (defaults to the Workflow_File's folder). */
+  workspacePath?: string;
   sessions: SessionStore;
   compiler: CompileRunner;
   /** Removes known secret values and paths from a text. */
@@ -286,7 +289,8 @@ class StudioRecordingManager implements RecordingManager {
       // The Kiro of this computer when it has a home folder, else the open project
       const info = await power.info();
       const scope = resolveInstallScope(this.finishScope, info.kiroHomeExists === true);
-      const preview = await power.preview({ scope });
+      const workspacePath = this.deps.workspacePath ?? dirname(this.deps.workflowFile);
+      const preview = await power.preview({ scope, ...(scope === 'project' ? { workspacePath } : {}) });
       const installed = await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope });
       this.kiro = {
         added: true,

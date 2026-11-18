@@ -83,23 +83,31 @@ export function registerRecordCommands(controller: Controller): vscode.Disposabl
         return;
       }
       const reason = controller.redact(answer.error || S.recordingNoLongerStarts);
-      if (answer.status === 409) {
-        void vscode.window.showErrorMessage(S.recordingAlready);
-        return;
-      }
       if (answer.field === 'name') {
+        if (answer.status === 409) {
+          void vscode.window.showErrorMessage(S.recordingFailed(reason));
+          return;
+        }
         const fixed = await askField(S.namePrompt, S.namePlaceholder, validateName, name, reason);
         if (fixed === undefined) return;
         name = fixed;
       } else if (answer.field === 'url') {
+        if (answer.status === 409) {
+          void vscode.window.showErrorMessage(S.recordingFailed(reason));
+          return;
+        }
         const fixed = await askField(S.urlPrompt, S.urlPlaceholder, validateUrl, url, reason);
         if (fixed === undefined) return;
         url = fixed;
+      } else if (answer.status === 409 && /already in progress|already being created/i.test(reason)) {
+        void vscode.window.showErrorMessage(S.recordingAlready);
+        return;
       } else {
         void vscode.window.showErrorMessage(S.recordingFailed(reason));
         return;
       }
     }
+    void vscode.window.showErrorMessage(S.recordingFailed(S.recordingNoLongerStarts));
   });
 
   const finish = vscode.commands.registerCommand('daemonize.finishRecording', async () => {

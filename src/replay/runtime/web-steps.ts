@@ -220,7 +220,7 @@ async function resolveFrames(page: Page, step: StepLike): Promise<FrameRef[]> {
 // Locators
 // ---------------------------------------------------------------------------
 
-const REGION_ROLES = ['listbox', 'menu', 'region', 'group', 'form', 'dialog', 'alertdialog'];
+const REGION_ROLES = ['listbox', 'menu', 'region', 'group', 'radiogroup', 'form', 'dialog', 'alertdialog'];
 
 function scopeLocator(frame: Frame, scope: { kind: ScopeKind; name: string }): Locator {
   const exact = scope.name.length < MAX_ACCESSIBLE_NAME;
@@ -228,8 +228,9 @@ function scopeLocator(frame: Frame, scope: { kind: ScopeKind; name: string }): L
   if (scope.kind === 'dialog') return named('dialog').or(named('alertdialog'));
   if (scope.kind === 'region') return REGION_ROLES.map(named).reduce((all, one) => all.or(one));
   return frame
-    .locator('section, fieldset, [role=region], [role=group]')
-    .filter({ has: frame.getByRole('heading', { name: scope.name, exact }) });
+    .locator('section, fieldset, [role=region], [role=group], [role=radiogroup]')
+    .filter({ has: frame.getByRole('heading', { name: scope.name, exact }) })
+    .or(frame.locator('fieldset').and(named('group').or(named('radiogroup')).or(named('region'))));
 }
 
 function buildLocator(frame: Frame, candidate: LocatorCandidate, rowSelector: string | undefined): Locator {

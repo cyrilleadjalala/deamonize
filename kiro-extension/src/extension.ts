@@ -91,10 +91,15 @@ export function activateWith(context: vscode.ExtensionContext, deps: ExtensionDe
   ];
   context.subscriptions.push(...disposables as vscode.Disposable[]);
 
-  // Best effort: the direct child is killed when the Extension Host exits without deactivate.
+  // Best effort: kill the Studio process tree when the Extension Host exits without deactivate.
   const onExit = (): void => {
     const pid = controller.manager.session?.pid;
     if (pid !== undefined) {
+      if (process.platform === 'win32') {
+        try {
+          nodeSpawn('taskkill', ['/pid', String(pid), '/T', '/F'], { detached: true, windowsHide: true, stdio: 'ignore' }).unref();
+        } catch { /* already gone */ }
+      }
       try { process.kill(pid); } catch { /* already gone */ }
     }
   };

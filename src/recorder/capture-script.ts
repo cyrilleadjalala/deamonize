@@ -657,9 +657,12 @@ export const CAPTURE_SCRIPT = `
 
   let root = null;
   let ui = {};
-  let panelState = { steps: 0, last: [], collapsed: false, ending: false, studio: false };
+  let panelState = { steps: 0, last: [], collapsed: false, ending: false, studio: false, kiroHomeExists: false };
   let saving = false;
   let sheetOpen = false;
+  let drawerOpen = false;
+  let editOpen = false;
+  let fileNoticeUntil = 0;
   let rootLook = '';
   let lastMark = null;
   let offerKey = null;
@@ -785,9 +788,25 @@ export const CAPTURE_SCRIPT = `
       ui.result = uiEl('div', '', 'display:flex;flex-direction:column;gap:8px;margin-bottom:10px');
       ui.finish = uiButton('Finish and save', 'finish', finishPressed, 'primary');
       ui.sheet = uiEl('div', '', 'display:none;flex-direction:column;gap:10px', 'finish-sheet');
-      ui.body.append(ui.result, ui.finish, ui.sheet);
+      // The field list opened from the end sheet: the fields of the session, and the form of the one being edited
+      ui.drawer = uiEl('div', '', 'display:none;flex-direction:column;gap:8px;margin-top:10px;max-height:40vh;overflow:auto;border-top:1px solid ' + K.line + ';padding-top:10px', 'field-drawer');
+      ui.drawer.setAttribute('role', 'region');
+      ui.drawer.setAttribute('aria-label', 'Review fields');
+      ui.drawerList = uiEl('ul', '', 'list-style:none;display:flex;flex-direction:column;gap:6px');
+      ui.drawerForm = uiEl('div', '', 'display:block');
+      const drawerHead = uiEl('div', '', 'display:flex;align-items:center;gap:8px');
+      drawerHead.append(uiEl('strong', 'Review fields', 'flex:1;font-weight:600;font-size:14px'), uiButton('Close', 'close-drawer', closeDrawer, 'quiet'));
+      ui.drawer.append(drawerHead, ui.drawerList, ui.drawerForm);
+      ui.drawer.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !editOpen) {
+          e.preventDefault();
+          closeDrawer();
+        }
+      });
+      ui.body.append(ui.result, ui.finish, ui.sheet, ui.drawer);
     }
     ui.status = uiEl('p', '', 'margin-top:8px;display:none;color:' + K.muted);
+    ui.status.setAttribute('role', 'status');
     ui.status.setAttribute('aria-live', 'polite');
     ui.body.appendChild(ui.status);
     el.appendChild(ui.body);
@@ -835,9 +854,13 @@ export const CAPTURE_SCRIPT = `
     root.style.display = offerMode !== 'none' || ui.status.textContent !== '' ? 'block' : 'none';
   }
 
-  function setStatus(text, keep) {
+  const FILE_NOTICE = 'File upload is not supported yet. This field is not recorded as an input.';
+
+  function setStatus(text, keep, important) {
     ensureFrameRoot();
     if (!root) return;
+    // The notice about a file field stays at least 5 seconds: only a message that must be seen replaces it
+    if (!important && !keep && performance.now() < fileNoticeUntil && ui.status.textContent === FILE_NOTICE) return;
     clearTimeout(noticeTimer);
     ui.status.textContent = text;
     ui.status.style.display = text ? 'block' : 'none';
@@ -856,7 +879,7 @@ export const CAPTURE_SCRIPT = `
 
   function stepIcon(label) {
     const word = String(label).split(' ')[0];
-    return word === 'type' ? 'type' : word === 'select' ? 'select' : 'click';
+    return word === 'type' ? 'type' : word === 'select' ? 'select' : word === 'check' ? 'check' : 'click';
   }
 
   function renderPanel() {
@@ -896,6 +919,7 @@ export const CAPTURE_SCRIPT = `
     ui.finish.style.display = hasFinishBinding() && !sheetOpen ? 'inline-flex' : 'none';
     ui.result.style.display = sheetOpen ? 'none' : 'flex';
     ui.sheet.style.display = sheetOpen ? 'flex' : 'none';
+    ui.drawer.style.display = sheetOpen && drawerOpen ? 'flex' : 'none';
     if (panelState.ending && !saving) {
       saving = true;
       setStatus('Saving\u2026', true);
@@ -973,6 +997,10 @@ export const CAPTURE_SCRIPT = `
     if (summary && summary.secrets > 0) {
       ui.sheet.appendChild(uiEl('p', summary.secrets === 1 ? '1 secret is kept out of the tool.' : summary.secrets + ' secrets are kept out of the tool.', 'font-size:12px;color:' + K.muted));
     }
+    if (summary && typeof summary.files === 'number' && summary.files >= 1) {
+      const files = summary.files === 1 ? '1 file field was' : summary.files + ' file fields were';
+      ui.sheet.appendChild(uiEl('p', files + ' not recorded: file upload is not supported yet.', 'font-size:12px;color:' + K.muted, 'file-count'));
+    }
     if (!kind) {
       const note = uiEl('p', 'No result chosen yet. ', 'font-size:12px;color:' + K.muted);
       note.appendChild(uiButton('Choose one', 'sheet-choose', () => { closeSheet(); startMarkResult(); }, 'quiet'));
@@ -982,9 +1010,10 @@ export const CAPTURE_SCRIPT = `
     row.append(
       uiButton('Test first', 'finish-test', () => finishWith('test'), 'quiet'),
       uiButton('Save only', 'finish-save', () => finishWith('save'), 'quiet'),
+      uiButton('Review fields', 'review-fields', openDrawer, 'quiet'),
       uiButton('Back', 'sheet-back', closeSheet, 'quiet'),
     );
-    ui.sheet.append(uiButton('Save and add to Kiro', 'finish-kiro', () => finishWith('kiro'), 'primary', 'check'), row);
+    ui.sheet.append(scopeChoice(), uiButton('Save and add to Kiro', 'finish-kiro', () => finishWith('kiro'), 'primary', 'check'), row);
     sheetOpen = true;
     setStatus('');
     renderPanel();
@@ -992,8 +1021,39 @@ export const CAPTURE_SCRIPT = `
     if (first) first.focus();
   }
 
+  // Where the tool is added to Kiro: a choice when the Kiro folder exists, otherwise only this project
+  function scopeChoice() {
+    if (!panelState.kiroHomeExists) {
+      return uiEl('p', 'Only this project', 'color:' + K.muted, 'scope-static');
+    }
+    const group = uiEl('div', '', 'display:flex;flex-direction:column;gap:6px', 'scope');
+    group.setAttribute('role', 'radiogroup');
+    group.setAttribute('aria-label', 'Where to add the tool');
+    const name = 'daemonize-scope-' + Math.random().toString(36).slice(2, 8);
+    [['global', 'All my projects'], ['project', 'Only this project']].forEach((choice, index) => {
+      const label = uiEl('label', '', 'display:flex;align-items:center;gap:8px;cursor:pointer');
+      const radio = uiEl('input', '', CHECK_STYLE, 'scope-' + choice[0]);
+      radio.type = 'radio';
+      radio.name = name;
+      radio.value = choice[0];
+      radio.checked = index === 0;
+      ring(radio);
+      label.append(radio, document.createTextNode(choice[1]));
+      group.appendChild(label);
+    });
+    return group;
+  }
+
+  function chosenScope() {
+    if (!panelState.kiroHomeExists) return 'project';
+    const picked = ui.sheet.querySelector('[data-daemonize-action^=scope-]:checked');
+    return picked && picked.value === 'global' ? 'global' : 'project';
+  }
+
   function closeSheet() {
     sheetOpen = false;
+    drawerOpen = false;
+    editOpen = false;
     ui.sheet.textContent = '';
     renderPanel();
     ui.finish.focus();
@@ -1001,6 +1061,7 @@ export const CAPTURE_SCRIPT = `
 
   async function finishWith(intent) {
     if (saving) return;
+    if (blockedByEdit()) return;
     saving = true;
     ui.finish.disabled = true;
     setStatus('Saving\u2026', true);
@@ -1008,7 +1069,8 @@ export const CAPTURE_SCRIPT = `
     try {
       flushLive();
       await Promise.all(Array.from(outstanding));
-      const result = await window.__daemonizeFinish({ intent });
+      // The scope goes only with "add to Kiro"
+      const result = await window.__daemonizeFinish(intent === 'kiro' ? { intent, scope: chosenScope() } : { intent });
       if (!result || !result.ok) throw new Error((result && result.error) || 'Could not finish the recording');
       renderPanel();
     } catch (e) {
@@ -1021,27 +1083,44 @@ export const CAPTURE_SCRIPT = `
 
   // ---------------------------------------------------------------- the offer ("Make variable")
 
-  // The offer is the last typed or selected field of the current route. Pure: it is also exposed for tests.
+  const MAX_EARLIER = 100;
+
+  // The offer is the last typed or selected field of the current route; the offers before it stay in the earlier list
+  // (at most 100, one per field, newest last) so the field list can still reach them. Pure: it is also exposed for tests.
   function createOfferModel(initialRoute) {
     let offer = null;
     let route = initialRoute;
+    let earlier = [];
+    const forget = (fieldId) => { earlier = earlier.filter((o) => o.fieldId !== fieldId); };
+    const remember = (previous) => {
+      // A text selected in a row is not a field of a step
+      if (previous === null || previous.rowText !== undefined) return;
+      forget(previous.fieldId);
+      earlier.push(previous);
+      if (earlier.length > MAX_EARLIER) earlier.shift();
+    };
     return {
       apply(e) {
         if (e.t === 'typed' || e.t === 'row') {
           if (e.route === route) {
-            offer = { fieldId: e.fieldId, stepIndex: e.stepIndex, suggestion: e.suggestion, label: e.label, route: e.route, rowText: e.rowText };
+            if (offer !== null && offer.fieldId !== e.fieldId) remember(offer);
+            offer = { fieldId: e.fieldId, stepIndex: e.stepIndex, suggestion: e.suggestion, label: e.label, route: e.route, rowText: e.rowText, kind: e.kind };
+            forget(offer.fieldId);
           }
         } else if (e.t === 'input') {
-          if (offer !== null && offer.fieldId !== e.fieldId) offer = null;
+          // Typing in another field: the offer of the previous one is kept for the field list, and stays offered
+          if (offer !== null && offer.fieldId !== e.fieldId) remember(offer);
         } else if (e.t === 'route') {
           offer = null;
           route = e.route;
         } else if (e.t === 'clear') {
           offer = null;
+          if (typeof e.stepIndex === 'number') earlier = earlier.filter((o) => o.stepIndex !== e.stepIndex);
         }
         return offer;
       },
       get offer() { return offer; },
+      get earlier() { return earlier.slice(); },
       get route() { return route; },
     };
   }
@@ -1086,41 +1165,263 @@ export const CAPTURE_SCRIPT = `
     renderOffer();
   }
 
-  function askName(offer) {
-    offerMode = 'naming';
-    ui.offer.textContent = '';
+  // ---- the settings of a variable: what the form sends
+
+  const TYPE_CHOICES = [['string', 'text'], ['number', 'number'], ['boolean', 'true or false']];
+  const OMITTED_CHOICES = [['skip', 'If left empty: skip this field'], ['useRecorded', 'If left empty: use the recorded value']];
+  const FIELD_STYLE = 'all:initial;box-sizing:border-box;font:13px/1.3 ' + FONT + ';color:' + K.text + ';background:' + K.neutral + ';border:1px solid ' + K.line + ';border-radius:10px;padding:6px 10px;margin:0;color-scheme:dark;';
+  const CHECK_STYLE = 'appearance:auto;box-sizing:border-box;width:16px;height:16px;flex:none;cursor:pointer;accent-color:' + K.violet + ';';
+
+  // "Make variable" request: type always, optional and whenOmitted only for an optional variable. Pure.
+  function variableRequest(offer, values) {
+    const request = { stepIndex: offer.stepIndex, name: values.name };
+    if (offer.rowText !== undefined) request.rowText = offer.rowText;
+    request.type = values.type;
+    if (values.optional) {
+      request.optional = true;
+      request.whenOmitted = values.whenOmitted;
+    }
+    return request;
+  }
+
+  // Edit request: only the settings the person changed, or null when nothing changed. Pure.
+  function editRequest(current, values) {
+    const request = { name: current.name };
+    if (values.name !== current.name) request.newName = values.name;
+    if (values.type !== undefined && values.type !== current.type) request.type = values.type;
+    if (values.optional !== current.optional) request.optional = values.optional;
+    if (values.optional && (!current.optional || values.whenOmitted !== (current.whenOmitted || 'useRecorded'))) {
+      request.whenOmitted = values.whenOmitted;
+    }
+    return Object.keys(request).length > 1 ? request : null;
+  }
+
+  // Every control of the panel draws its own focus ring, for the keyboard only (the page may remove every outline)
+  function ring(el) {
+    el.addEventListener('focus', () => {
+      if (el.matches(':focus-visible')) {
+        el.style.outline = '2px solid ' + K.violetSoft;
+        el.style.outlineOffset = '2px';
+      }
+    });
+    el.addEventListener('blur', () => { el.style.outline = 'none'; });
+    return el;
+  }
+
+  function uiChoice(action, label, choices, selected) {
+    const select = uiEl('select', '', FIELD_STYLE + 'cursor:pointer', action);
+    select.setAttribute('aria-label', label);
+    choices.forEach((choice) => {
+      const option = document.createElement('option');
+      option.value = choice[0];
+      option.textContent = choice[1];
+      select.appendChild(option);
+    });
+    select.value = selected;
+    return ring(select);
+  }
+
+  // The form of "Make variable" (current is null) and of an edit (current is { name, type, optional, whenOmitted }).
+  // handlers.send(values) answers { ok, error }, handlers.done(values) and handlers.cancel() end the form.
+  function variableForm(offer, current, handlers) {
+    const kind = offer.kind || 'text';
+    const form = uiEl('div', '', 'display:flex;flex-direction:column;gap:8px;align-items:flex-start', 'variable-form');
+    form.setAttribute('role', 'group');
+    form.setAttribute('aria-label', current ? 'Edit variable' : 'Make variable');
+
     const input = uiEl('input', '', 'all:initial;font:13px/1.3 ' + FONT + ';color:' + K.text + ';background:' + K.neutral + ';border:1px solid ' + K.line + ';border-radius:10px;padding:6px 10px;margin:0;box-sizing:border-box;width:max(220px,' + (offer.suggestion.length + 4) + 'ch);max-width:min(360px,60vw)', 'variable-name');
     input.type = 'text';
-    input.value = offer.suggestion;
-    input.title = offer.suggestion;
+    input.value = current ? current.name : offer.suggestion;
+    input.title = input.value;
+    input.setAttribute('aria-label', 'Variable name');
+    ring(input);
+    const message = uiEl('span', '', 'flex-basis:100%;color:' + K.red);
+    message.setAttribute('role', 'alert');
+    const nameRow = uiEl('div', '', 'display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;max-width:100%');
+    nameRow.append(input, message);
 
+    // A checkbox is always true or false, a radio group is always text, a text selected in a row is always text
+    let typeBox = null;
+    if (kind !== 'radio') {
+      const choices = kind === 'check' ? TYPE_CHOICES.slice(2) : offer.rowText !== undefined ? TYPE_CHOICES.slice(0, 1) : TYPE_CHOICES;
+      typeBox = uiChoice('variable-type', 'Type', choices, current ? current.type : kind === 'check' ? 'boolean' : 'string');
+    }
+
+    const optionalLabel = uiEl('label', '', 'display:flex;align-items:center;gap:6px;cursor:pointer');
+    const optional = uiEl('input', '', CHECK_STYLE, 'variable-optional');
+    optional.type = 'checkbox';
+    optional.checked = !!(current && current.optional);
+    optional.setAttribute('aria-label', 'Optional');
+    ring(optional);
+    optionalLabel.append(optional, document.createTextNode('Optional'));
+
+    const omitted = uiChoice('variable-omitted', 'If left empty', OMITTED_CHOICES, current ? current.whenOmitted || 'useRecorded' : 'skip');
+    const showOmitted = () => { omitted.style.display = optional.checked ? 'block' : 'none'; };
+    optional.addEventListener('change', showOmitted);
+    showOmitted();
+
+    const buttons = uiEl('div', '', 'display:flex;gap:8px;align-items:center');
     const ok = uiButton('OK', 'confirm-variable', confirm, 'primary');
     ok.style.width = 'auto';
-    const message = uiEl('span', '', 'flex-basis:100%');
+    buttons.append(ok, uiButton('Cancel', 'cancel-variable', () => handlers.cancel(), 'quiet'));
+    form.append(nameRow);
+    if (typeBox) form.appendChild(typeBox);
+    form.append(optionalLabel, omitted, buttons);
+
+    let busy = false;
+    function values() {
+      return {
+        name: input.value.trim(),
+        type: kind === 'radio' ? 'string' : typeBox.value,
+        optional: optional.checked,
+        whenOmitted: omitted.value,
+      };
+    }
 
     async function confirm() {
-      const name = input.value.trim();
-      const request = { stepIndex: offer.stepIndex, name };
-      if (offer.rowText !== undefined) request.rowText = offer.rowText;
-      const result = await window.__daemonizeMarkVariable(request);
-      if (result && result.ok) {
-        setOffer({ t: 'clear' });
-        setStatus('Variable "' + name + '" saved', false);
-      } else {
-        message.textContent = (result && result.error) || 'Could not save the variable';
+      if (busy) return;
+      busy = true;
+      try {
+        const answer = await handlers.send(values());
+        if (answer && answer.ok) {
+          handlers.done(values());
+        } else {
+          message.textContent = (answer && answer.error) || 'Could not save the variable';
+          input.setAttribute('aria-invalid', 'true');
+        }
+      } catch (e) {
+        message.textContent = 'Could not save the variable';
+      } finally {
+        busy = false;
       }
     }
 
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+    // Enter confirms from any field; on a button it keeps its usual meaning
+    form.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) {
         e.preventDefault();
         confirm();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handlers.cancel();
       }
     });
+    return { el: form, input };
+  }
 
-    ui.offer.append(input, ok, message);
-    input.focus();
-    input.select();
+  function askName(offer) {
+    offerMode = 'naming';
+    ui.offer.textContent = '';
+    const form = variableForm(offer, null, {
+      send: (values) => window.__daemonizeMarkVariable(variableRequest(offer, values)),
+      done: (values) => {
+        setOffer({ t: 'clear', stepIndex: offer.stepIndex });
+        setStatus('Variable "' + values.name + '" saved', false);
+      },
+      cancel: () => {
+        offerMode = 'none';
+        offerKey = null;
+        renderOffer();
+      },
+    });
+    ui.offer.appendChild(form.el);
+    form.input.focus();
+    form.input.select();
+  }
+
+  // ---------------------------------------------------------------- the field list (Review fields)
+
+  function suggestionFor(field) {
+    const known = model.earlier.concat(model.offer ? [model.offer] : []).find((o) => o.stepIndex === field.stepIndex);
+    if (known) return known.suggestion;
+    const words = String(field.label || '').split(' ');
+    return toSnake(words.length > 1 ? words.slice(1).join(' ') : words[0]);
+  }
+
+  function closeFieldForm() {
+    editOpen = false;
+    ui.drawerForm.textContent = '';
+  }
+
+  function showFieldForm(field) {
+    closeFieldForm();
+    editOpen = true;
+    const offer = { stepIndex: field.stepIndex, suggestion: field.variable ? field.variable.name : suggestionFor(field), label: field.label, kind: field.kind };
+    const form = variableForm(offer, field.variable || null, {
+      send: (values) => {
+        if (!field.variable) return window.__daemonizeMarkVariable(variableRequest(offer, values));
+        const request = editRequest(field.variable, values);
+        return request === null ? { ok: true } : window.__daemonizeEditVariable(request);
+      },
+      done: (values) => {
+        if (!field.variable) setOffer({ t: 'clear', stepIndex: field.stepIndex });
+        closeFieldForm();
+        setStatus('Variable "' + values.name + '" saved', false);
+        refreshDrawer();
+      },
+      cancel: () => {
+        closeFieldForm();
+        const first = ui.drawerList.querySelector('button');
+        if (first) first.focus();
+      },
+    });
+    ui.drawerForm.appendChild(form.el);
+    form.input.focus();
+    form.input.select();
+  }
+
+  async function refreshDrawer() {
+    let answer = null;
+    try {
+      answer = await window.__daemonizePanel({ type: 'fields' });
+    } catch (e) {
+      // The page is going away
+    }
+    const fields = answer && Array.isArray(answer.fields) ? answer.fields : [];
+    ui.drawerList.textContent = '';
+    if (fields.length === 0) {
+      ui.drawerList.appendChild(uiEl('p', 'No field to review yet.', 'color:' + K.muted));
+      return;
+    }
+    fields.forEach((field) => {
+      const row = uiEl('li', '', 'display:flex;align-items:center;gap:8px;min-width:0');
+      const button = uiButton(String(field.label || field.kind), 'review-field', () => showFieldForm(field), 'quiet');
+      button.style.maxWidth = '240px';
+      button.style.overflow = 'hidden';
+      button.style.textOverflow = 'ellipsis';
+      button.style.whiteSpace = 'nowrap';
+      button.setAttribute('aria-label', (field.variable ? 'Edit variable ' + field.variable.name + ': ' : 'Make variable: ') + String(field.label || field.kind));
+      row.appendChild(button);
+      row.appendChild(field.variable ? uiPill(field.variable.name + (field.variable.optional ? ' (optional)' : ''), 'violet') : uiPill('no variable'));
+      ui.drawerList.appendChild(row);
+    });
+  }
+
+  async function openDrawer() {
+    drawerOpen = true;
+    closeFieldForm();
+    await refreshDrawer();
+    renderPanel();
+    const first = ui.drawerList.querySelector('button') || ui.drawer.querySelector('[data-daemonize-action=close-drawer]');
+    if (first) first.focus();
+  }
+
+  function closeDrawer() {
+    drawerOpen = false;
+    closeFieldForm();
+    renderPanel();
+    const again = ui.sheet.querySelector('[data-daemonize-action=review-fields]');
+    if (again) again.focus();
+  }
+
+  // A variable edit that is open and not confirmed holds the end of the recording back
+  function blockedByEdit() {
+    if (!drawerOpen || !editOpen) return false;
+    setStatus('Confirm or cancel the open variable edit first.', false);
+    const open = ui.drawerForm.querySelector('input');
+    if (open) open.focus();
+    return true;
   }
 
   // ---------------------------------------------------------------- result zone (panel part)
@@ -1302,16 +1603,19 @@ export const CAPTURE_SCRIPT = `
     baselineScroll = { x: window.scrollX, y: window.scrollY };
     refreshBaseline();
     scheduleBaseline();
-    if ((actionType === 'type' || actionType === 'select') && !event.secretRef) {
-      // Only the latest typed field is offered: a result that comes back after the user moved on is ignored
+    // A typed or selected field, a checkbox or a switch, and a radio of a group can become a variable
+    const offerKind =
+      actionType === 'type' ? 'text' : actionType === 'select' ? 'choice' : actionType === 'check' ? 'check' : extra && extra.radio ? 'radio' : '';
+    if (offerKind && !event.secretRef) {
+      // Only the latest field is offered: a result that comes back after the user moved on is ignored
       const route = location.pathname;
       const seq = ++typedSeq;
-      lastInputEl = el;
+      if (offerKind === 'text' || offerKind === 'choice') lastInputEl = el;
       const label = info.name || info.nameAttr || info.id || 'value';
       Promise.resolve(pending)
         .then((index) => {
           if (typeof index !== 'number' || seq !== typedSeq) return;
-          setOffer({ t: 'typed', fieldId: fieldIdOf(el), stepIndex: index, suggestion: toSnake(label), label, route });
+          setOffer({ t: 'typed', fieldId: fieldIdOf(el), stepIndex: index, suggestion: toSnake(label), label, route, kind: offerKind });
         })
         .catch(() => {});
     }
@@ -1489,6 +1793,66 @@ export const CAPTURE_SCRIPT = `
     if (trigger) emit('hover', trigger);
     if (scrollTarget) emit('scrollIntoView', target);
   }
+  // ---------------------------------------------------------------- checkboxes, switches, radios and file fields
+
+  function explicitRole(el) {
+    return (el.getAttribute('role') || '').trim().split(/\\s+/)[0].toLowerCase();
+  }
+
+  function isCheckControl(el) {
+    if (el.tagName === 'INPUT') return typeOf(el) === 'checkbox';
+    const role = explicitRole(el);
+    return role === 'checkbox' || role === 'switch';
+  }
+
+  // "true" or "false" from the state after the click; aria-checked false, mixed or absent is "false"
+  function checkValueOf(el) {
+    if (el.tagName === 'INPUT') return el.checked ? 'true' : 'false';
+    return el.getAttribute('aria-checked') === 'true' ? 'true' : 'false';
+  }
+
+  function isRadioControl(el) {
+    return el.tagName === 'INPUT' ? typeOf(el) === 'radio' : explicitRole(el) === 'radio';
+  }
+
+  function isDisabledControl(el) {
+    return el.disabled === true || el.getAttribute('aria-disabled') === 'true';
+  }
+
+  // A group: radios with the same name in the same form (or the same document), or the radios of a radiogroup
+  function radioGroupOf(el) {
+    if (el.tagName === 'INPUT') {
+      const name = el.getAttribute('name') || '';
+      if (!name) return [el];
+      const scope = el.getRootNode().querySelectorAll ? el.getRootNode() : document;
+      return Array.from(scope.querySelectorAll('input[type=radio]')).filter((r) => r.form === el.form && (r.getAttribute('name') || '') === name);
+    }
+    const group = el.closest('[role=radiogroup]');
+    return group ? Array.from(group.querySelectorAll('[role=radio]')) : [el];
+  }
+
+  // Names are the accessible names, cut at 201 characters so that the recorder can tell one that is too long
+  function radioName(el) {
+    return collapse(computeName(el, { recursion: false })).slice(0, 201);
+  }
+
+  function radioInfoOf(el) {
+    const group = radioGroupOf(el);
+    const names = group.filter((r) => !isDisabledControl(r)).map(radioName);
+    return { names: names.slice(0, 52), total: group.length, clicked: radioName(el), clickedDisabled: isDisabledControl(el) };
+  }
+
+  const fileFieldIds = new WeakMap();
+  let fileFieldCount = 0;
+
+  // Only a counter signal leaves the page: no name, path, size, type or content of the file
+  function noteFileField(el) {
+    if (!fileFieldIds.has(el)) fileFieldIds.set(el, 'file-' + Math.random().toString(36).slice(2, 8) + '-' + ++fileFieldCount);
+    fileNoticeUntil = performance.now() + 5000;
+    setStatus(FILE_NOTICE, false, true);
+    if (hasPanelBinding()) Promise.resolve(window.__daemonizePanel({ type: 'file', fieldId: fileFieldIds.get(el) })).catch(() => {});
+  }
+
   // ---------------------------------------------------------------- events
 
   // Pressing Enter in a field makes the browser click the form's submit button
@@ -1514,10 +1878,32 @@ export const CAPTURE_SCRIPT = `
     const target = clickTarget(e.target);
     if (!target) return;
     prepareClick(target);
+    // A checkbox or a switch is recorded with the state it has after the click
+    if (isCheckControl(target)) {
+      if (target.tagName === 'INPUT') emit('check', target, checkValueOf(target));
+      // A custom control updates aria-checked in its own handler: read it once that handler has run
+      else setTimeout(() => emit('check', target, checkValueOf(target)), 0);
+      return;
+    }
     const submits =
       ((target.tagName === 'BUTTON' && target.type === 'submit') ||
         (target.tagName === 'INPUT' && ['submit', 'image'].includes(typeOf(target)))) && !!target.form;
-    emit('click', target, undefined, submits ? { submit: true } : undefined);
+    let extra = submits ? { submit: true } : undefined;
+    if (isRadioControl(target)) {
+      // A radio inside a row, a card or a list item keeps its row binding and is not offered as a choice
+      const context = parentContext(target);
+      if (!context || !context.rowBinding) extra = Object.assign({}, extra, { radio: radioInfoOf(target) });
+    }
+    emit('click', target, undefined, extra);
+  }, true);
+
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (!(el instanceof Element) || inUi(el)) return;
+    // A file field cannot be turned into a variable: say so, and tell the recorder only that one was chosen
+    if (el.tagName === 'INPUT' && typeOf(el) === 'file') {
+      noteFileField(el);
+    }
   }, true);
 
   document.addEventListener('change', (e) => {
@@ -1621,6 +2007,11 @@ export const CAPTURE_SCRIPT = `
 
   window.__daemonizeHelpers = {
     offerModel: { create: createOfferModel },
+    variableRequest,
+    editRequest,
+    checkValueOf,
+    radioInfoOf,
+    FILE_NOTICE,
     LIVE_FLUSH_MS,
     roleOf,
     accessibleName: accessibleNameOf,

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ScreenHasher } from '../state/screen-hasher.js';
+import { renameVariable, retypePayloads } from '../workflow/variable-edit.js';
+import type { VariableType } from './panel-protocol.js';
 import type {
   Anchor,
   RowBinding,
@@ -12,6 +14,7 @@ import type {
   StepActionType,
   StepRisk,
   VisualAnchor,
+  WhenOmitted,
   Workflow,
   WorkflowStep,
   WorkflowVariable,
@@ -203,6 +206,75 @@ export class WorkflowRecorder {
     this.variables.set(variable.name, variable);
     this.payload[variable.name] = coerce(step.value, variable.type);
     step.variable = variable.name;
+  }
+
+  /**
+   * Mark a radio click step as a choice Variable: the accessible name of the clicked radio becomes the recorded
+   * value of the step, then the usual mark. A refusal leaves the step as recorded.
+   */
+  markChoiceVariable(stepIndex: number, variable: WorkflowVariable, value: string): void {
+    const step = this.steps[stepIndex];
+    if (step === undefined) {
+      throw new Error(`No step at index ${stepIndex}`);
+    }
+    const before = step.value;
+    step.value = value;
+    try {
+      this.markVariable(stepIndex, variable);
+    } catch (err) {
+      if (before === undefined) delete step.value;
+      else step.value = before;
+      throw err;
+    }
+  }
+
+  /**
+   * Rename, retype or change the optional setting of a Variable in one step: every step, row binding, recipe binding
+   * and the observed payload follow. The caller validated the patch; a value that cannot be converted throws and
+   * changes nothing.
+   */
+  editVariable(
+    name: string,
+    patch: { newName?: string; type?: VariableType; optional?: boolean; whenOmitted?: WhenOmitted },
+  ): void {
+    const variable = this.variables.get(name);
+    if (variable === undefined) {
+      throw new Error(`Variable "${name}" is not defined`);
+    }
+    const target = patch.newName ?? name;
+    if (target !== name && this.variables.has(target)) {
+      throw new Error(`Variable "${target}" is already defined`);
+    }
+    const host = { steps: this.steps, variables: [...this.variables.values()], observedPayloads: [this.payload] };
+
+    if (patch.type !== undefined && patch.type !== (variable.type ?? 'string')) {
+      if (!retypePayloads(host, name, variable.type ?? 'string', patch.type)) {
+        throw new Error(`The recorded value of "${name}" cannot be converted to ${patch.type}`);
+      }
+      variable.type = patch.type;
+    }
+    if (patch.optional === true) variable.optional = true;
+    if (patch.optional === false) {
+      delete variable.optional;
+      delete variable.whenOmitted;
+    }
+    if (patch.whenOmitted !== undefined) variable.whenOmitted = patch.whenOmitted;
+    if (target !== name) {
+      renameVariable(host, name, target);
+      // The payload object is shared with `finish()`: it is rewritten in place
+      const renamed = host.observedPayloads[0];
+      if (renamed !== this.payload) {
+        for (const key of Object.keys(this.payload)) delete this.payload[key];
+        Object.assign(this.payload, renamed);
+      }
+      this.variables.clear();
+      for (const each of host.variables) this.variables.set(each.name, each);
+    }
+  }
+
+  /** A copy of the Variables defined so far, in definition order. */
+  variableList(): WorkflowVariable[] {
+    return [...this.variables.values()].map((variable) => structuredClone(variable));
   }
 
   /** Finish the recording with the screen the user ended on. */

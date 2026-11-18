@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Recorder controls</title></head>
+<body>
+  <h1>Recorder controls</h1>
+  <form id="main" onsubmit="return false">
+    <label for="full">Full name</label>
+    <input id="full" name="full" type="text" />
+    <label for="age">Age</label>
+    <input id="age" name="age" type="text" />
+    <label for="city">City</label>
+    <select id="city" name="city"><option value="paris">Paris</option><option value="rome">Rome</option></select>
+
+    <label><input id="news" type="checkbox" /> Newsletter</label>
+
+    <div id="notify" role="switch" aria-checked="false" aria-label="Notifications" tabindex="0">Notifications</div>
+    <div id="agree" role="checkbox" aria-checked="false" aria-label="I agree" tabindex="0">I agree</div>
+
+    <fieldset>
+      <legend>Plan</legend>
+      <label><input type="radio" name="plan" value="free" /> Free</label>
+      <label><input type="radio" name="plan" value="pro" /> Pro</label>
+      <label><input type="radio" name="plan" value="team" /> Team</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Delivery</legend>
+      <label><input type="radio" name="delivery" value="a" /> Standard</label>
+      <label><input type="radio" name="delivery" value="b" disabled /> Drone</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Lonely</legend>
+      <label><input type="radio" name="lonely" value="x" /> Only one</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Twins</legend>
+      <label><input type="radio" name="twins" value="1" /> Same</label>
+      <label><input type="radio" name="twins" value="2" /> Same</label>
+    </fieldset>
+
+    <div role="radiogroup" aria-label="Size">
+      <div id="size-s" role="radio" aria-checked="false" tabindex="0">Small</div>
+      <div id="size-l" role="radio" aria-checked="false" tabindex="0">Large</div>
+    </div>
+
+    <label for="doc">Document</label>
+    <input id="doc" type="file" />
+
+    <label for="pw">Password</label>
+    <input id="pw" type="password" />
+
+    <button id="go" type="button">Go</button>
+  </form>
+  <script>
+    // Custom controls update aria-checked in their own click handler, as a component library does
+    for (const id of ['notify', 'agree']) {
+      document.getElementById(id).addEventListener('click', (e) => {
+        const el = e.currentTarget;
+        el.setAttribute('aria-checked', el.getAttribute('aria-checked') === 'true' ? 'false' : 'true');
+      });
+    }
+    for (const id of ['size-s', 'size-l']) {
+      document.getElementById(id).addEventListener('click', () => {
+        for (const other of ['size-s', 'size-l']) document.getElementById(other).setAttribute('aria-checked', String(other === id));
+      });
+    }
+  </script>
+</body>
+</html>

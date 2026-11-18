@@ -173,9 +173,15 @@ describe('capture script panel (no recorder bindings in the page)', () => {
       const otherField = model.offer;
       model.apply({ t: 'typed', fieldId: 'y', stepIndex: 4, suggestion: 's', label: 'S', route });
       model.apply({ t: 'route', route: '/b' });
-      return { afterTyped, sameField, otherField, afterRoute: model.offer };
+      const earlierAfterInput = model.earlier.map((o: { fieldId: string }) => o.fieldId);
+      model.apply({ t: 'typed', fieldId: 'y', stepIndex: 4, suggestion: 's', label: 'S', route });
+      model.apply({ t: 'route', route: '/b' });
+      return { afterTyped, sameField, otherField: otherField && otherField.fieldId, earlierAfterInput, afterRoute: model.offer, earlierAfterRoute: model.earlier.map((o: { fieldId: string }) => o.fieldId) };
     });
-    expect(offers).toEqual({ afterTyped: 'x', sameField: 'x', otherField: null, afterRoute: null });
+    // Typing in another field keeps the offer and puts the earlier one in the list; a route change clears only the offer
+    expect(offers).toEqual({
+      afterTyped: 'x', sameField: 'x', otherField: 'x', earlierAfterInput: ['x'], afterRoute: null, earlierAfterRoute: ['x'],
+    });
   });
 
   it('sizes the variable name input from the suggestion, capped at 360px', async () => {

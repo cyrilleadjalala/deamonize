@@ -2,11 +2,11 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 vi.setConfig({ testTimeout: 90000, hookTimeout: 60000 });
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtemp, mkdir, readFile, rm, access } from 'node:fs/promises';
+import { mkdtemp, chmod, readFile, rm, access, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { record } from '../../src/cli/commands/record.js';
-import { deserializeWorkflowSet } from '../../src/workflow/workflow-set.js';
+import { deserializeWorkflowSet, serializeWorkflowSet } from '../../src/workflow/workflow-set.js';
 
 const PAGE = `<!doctype html>
 <html><head><title>Orders</title></head>
@@ -110,7 +110,9 @@ describe('record(): no recorded step is lost after the session ends', () => {
 
   it('a failing saveWorkflow on the output file leaves the steps in the recovery file', async () => {
     const out = outFile();
-    await mkdir(out); // a directory: the workflow file cannot be written there
+    // A valid, empty, read-only file: it passes the origin preflight, and the workflow file cannot be written
+    await writeFile(out, serializeWorkflowSet({ version: '1', targetType: 'web', targetName: 'app', startUrl: baseUrl, workflows: [] }));
+    await chmod(out, 0o444);
     const failure = await record({
       ...base,
       url: baseUrl,

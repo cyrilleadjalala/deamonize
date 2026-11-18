@@ -48,7 +48,8 @@ function expectedOffer(events: OfferEvent[]): string | undefined {
   void current;
   if (last === undefined) return undefined;
   const after = events.slice(last.index + 1);
-  const cleared = after.some((e) => e.t === 'route' || (e.t === 'input' && e.fieldId !== last!.fieldId));
+  // Requirement 6.1: typing in another field keeps the offer (the earlier one goes to the field list); only a route clears it
+  const cleared = after.some((e) => e.t === 'route');
   return cleared ? undefined : last.fieldId;
 }
 
@@ -82,7 +83,7 @@ describe('recording properties (real browser)', () => {
   });
 
   // Feature: studio-first-recording-fixes, Property 5: Bug Condition - The recording panel, the offer, the live flush and the finish binding
-  it('Property 5: the offer is the last typed field unless a later route or another field cleared it', async () => {
+  it('Property 5: the offer is the last typed field unless a later route cleared it', async () => {
     const page = await browser.newPage();
     try {
       await page.goto(baseUrl);

@@ -70,6 +70,10 @@ describe('recordTui: record a terminal program, then replay it', () => {
     terminal.type('v');
     await terminal.waitFor('variable name: your_name');
     terminal.type('\r');
+    await terminal.waitFor('optional? (y/n, Enter = n)');
+    terminal.type('\r');
+    await terminal.waitFor('type? (s/n/b, Enter = s)');
+    terminal.type('\r');
     await terminal.waitFor('variable "your_name" saved');
 
     terminal.type('1\r');

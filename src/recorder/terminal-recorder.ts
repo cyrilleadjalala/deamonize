@@ -2,7 +2,7 @@ import { keyToSequence } from '../sandbox/keys.js';
 import { tokenizeInput, type InputToken } from './key-tokenizer.js';
 import { WorkflowRecorder } from './workflow-recorder.js';
 import { compileScreenPattern, escapeRegex, lineSpec, PatternError } from '../replay/runtime/pattern-wait.js';
-import type { FinalZone, ResultZone, ScreenContent, ScreenWait, Workflow } from '../types.js';
+import type { FinalZone, ResultZone, ScreenContent, ScreenWait, Workflow, WorkflowVariable } from '../types.js';
 
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -97,7 +97,10 @@ export interface InputResult {
  */
 export class TerminalRecorder {
   private readonly recorder: WorkflowRecorder;
-  private mode: 'normal' | 'menu' | 'naming' | 'waiting' = 'normal';
+  private mode: 'normal' | 'menu' | 'naming' | 'asking' | 'waiting' = 'normal';
+  /** The question being asked after a valid name, with the answers given so far. */
+  private question: 'optional' | 'type' | 'omitted' = 'optional';
+  private answers: { name: string; optional: boolean; type: 'string' | 'number' | 'boolean' } = { name: '', optional: false, type: 'string' };
   /** The last step whose screen after it is not known yet (read at the next input). */
   private awaiting: number | null = null;
   /** The last line of the screen when the current input arrived: the state the previous steps led to. */
@@ -202,6 +205,9 @@ export class TerminalRecorder {
         case 'naming':
           this.handleNaming(token, result);
           break;
+        case 'asking':
+          this.handleAsking(token, result);
+          break;
         case 'waiting':
           this.handleWaiting(token, result);
           break;
@@ -288,8 +294,78 @@ export class TerminalRecorder {
       this.mode = 'normal';
       result.echo += '\r\n[recording] cancelled\r\n';
     } else if (token.kind === 'key' && token.name === 'Enter') {
-      result.echo += '\r\n' + this.markLastTyped();
+      result.echo += '\r\n' + this.startQuestions();
     }
+  }
+
+  private questionText(): string {
+    if (this.question === 'optional') return '[recording] optional? (y/n, Enter = n): ';
+    if (this.question === 'type') return '[recording] type? (s/n/b, Enter = s): ';
+    return '[recording] if left empty: skip or use the recorded value (s/r, Enter = s): ';
+  }
+
+  /** After the name: check it, then ask the first question. */
+  private startQuestions(): string {
+    const name = this.nameBuffer.trim();
+    if (!VARIABLE_NAME.test(name)) {
+      return '[recording] use letters, digits and underscores, not starting with a digit; variable name: ' + this.nameBuffer;
+    }
+    this.answers = { name, optional: false, type: 'string' };
+    this.question = 'optional';
+    this.mode = 'asking';
+    return this.questionText();
+  }
+
+  /** One key per question; an empty answer is the default, any other key repeats the question. */
+  private handleAsking(token: InputToken, result: InputResult): void {
+    if (token.kind === 'key' && token.name === 'Escape') {
+      this.mode = 'normal';
+      result.echo += '\r\n[recording] cancelled\r\n';
+      return;
+    }
+    let key: string;
+    if (token.kind === 'key' && token.name === 'Enter') key = '';
+    else if (token.kind === 'text') key = token.text.trim().toLowerCase();
+    else return;
+    const offered = this.question === 'optional' ? ['y', 'n'] : this.question === 'type' ? ['s', 'n', 'b'] : ['s', 'r'];
+    if (key !== '' && !offered.includes(key)) {
+      result.echo += `\r\n[recording] answer with one of: ${offered.join(', ')} (or Enter for the default)\r\n` + this.questionText();
+      return;
+    }
+    result.echo += key + '\r\n';
+    if (this.question === 'optional') {
+      this.answers.optional = key === 'y';
+      this.question = 'type';
+      result.echo += this.questionText();
+    } else if (this.question === 'type') {
+      const type = key === 'n' ? 'number' : key === 'b' ? 'boolean' : 'string';
+      const refusal = this.conversionRefusal(type);
+      if (refusal !== undefined) {
+        result.echo += refusal + this.questionText();
+        return;
+      }
+      this.answers.type = type;
+      if (this.answers.optional) {
+        this.question = 'omitted';
+        result.echo += this.questionText();
+      } else {
+        result.echo += this.markLastTyped(false);
+      }
+    } else {
+      result.echo += this.markLastTyped(key === 'r' ? 'useRecorded' : 'skip');
+    }
+  }
+
+  /** A message when the typed text does not convert to the type, else undefined. */
+  private conversionRefusal(type: 'string' | 'number' | 'boolean'): string | undefined {
+    const text = this.recorder.stepsSoFar()[this.lastTyped!.index].value ?? '';
+    if (type === 'number' && (text.trim() === '' || !Number.isFinite(Number(text)))) {
+      return '[recording] the text you typed is not a number, so this variable cannot be a number; choose another type\r\n';
+    }
+    if (type === 'boolean' && text !== 'true' && text !== 'false') {
+      return '[recording] the text you typed is not true or false, so this variable cannot be a yes/no value; choose another type\r\n';
+    }
+    return undefined;
   }
 
   private handleWaiting(token: InputToken, result: InputResult): void {
@@ -365,15 +441,19 @@ export class TerminalRecorder {
   }
 
   /** Mark the last typed text as a variable; returns the message to show. */
-  private markLastTyped(): string {
-    const name = this.nameBuffer.trim();
-    if (!VARIABLE_NAME.test(name)) {
-      return '[recording] use letters, digits and underscores, not starting with a digit; variable name: ' + this.nameBuffer;
-    }
+  private markLastTyped(whenOmitted: false | 'skip' | 'useRecorded'): string {
+    const { name, type } = this.answers;
 
     try {
       const description = this.lastTyped?.prompt;
-      this.recorder.markVariable(this.lastTyped!.index, description ? { name, description } : { name });
+      // Defaults add nothing to the file: `type` only when not string, `optional` and `whenOmitted` only when chosen
+      const variable: WorkflowVariable = description ? { name, description } : { name };
+      if (type !== 'string') variable.type = type;
+      if (whenOmitted !== false) {
+        variable.optional = true;
+        variable.whenOmitted = whenOmitted;
+      }
+      this.recorder.markVariable(this.lastTyped!.index, variable);
       this.lastTyped!.marked = true;
       this.constantValues -= 1;
       this.mode = 'normal';

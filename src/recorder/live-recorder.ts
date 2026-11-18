@@ -2,6 +2,18 @@ import type { Frame, Page } from 'playwright';
 import { CAPTURE_SCRIPT } from './capture-script.js';
 import { buildSelectors, buildZoneSelector, type ElementInfo } from './selector-builder.js';
 import type { WorkflowRecorder } from './workflow-recorder.js';
+import type {
+  EditVariableRequest,
+  FieldsAnswer,
+  FinishRequest,
+  MarkVariableRequest,
+  PanelField,
+  PanelRequest,
+  PanelSummary,
+  RadioInfo,
+  VariableAnswer,
+} from './panel-protocol.js';
+import { safeFieldLabel, validateEdit, validateRadioGroup, validateVariableSettings } from './variable-settings.js';
 import { NetworkCapture } from './network-capture.js';
 import { buildHttpRecipe } from './http-correlate.js';
 import { followUpReads, selectRecipe } from './select-recipe.js';
@@ -31,6 +43,7 @@ export interface CapturedEvent {
   canvas?: boolean;             // a click on a <canvas>: no selector, only the clicked point (`box`)
   replaces?: number;            // a `type` event: index of the previous flush of the same field (no other step since)
   continues?: boolean;          // the same, when that index is not known to the page yet: the last step is meant
+  radio?: RadioInfo;            // a click on a radio that has no ancestor row: the group it belongs to
 }
 
 /** Binding the panel of the page calls to read its state and to store its collapse state. */
@@ -38,18 +51,28 @@ export const PANEL_BINDING = '__daemonizePanel';
 /** Binding the "Finish and save" button calls: ends the session while the page is still open. */
 export const FINISH_BINDING = '__daemonizeFinish';
 
-export type PanelRequest = { type: 'state' } | { type: 'summary' } | { type: 'collapse'; collapsed: boolean };
+export type {
+  EditVariableRequest,
+  FieldsAnswer,
+  FinishRequest,
+  MarkVariableRequest,
+  PanelRequest,
+  PanelSummary,
+  RadioInfo,
+  VariableAnswer,
+} from './panel-protocol.js';
 
 /** What the user wants next once the recording is saved: only save it, test it in the Studio, or add it to Kiro. */
 export type FinishIntent = 'save' | 'test' | 'kiro';
 const FINISH_INTENTS: readonly FinishIntent[] = ['save', 'test', 'kiro'];
 
-/** What the end sheet of the panel shows. Counts and names only: a typed value never goes into it. */
-export interface PanelSummary {
-  steps: number;
-  variables: string[];
-  secrets: number;
-}
+/** Where the tool is added to Kiro: every project, or this one. Only set by `intent: 'kiro'`. */
+export type FinishScope = 'global' | 'project';
+const FINISH_SCOPES: readonly FinishScope[] = ['global', 'project'];
+
+const MAX_FIELDS = 100;
+const MAX_FILE_FIELDS = 1000;
+const MAX_FILE_FIELD_ID_LENGTH = 100;
 
 /** What the panel in the page shows. Labels only: a typed value never goes into it. */
 export interface PanelState {
@@ -60,6 +83,8 @@ export interface PanelState {
   ending: boolean;
   /** True in a Studio-driven recording: "Finish and save" opens the end sheet (test it, add it to Kiro). */
   studio: boolean;
+  /** True when the Kiro folder existed when the recording started: the end sheet then offers "All my projects". */
+  kiroHomeExists: boolean;
 }
 
 /** Why the session ended: the panel button, an AbortSignal, or a call from Node (a Studio-driven recording). */
@@ -84,6 +109,8 @@ export interface LiveRecorderOptions {
    * Off when absent. `thumbnails: false` keeps rect and intent and takes no picture.
    */
   visual?: { workflowFile: string; thumbnails?: boolean };
+  /** The Kiro folder existed when the recording started: the end sheet offers a choice of scope. */
+  kiroHomeExists?: boolean;
 }
 
 /** Which replay level can be used for a step, and why not Level 1 when it cannot. */
@@ -97,14 +124,7 @@ export interface NetworkStepReport {
   reason?: string;
 }
 
-/** Request sent by the "Make variable" box shown in the page. */
-export interface MarkVariableRequest {
-  stepIndex: number;
-  name: string;
-  rowText?: string;             // a text selected in a row becomes the variable (stepIndex is then ignored)
-}
-
-export type MarkVariableResult = { ok: true } | { ok: false; error: string };
+export type MarkVariableResult = VariableAnswer;
 
 /** Request sent by the "Mark result" action shown in the page: the element the user clicked and the kind suggested for it. */
 export interface MarkResultRequest {
@@ -176,6 +196,12 @@ export class LiveRecorder {
   private readonly urlBefore = new Map<number, { url: string; page: number }>();
   private readonly lastUrls = new Map<number, string>();
   private readonly typedKeys = new Map<number, string>();
+  private readonly radios = new Map<number, RadioInfo>();
+  private readonly fileFields = new Set<string>();
+  private readonly frameIds = new WeakMap<Frame, number>();
+  private frameCount = 0;
+  private scope: FinishScope | undefined;
+  private readonly kiroHomeExists: boolean;
 
   /** Resolves once, with the reason of the first `requestEnd`. `record()` awaits it next to the terminal and the window. */
   readonly ended: Promise<EndReason>;
@@ -191,6 +217,7 @@ export class LiveRecorder {
     this.pages = [page];
     this.visual = options.visual;
     this.studio = options.studio === true;
+    this.kiroHomeExists = options.kiroHomeExists === true;
     this.network = options.captureNetwork === true ? new NetworkCapture(page.context()) : undefined;
   }
 
@@ -294,6 +321,16 @@ export class LiveRecorder {
     return this.intent;
   }
 
+  /** Where to add the tool to Kiro, when the user chose it with "Save and add to Kiro"; otherwise undefined. */
+  get finishScope(): FinishScope | undefined {
+    return this.scope;
+  }
+
+  /** How many file fields the user filled during the session, each counted once. Never written to the workflow file. */
+  get unrecordedFileFields(): number {
+    return this.fileFields.size;
+  }
+
   /** What the end sheet of the panel shows now. */
   panelSummary(): PanelSummary {
     const steps = this.recorder.stepsSoFar();
@@ -301,7 +338,54 @@ export class LiveRecorder {
       steps: this.steps,
       variables: [...this.recorder.variableValues().keys()],
       secrets: new Set(steps.flatMap((step) => (step.secretRef === undefined ? [] : [step.secretRef]))).size,
+      files: this.fileFields.size,
     };
+  }
+
+  /**
+   * The fields of the session the user can turn into a variable or adjust: typed, selected, checked and radio steps,
+   * without any secret. At most the last 100, by step index ascending. A typed value never goes into it.
+   */
+  panelFields(): FieldsAnswer {
+    const variables = new Map(this.recorder.variableList().map((variable) => [variable.name, variable]));
+    const fields: PanelField[] = [];
+    this.recorder.stepsSoFar().forEach((step, stepIndex) => {
+      if (step.secretRef !== undefined) return;
+      let kind: PanelField['kind'];
+      if (step.actionType === 'type') kind = 'text';
+      else if (step.actionType === 'select') kind = 'choice';
+      else if (step.actionType === 'check') kind = 'check';
+      else if (step.actionType === 'click' && this.radios.has(stepIndex)) kind = 'radio';
+      else return;
+      const field: PanelField = { stepIndex, label: safeFieldLabel(step), kind };
+      const variable = step.variable === undefined ? undefined : variables.get(step.variable);
+      if (variable !== undefined) {
+        field.variable = {
+          name: variable.name,
+          type: variable.type ?? 'string',
+          optional: variable.optional === true,
+          ...(variable.whenOmitted === undefined ? {} : { whenOmitted: variable.whenOmitted }),
+        };
+      }
+      fields.push(field);
+    });
+    return { fields: fields.slice(-MAX_FIELDS) };
+  }
+
+  private frameId(frame: Frame): number {
+    let id = this.frameIds.get(frame);
+    if (id === undefined) {
+      id = ++this.frameCount;
+      this.frameIds.set(frame, id);
+    }
+    return id;
+  }
+
+  /** A file field was filled in: only a counter signal, nothing of the file. No step and no Variable. */
+  private noteFileField(frame: Frame, fieldId: unknown): { ok: boolean } {
+    if (typeof fieldId !== 'string' || fieldId === '' || fieldId.length > MAX_FILE_FIELD_ID_LENGTH) return { ok: false };
+    if (this.fileFields.size < MAX_FILE_FIELDS) this.fileFields.add(`${this.frameId(frame)}:${fieldId}`);
+    return { ok: true };
   }
 
   /** What the panel of the page shows now. */
@@ -313,6 +397,7 @@ export class LiveRecorder {
       ...(this.zone === undefined ? {} : { zone: { kind: this.zone.extractor?.kind ?? 'text' } }),
       ending: this.endReason !== undefined,
       studio: this.studio,
+      kiroHomeExists: this.kiroHomeExists,
     };
   }
 
@@ -417,17 +502,26 @@ export class LiveRecorder {
     await page.exposeBinding('__daemonizeMarkResult', (_source, request: MarkResultRequest) =>
       this.handleMarkResult(request)
     );
-    await page.exposeBinding(PANEL_BINDING, (_source, request: PanelRequest) => {
+    await page.exposeBinding('__daemonizeEditVariable', (_source, request: EditVariableRequest) =>
+      this.handleEditVariable(request)
+    );
+    await page.exposeBinding(PANEL_BINDING, (source, request: PanelRequest) => {
       if (request?.type === 'collapse') {
         this.collapsed = request.collapsed === true;
         return { ok: true };
       }
       if (request?.type === 'summary') return this.panelSummary();
+      if (request?.type === 'fields') return this.panelFields();
+      if (request?.type === 'file') return this.noteFileField(source.frame, request.fieldId);
       return this.panelState();
     });
-    await page.exposeBinding(FINISH_BINDING, (_source, request?: { intent?: unknown }) => {
+    await page.exposeBinding(FINISH_BINDING, (_source, request?: FinishRequest) => {
       const intent = FINISH_INTENTS.find((candidate) => candidate === request?.intent);
-      if (this.endReason === undefined && intent !== undefined) this.intent = intent;
+      if (this.endReason === undefined && intent !== undefined) {
+        this.intent = intent;
+        // The scope only goes with "add to Kiro", and only as one of the two known words
+        this.scope = intent === 'kiro' ? FINISH_SCOPES.find((candidate) => candidate === request?.scope) : undefined;
+      }
       this.requestEnd('panel');
       return { ok: true };
     });
@@ -509,7 +603,7 @@ export class LiveRecorder {
       actionType: event.actionType,
       selectors,
       // The value of a secret field is never stored
-      value: secretRef === undefined ? event.value : undefined,
+      value: secretRef === undefined ? (event.actionType === 'check' ? (event.value === 'true' ? 'true' : 'false') : event.value) : undefined,
       label: event.label,
       anchor,
       rowBinding: event.rowBinding,
@@ -521,6 +615,10 @@ export class LiveRecorder {
     this.steps += 1;
     this.noteLabel(event.label ?? event.actionType);
     if (event.actionType === 'type') this.typedKeys.set(index, selectors.join('\n'));
+    if (event.actionType === 'click' && event.radio !== undefined) {
+      const radio = cleanRadio(event.radio);
+      if (radio !== undefined) this.radios.set(index, radio);
+    }
     if (ctx.actionId !== undefined) this.stepActions.set(index, ctx.actionId);
     if (event.rowBinding !== undefined) {
       this.bindRowToKnownVariable(index, event.rowTexts ?? []);
@@ -644,32 +742,84 @@ export class LiveRecorder {
 
   /** Handle a variable named by the user in the page; never throws. */
   handleMarkVariable(request: MarkVariableRequest): MarkVariableResult {
-    if (!VARIABLE_NAME.test(request.name)) {
+    if (request === null || typeof request !== 'object' || typeof request.name !== 'string' || !VARIABLE_NAME.test(request.name)) {
       return { ok: false, error: 'Use letters, digits and underscores, not starting with a digit' };
     }
 
+    // Every setting is checked before anything changes
     if (request.rowText !== undefined) {
+      const checked = validateVariableSettings(request, undefined);
+      if (!checked.ok) return checked;
       try {
-        this.recorder.defineVariable({ name: request.name, description: 'text of a row' }, request.rowText);
+        this.recorder.defineVariable({ name: request.name, description: 'text of a row', ...checked.settings }, request.rowText);
         return { ok: true };
       } catch (err) {
         return { ok: false, error: (err as Error).message };
       }
     }
 
+    const step = this.recorder.stepsSoFar()[request.stepIndex];
+    const radio = step?.actionType === 'click' ? this.radios.get(request.stepIndex) : undefined;
+    const checked = validateVariableSettings(
+      request,
+      step === undefined ? undefined : { actionType: step.actionType, value: step.value, isRadioClick: radio !== undefined },
+    );
+    if (!checked.ok) return checked;
+    const group = radio === undefined ? undefined : validateRadioGroup(radio);
+    if (group !== undefined && !group.ok) return group;
+
     const variable: WorkflowVariable = { name: request.name };
     const description = this.fieldNames.get(request.stepIndex);
-    if (description !== undefined) {
+    // The name of a radio is the choice itself, not a description of the field
+    if (description !== undefined && radio === undefined) {
       variable.description = description;
     }
+    Object.assign(variable, checked.settings);
+    if (group !== undefined && group.ok) variable.enum = group.enum;
 
     try {
-      this.recorder.markVariable(request.stepIndex, variable);
+      if (group !== undefined && group.ok) this.recorder.markChoiceVariable(request.stepIndex, variable, group.value);
+      else this.recorder.markVariable(request.stepIndex, variable);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
   }
+
+  /** Handle the edit of a Variable made in the Field_Drawer; never throws. Nothing changes on a refusal. */
+  handleEditVariable(request: EditVariableRequest): VariableAnswer {
+    if (request === null || typeof request !== 'object') return { ok: false, error: 'Choose the variable to change.' };
+    const values = this.recorder.variableValues();
+    const checked = validateEdit(request, this.recorder.variableList(), (name) => values.get(name));
+    if (!checked.ok) return checked;
+
+    // A checkbox stays true or false and a radio group stays a choice of texts
+    if (request.type !== undefined) {
+      const owner = this.recorder.stepsSoFar().find((step) => step.variable === request.name);
+      if (owner?.actionType === 'check' && request.type !== 'boolean') {
+        return { ok: false, error: 'A checkbox or switch can only be a true or false variable.' };
+      }
+    }
+    const patch: Parameters<WorkflowRecorder['editVariable']>[1] = {};
+    if (request.newName !== undefined) patch.newName = request.newName;
+    if (request.type !== undefined) patch.type = request.type;
+    if (request.optional !== undefined) patch.optional = request.optional;
+    if (request.whenOmitted !== undefined) patch.whenOmitted = request.whenOmitted;
+    try {
+      this.recorder.editVariable(request.name, patch);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
+}
+
+/** The radio group the page reported, kept only when it has the expected shape. */
+function cleanRadio(radio: RadioInfo): RadioInfo | undefined {
+  if (radio === null || typeof radio !== 'object') return undefined;
+  if (!Array.isArray(radio.names) || radio.names.length > 52 || !radio.names.every((name) => typeof name === 'string')) return undefined;
+  if (typeof radio.total !== 'number' || typeof radio.clicked !== 'string') return undefined;
+  return { names: [...radio.names], total: radio.total, clicked: radio.clicked, clickedDisabled: radio.clickedDisabled === true };
 }
 
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {

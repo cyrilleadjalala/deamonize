@@ -76,6 +76,9 @@ describe('TerminalRecorder', () => {
     const naming = recorder.handleInput('v');
     expect(naming.echo).toContain('variable name: your_name');
 
+    const asked = recorder.handleInput('\r');
+    expect(asked.echo).toContain('optional? (y/n, Enter = n)');
+    expect(recorder.handleInput('\r').echo).toContain('type? (s/n/b, Enter = s)');
     const saved = recorder.handleInput('\r');
     expect(saved.echo).toContain('variable "your_name" saved');
     expect(saved.forward).toBe('');
@@ -101,6 +104,8 @@ describe('TerminalRecorder', () => {
 
     recorder.handleInput('\x7f'.repeat(5));
     recorder.handleInput('who');
+    recorder.handleInput('\r');
+    recorder.handleInput('\r');
     expect(recorder.handleInput('\r').echo).toContain('variable "who" saved');
     expect(recorder.finish().variables[0].name).toBe('who');
   });
@@ -197,6 +202,8 @@ describe('TerminalRecorder screen waits', () => {
     second.handleInput('v');
     second.handleInput('\x7f'.repeat(32));
     second.handleInput('who');
+    second.handleInput('\r');
+    second.handleInput('\r');
     const saved = second.handleInput('\r');
     expect(saved.echo).toContain('variable "who" saved');
     expect(saved.echo).toContain('1 screen wait(s) contained the value and were removed');

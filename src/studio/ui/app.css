@@ -59,6 +59,9 @@
   --purple-deep: #2b1d4d;
   --purple-line: var(--kiro-purple-800);
   --focus: var(--kiro-purple-300);
+  /* Logo marks: outline shield and check mark, each 3:1 or more on the header (see docs/design-tokens.md) */
+  --logo-shield: var(--kiro-purple-500);
+  --logo-check: var(--kiro-purple-300);
 
   /* Status colours: the Kiro hue as text or icon, a derived dark tint behind it */
   --warn: var(--kiro-yellow-400);
@@ -290,6 +293,12 @@ svg :focus-visible {
 
 .logo {
   flex: none;
+  width: 38px;
+  height: 38px;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   filter: drop-shadow(0 0 8px rgba(145, 71, 255, 0.45));
 }
 
@@ -2067,6 +2076,8 @@ select.input {
 @media print {
   :root {
     color-scheme: light;
+    --logo-shield: var(--kiro-purple-700);
+    --logo-check: var(--kiro-purple-800);
   }
 
   html,

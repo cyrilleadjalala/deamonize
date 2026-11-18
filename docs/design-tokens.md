@@ -53,10 +53,10 @@ The `forced-colors` and `print` blocks of `app.css` are unchanged.
 ## The extension
 
 - The side panels are native tree views: they follow the theme of the editor (Dark, Light, high contrast). Code there may name theme colours (`charts.green`, `charts.yellow`, `charts.red`, ...) and never a hex value. `tests/extension/static/no-hardcoded-colors.test.ts` checks it.
-- `kiro-extension/media/icon.svg` is the source of `media/icon.png` (`npm run icon` in `kiro-extension/`). The Marketplace needs a PNG. The sidebar icon `daemonize.svg` stays monochrome.
+- `kiro-extension/media/icon.svg` is the source of `media/icon.png` (`npm run icon` in `kiro-extension/`). It is also the source of the shield path used by `src/studio/ui/favicon.svg` and by the inline logo in `src/studio/ui/index.html`, which colours its two marks with `--logo-shield` and `--logo-check`. The Marketplace needs a PNG. The sidebar icon `daemonize.svg` stays monochrome.
 
 ## Left out on purpose
 
 - The AWS fonts (Diatype): they belong to AWS. The system font stack is kept.
 - The Kiro logo and ghost: the extension icon is an original shield.
-- The Studio logo (a ghost) looks close to the Kiro one: decide whether to redraw it.
+- The Studio logo is an original shield with a check mark, drawn as an outline (stroke `#9147ff` for the shield, `#c59eff` for the check). It is not the Kiro logo.

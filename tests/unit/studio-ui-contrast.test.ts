@@ -3,7 +3,7 @@
  * the text colours keep a WCAG contrast of at least 4.5:1 on the surfaces they sit on (3:1 for the
  * focus ring and other non-text marks), and no colour literal creeps back outside the token block.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -109,6 +109,27 @@ describe('Studio design tokens: non-text marks (3:1)', () => {
   for (const level of ['http', 'accessibility', 'vision', 'coordinates', 'terminal', 'none']) {
     it(`the ${level} bar segment on the track`, () => {
       expect(contrast(`lv-${level}`, 'bg-raised')).toBeGreaterThanOrEqual(3);
+    });
+  }
+});
+
+describe('Studio stylesheets of the groups (src/studio/ui/css/*.css)', () => {
+  const cssDir = join(resolve(import.meta.dirname, '../../src/studio/ui'), 'css');
+  const files = readdirSync(cssDir).filter((name) => name.endsWith('.css'));
+  it('has the three group stylesheets', () => {
+    expect(files).toEqual(expect.arrayContaining(['record.css', 'editor.css', 'compile.css']));
+  });
+  for (const name of files) {
+    const text = readFileSync(join(cssDir, name), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    it(`${name} holds no colour literal outside :root (colours come from the tokens)`, () => {
+      expect(text).not.toContain(':root');
+      expect(text.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
+      expect(text.match(/\b(rgb|rgba|hsl|hsla)\(/g) ?? []).toEqual([]);
+    });
+    it(`${name} uses only tokens that exist in app.css`, () => {
+      const used = [...text.matchAll(/var\(--([a-z0-9-]+)/g)].map((match) => match[1]);
+      const declared = new Set([...text.matchAll(/(?:^|[;{\s])--([a-z0-9-]+)\s*:/g)].map((match) => match[1]));
+      expect(used.filter((token) => !tokens.has(token) && !declared.has(token))).toEqual([]);
     });
   }
 });

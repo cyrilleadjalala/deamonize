@@ -41,6 +41,26 @@ function flag(on, label) {
   );
 }
 
+/** @param {any} m the `modes` of a target */
+function modeFlags(m) {
+  return h('ul', { class: 'flags' }, flag(true, 'Strict'), flag(Boolean(m.healSupport), 'Heal'), flag(Boolean(m.http), 'HTTP'), flag(Boolean(m.compiled), 'Compiled server'));
+}
+
+/**
+ * After a build ends in `done`: shows the HTTP and Heal flags of the new output and sets the two checkboxes again.
+ * @param {HTMLElement} root @param {HTMLElement & { applyTarget?: (target: any) => void }} control
+ */
+async function refreshModes(root, control) {
+  const fresh = await api.overviewFresh();
+  const targets = fresh.targets ?? [];
+  control.applyTarget?.(targets[0]);
+  for (const card of root.querySelectorAll('.target-card')) {
+    const match = targets.find((t) => t.name === card.getAttribute('data-target') && t.type === card.getAttribute('data-type'));
+    const flags = card.querySelector('.modes ul.flags');
+    if (match !== undefined && flags !== null) flags.replaceWith(modeFlags(match.modes ?? {}));
+  }
+}
+
 /** @param {any} target @param {any[]} workflows @param {number} index */
 function targetCard(target, workflows, index) {
   const mine = workflows.filter((w) => w.target.name === target.name && w.target.type === target.type);
@@ -74,7 +94,7 @@ function targetCard(target, workflows, index) {
       'div',
       { class: 'modes' },
       h('h4', { class: 'mini-title', text: 'Replay modes' }),
-      h('ul', { class: 'flags' }, flag(true, 'Strict'), flag(Boolean(m.healSupport), 'Heal'), flag(Boolean(m.http), 'HTTP'), flag(Boolean(m.compiled), 'Compiled server'))
+      modeFlags(m)
     ),
     h(
       'p',
@@ -151,12 +171,13 @@ export async function renderOverview() {
     return root;
   }
   if (live) {
+    const control = recompileControl({ target: targets[0], onDone: () => refreshModes(root, control) });
     // New action, credentials and the build controls (hidden in the static demo and in sample mode)
     root.appendChild(
       h('div', { class: 'overview-actions run-bar' },
         newActionSection(),
         h('a', { class: 'btn', href: href('credentials'), text: COPY.credentialsLink }),
-        recompileControl())
+        control)
     );
     if (overview.outputCompiled === true) root.appendChild(connectCard());
   }

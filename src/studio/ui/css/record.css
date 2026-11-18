@@ -1,0 +1,28 @@
+/* Styles of the recording screens (panel texts, new-action form, recording status). Owned by the recording group. Colours only through the tokens of :root in ../app.css. */
+
+/* The result of "Save and add to Kiro": the scroll target sits below the sticky header, with room under it so the
+   whole Connect block, including "Remove from Kiro", can scroll clear of the bottom edge. */
+.record-outcome,
+#connect-card {
+  scroll-margin-top: 160px;
+}
+.record-outcome {
+  padding-bottom: 96px;
+}
+
+/* Credentials still missing after the tool was added to Kiro */
+.record-credentials {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--kiro-yellow-400);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.record-credentials .state-title {
+  margin: 0 0 6px;
+}
+
+/* The address belongs to another application */
+.action-url-origin {
+  margin: 6px 0 0;
+}

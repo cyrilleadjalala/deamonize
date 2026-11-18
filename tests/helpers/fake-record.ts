@@ -6,6 +6,8 @@ import type { RecordCallOptions, RecordFn } from '../../src/studio/recording-man
 export class FakeRecord {
   calls: RecordCallOptions[] = [];
   steps = 0;
+  /** What the end sheet of the panel chose. */
+  intent: 'save' | 'test' | 'kiro' = 'save';
   labels: string[] = [];
   browserClosed = false;
   /** When true, an abort of the signal ends the session successfully (like "Finish and save"). */
@@ -26,6 +28,7 @@ export class FakeRecord {
       options.onBrowser({ close: async () => { this.browserClosed = true; } });
       options.onLive({
         get stepCount(): number { return owner.steps; },
+        get finishIntent(): 'save' | 'test' | 'kiro' { return owner.intent; },
         panelState: () => ({ last: this.labels.slice(-3) }),
       });
       options.signal.addEventListener('abort', () => {

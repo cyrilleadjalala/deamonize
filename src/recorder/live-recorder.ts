@@ -38,7 +38,18 @@ export const PANEL_BINDING = '__daemonizePanel';
 /** Binding the "Finish and save" button calls: ends the session while the page is still open. */
 export const FINISH_BINDING = '__daemonizeFinish';
 
-export type PanelRequest = { type: 'state' } | { type: 'collapse'; collapsed: boolean };
+export type PanelRequest = { type: 'state' } | { type: 'summary' } | { type: 'collapse'; collapsed: boolean };
+
+/** What the user wants next once the recording is saved: only save it, test it in the Studio, or add it to Kiro. */
+export type FinishIntent = 'save' | 'test' | 'kiro';
+const FINISH_INTENTS: readonly FinishIntent[] = ['save', 'test', 'kiro'];
+
+/** What the end sheet of the panel shows. Counts and names only: a typed value never goes into it. */
+export interface PanelSummary {
+  steps: number;
+  variables: string[];
+  secrets: number;
+}
 
 /** What the panel in the page shows. Labels only: a typed value never goes into it. */
 export interface PanelState {
@@ -47,6 +58,8 @@ export interface PanelState {
   collapsed: boolean;
   zone?: { kind: string };
   ending: boolean;
+  /** True in a Studio-driven recording: "Finish and save" opens the end sheet (test it, add it to Kiro). */
+  studio: boolean;
 }
 
 /** Why the session ended: the panel button, an AbortSignal, or a call from Node (a Studio-driven recording). */
@@ -64,6 +77,8 @@ export interface HandleContext {
 export interface LiveRecorderOptions {
   /** Observe fetch/XHR requests to record Level 1 recipes (default false). */
   captureNetwork?: boolean;
+  /** A Studio started this recording: the panel offers the next steps once the tool is saved. */
+  studio?: boolean;
   /**
    * Capture a Visual_Anchor (rect, intent and a thumbnail in `<workflowFile>.assets/`) for each step with a target.
    * Off when absent. `thumbnails: false` keeps rect and intent and takes no picture.
@@ -155,6 +170,8 @@ export class LiveRecorder {
   private readonly lastLabels: string[] = [];
   private collapsed = false;
   private endReason: EndReason | undefined;
+  private intent: FinishIntent = 'save';
+  private readonly studio: boolean;
   private resolveEnded: (reason: EndReason) => void = () => { };
   private readonly urlBefore = new Map<number, { url: string; page: number }>();
   private readonly lastUrls = new Map<number, string>();
@@ -173,6 +190,7 @@ export class LiveRecorder {
     });
     this.pages = [page];
     this.visual = options.visual;
+    this.studio = options.studio === true;
     this.network = options.captureNetwork === true ? new NetworkCapture(page.context()) : undefined;
   }
 
@@ -271,6 +289,21 @@ export class LiveRecorder {
     this.resolveEnded(reason);
   }
 
+  /** What the user chose on the end sheet of the panel ('save' when the session ended another way). */
+  get finishIntent(): FinishIntent {
+    return this.intent;
+  }
+
+  /** What the end sheet of the panel shows now. */
+  panelSummary(): PanelSummary {
+    const steps = this.recorder.stepsSoFar();
+    return {
+      steps: this.steps,
+      variables: [...this.recorder.variableValues().keys()],
+      secrets: new Set(steps.flatMap((step) => (step.secretRef === undefined ? [] : [step.secretRef]))).size,
+    };
+  }
+
   /** What the panel of the page shows now. */
   panelState(): PanelState {
     return {
@@ -279,6 +312,7 @@ export class LiveRecorder {
       collapsed: this.collapsed,
       ...(this.zone === undefined ? {} : { zone: { kind: this.zone.extractor?.kind ?? 'text' } }),
       ending: this.endReason !== undefined,
+      studio: this.studio,
     };
   }
 
@@ -388,9 +422,12 @@ export class LiveRecorder {
         this.collapsed = request.collapsed === true;
         return { ok: true };
       }
+      if (request?.type === 'summary') return this.panelSummary();
       return this.panelState();
     });
-    await page.exposeBinding(FINISH_BINDING, () => {
+    await page.exposeBinding(FINISH_BINDING, (_source, request?: { intent?: unknown }) => {
+      const intent = FINISH_INTENTS.find((candidate) => candidate === request?.intent);
+      if (this.endReason === undefined && intent !== undefined) this.intent = intent;
       this.requestEnd('panel');
       return { ok: true };
     });

@@ -204,6 +204,8 @@ describe('Studio first flow in a real browser, real backend', () => {
     await r.getByRole('button', { name: 'Search' }).click();
     await r.waitForURL('**/home?q=*');
     await r.getByRole('button', { name: 'Finish and save' }).click();
+    // In a Studio recording the button opens the end sheet; "Save only" ends it without a next step
+    await r.getByRole('button', { name: 'Save only' }).click();
 
     await expect.poll(() => page.locator('#test-it').count(), { timeout: 120000 }).toBe(1);
     await expect.poll(() => page.locator('#record-state').textContent()).toContain('Done');

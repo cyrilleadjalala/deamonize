@@ -80,6 +80,10 @@ export interface RecordingStatus {
   recoveryFile?: string;
   /** Plain-language note: session not used, not saved, or storage unavailable. */
   sessionNote?: string;
+  /** Only in state 'done', when the user chose a next step on the end sheet of the panel in the page. */
+  intent?: 'test' | 'kiro';
+  /** Only after the intent 'kiro': whether the tool was added to Kiro, with a plain message and where. */
+  kiro?: { added: boolean; message: string; scope?: 'global' | 'project' };
 }
 /** Already validated. */
 export interface StartInput {

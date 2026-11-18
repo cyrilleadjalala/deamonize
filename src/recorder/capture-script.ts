@@ -608,35 +608,128 @@ export const CAPTURE_SCRIPT = `
   const hasPanelBinding = () => typeof window.__daemonizePanel === 'function';
   const hasFinishBinding = () => typeof window.__daemonizeFinish === 'function';
 
-  const BTN_STYLE = 'font:inherit;color:#111827;background:#e5e7eb;border:0;border-radius:6px;padding:3px 9px;cursor:pointer;margin:0';
-  const PRIMARY_STYLE = 'font:inherit;font-weight:600;color:#fff;background:#2563eb;border:0;border-radius:6px;padding:5px 10px;cursor:pointer;margin:0;width:100%';
-  const ROOT_STYLE = 'all:initial;position:fixed;right:12px;bottom:12px;z-index:2147483647;display:block;box-sizing:border-box;background:#1f2937;color:#fff;font:13px/1.4 system-ui,sans-serif;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.3);padding:8px 10px;';
-  const TOP_STYLE = ROOT_STYLE + 'width:max-content;min-width:250px;max-width:calc(100vw - 24px)';
-  const FRAME_STYLE = ROOT_STYLE + 'width:max-content;max-width:calc(100vw - 24px);display:none';
+  // Colours of the panel: the Kiro dark surfaces (docs/design-tokens.md). The panel sits over any site, light or dark,
+  // so it has its own opaque surface and a hairline instead of borrowing the colours of the page.
+  const K = {
+    surface: '#19161d', raised: '#28242e', line: '#352f3d', tray: '#27272a', neutral: '#09090b',
+    text: '#fafafa', muted: '#c1bec6', violet: '#9147ff', violetSoft: '#c59eff', violetText: '#e0ccff', violetDeep: '#471d86',
+    red: '#f94358', green: '#35d482',
+  };
+  const FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+  // A page can style any tag: every control of the panel resets itself first and sets all it needs inline
+  const BUTTON_BASE = 'all:initial;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;margin:0;font:500 13px/1.2 ' + FONT + ';';
+  const BUTTONS = {
+    quiet: BUTTON_BASE + 'color:' + K.text + ';background:transparent;border:1px solid ' + K.muted + ';border-radius:10px;padding:5px 12px',
+    primary: BUTTON_BASE + 'color:#fff;background:' + K.violet + ';border:1px solid ' + K.violet + ';border-radius:12px;padding:9px 16px;width:100%',
+    icon: BUTTON_BASE + 'color:' + K.text + ';background:' + K.line + ';border:1px solid transparent;border-radius:8px;width:26px;height:26px;padding:0',
+    tab: BUTTON_BASE + 'color:' + K.muted + ';background:transparent;border:1px solid transparent;border-radius:8px;padding:5px 6px;font-size:12px',
+    bubble: BUTTON_BASE + 'position:relative;color:' + K.text + ';background:' + K.surface + ';border:0;border-radius:50%;width:48px;height:48px;padding:0;box-shadow:0 8px 20px rgba(0,0,0,.45),0 0 0 1px ' + K.line,
+  };
+  // The look of a button under the pointer; a pressed tab keeps its own look
+  const HOVERS = {
+    quiet: { background: K.text, color: '#000', borderColor: K.text },
+    primary: { background: '#fff', color: '#000', borderColor: '#fff' },
+    icon: { background: '#4a464e' },
+    tab: { background: K.line, color: K.text },
+    bubble: {},
+  };
+  const ROOT_BASE = 'all:initial;position:fixed;right:12px;bottom:12px;z-index:2147483647;display:block;box-sizing:border-box;color:' + K.text + ';font:13px/1.45 ' + FONT + ';';
+  const CARD = 'background:' + K.surface + ';border-radius:16px;box-shadow:0 12px 28px rgba(0,0,0,.45),0 0 0 1px ' + K.line + ';padding:12px 14px;';
+  const TOP_STYLE = ROOT_BASE + CARD + 'width:max-content;min-width:290px;max-width:calc(100vw - 24px)';
+  const BUBBLE_ROOT = ROOT_BASE + 'width:max-content';
+  const FRAME_STYLE = ROOT_BASE + CARD + 'width:max-content;max-width:calc(100vw - 24px);display:none';
+  const FLOAT = 'position:fixed;box-sizing:border-box;background:' + K.surface + ';color:' + K.text + ';font:13px/1.45 ' + FONT + ';box-shadow:0 12px 28px rgba(0,0,0,.45),0 0 0 1px ' + K.line + ';';
+  const PHASES = ['1 \u00b7 Record the steps', '2 \u00b7 Choose the result', '3 \u00b7 Save the tool'];
+  const ICON_PATHS = {
+    click: 'm5 3 14 7-6 2-2 6z',
+    type: 'M4 7V5h16v2M12 5v14M9 19h6',
+    min: 'M5 12h14',
+    target: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM12 2v3M12 19v3M2 12h3M19 12h3',
+    check: 'm5 12.5 4.5 4.5L19 7.5',
+    text: 'M4 6h16M4 12h16M4 18h10',
+    table: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18M9 4v16',
+    list: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
+    fields: 'M4 5h16a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 14h16a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z',
+    json: 'M8 4c-2 0-3 1-3 3v2c0 1.5-1 2.5-2 3 1 .5 2 1.5 2 3v2c0 2 1 3 3 3M16 4c2 0 3 1 3 3v2c0 1.5 1 2.5 2 3-1 .5-2 1.5-2 3v2c0 2-1 3-3 3',
+    attribute: 'm8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14',
+    select: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
+  };
 
   let root = null;
   let ui = {};
-  let panelState = { steps: 0, last: [], collapsed: false, ending: false };
+  let panelState = { steps: 0, last: [], collapsed: false, ending: false, studio: false };
   let saving = false;
+  let sheetOpen = false;
+  let rootLook = '';
   let lastMark = null;
   let offerKey = null;
   let offerMode = 'none';
   let resultKey = null;
   let noticeTimer = null;
 
+  // A page can style any tag (p, ul, strong...): the base values come first, the given style overrides them
   function uiEl(tag, text, style, action) {
     const el = document.createElement(tag);
     if (text) el.textContent = text;
-    if (style) el.style.cssText = style;
+    el.style.cssText = 'margin:0;padding:0;font:inherit;color:inherit;' + (style || '');
     if (action) el.setAttribute('data-daemonize-action', action);
     return el;
   }
 
-  function uiButton(text, action, onClick, style) {
-    const button = uiEl('button', text, style || BTN_STYLE, action);
+  function uiIcon(name, size) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.style.cssText = 'width:' + size + 'px;height:' + size + 'px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round';
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', ICON_PATHS[name] || ICON_PATHS.click);
+    svg.appendChild(path);
+    return svg;
+  }
+
+  // The red dot breathes unless the person asked for less motion (the Web Animations API needs no stylesheet, which a CSP may refuse)
+  function pulse(dot) {
+    try {
+      if (typeof dot.animate !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      dot.animate([{ boxShadow: '0 0 0 0 rgba(249,67,88,.5)' }, { boxShadow: '0 0 0 6px rgba(249,67,88,0)' }], { duration: 1600, iterations: Infinity });
+    } catch (e) {
+      // No animation is fine
+    }
+  }
+
+  function uiButton(text, action, onClick, kind, icon) {
+    const look = kind || 'quiet';
+    const button = uiEl('button', '', BUTTONS[look], action);
     button.type = 'button';
+    if (icon) button.appendChild(uiIcon(icon, 14));
+    if (text) button.appendChild(document.createTextNode(text));
     button.addEventListener('click', onClick);
+    const hover = HOVERS[look];
+    let rest = null;
+    button.addEventListener('mouseenter', () => {
+      if (button.disabled || button.getAttribute('aria-pressed') === 'true' || rest !== null) return;
+      rest = {};
+      Object.keys(hover).forEach((property) => { rest[property] = button.style[property]; button.style[property] = hover[property]; });
+    });
+    button.addEventListener('mouseleave', () => {
+      if (rest === null) return;
+      Object.keys(rest).forEach((property) => { button.style[property] = rest[property]; });
+      rest = null;
+    });
+    // The page may remove every outline: the focus ring is drawn inline, for the keyboard only
+    button.addEventListener('focus', () => {
+      if (button.matches(':focus-visible')) {
+        button.style.outline = '2px solid ' + K.violetSoft;
+        button.style.outlineOffset = '2px';
+      }
+    });
+    button.addEventListener('blur', () => { button.style.outline = 'none'; });
     return button;
+  }
+
+  function uiPill(text, tone) {
+    const colors = { violet: [K.violetDeep, K.violetText], green: ['#0f2f23', K.green], plain: [K.line, K.muted] }[tone || 'plain'];
+    return uiEl('span', text, 'display:inline-block;font:500 11px/1.6 ' + FONT + ';padding:0 8px;border-radius:999px;white-space:nowrap;background:' + colors[0] + ';color:' + colors[1]);
   }
 
   function buildRoot() {
@@ -647,26 +740,54 @@ export const CAPTURE_SCRIPT = `
       el.setAttribute('data-daemonize-panel', '');
       el.setAttribute('role', 'region');
       el.setAttribute('aria-label', 'Daemonize recorder');
-      const header = uiEl('div', '', 'display:flex;align-items:center;gap:8px');
-      ui.title = uiEl('strong', 'Recording', 'flex:1;font-weight:600');
-      ui.count = uiEl('span', '', 'opacity:.8');
-      ui.toggle = uiButton('-', 'toggle-panel', togglePanel, BTN_STYLE + ';padding:0 7px');
-      header.append(uiEl('span', '', 'width:10px;height:10px;border-radius:50%;background:#ef4444;flex:none'), ui.title, ui.count, ui.toggle);
-      el.appendChild(header);
+      ui.header = uiEl('div', '', 'display:flex;align-items:center;gap:8px');
+      ui.dot = uiEl('span', '', 'width:10px;height:10px;border-radius:50%;background:' + K.red + ';flex:none');
+      pulse(ui.dot);
+      ui.title = uiEl('strong', 'Recording', 'flex:1;font-weight:600;font-size:14px');
+      ui.count = uiEl('span', '', 'color:' + K.muted);
+      ui.toggle = uiButton('', 'toggle-panel', togglePanel, 'icon', 'min');
+      ui.header.append(ui.dot, ui.title, ui.count, ui.toggle);
+      // The three times of a recording: steps, result, save
+      ui.bars = [0, 1, 2].map(() => uiEl('span', '', 'flex:1;height:4px;border-radius:2px;background:' + K.tray));
+      ui.progress = uiEl('div', '', 'display:flex;gap:6px;margin-top:10px');
+      ui.progress.setAttribute('aria-hidden', 'true');
+      ui.progress.append(...ui.bars);
+      ui.phase = uiEl('p', '', 'margin-top:6px;font-size:12px;color:' + K.muted);
+      el.append(ui.header, ui.progress, ui.phase);
+      // Collapsed: a round bubble with the red dot and the number of steps
+      ui.bubbleCount = uiEl('span', '', 'position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:' + K.violet + ';color:#fff;font:600 11px/18px ' + FONT + ';text-align:center;padding:0 4px;box-sizing:border-box');
+      ui.bubble = uiButton('', 'expand-panel', togglePanel, 'bubble');
+      const bubbleDot = uiEl('span', '', 'width:10px;height:10px;border-radius:50%;background:' + K.red);
+      pulse(bubbleDot);
+      ui.bubble.append(bubbleDot, ui.bubbleCount);
+      ui.bubble.style.display = 'none';
+      el.appendChild(ui.bubble);
+      // While the person picks the result: a bar at the top of the page, an outline on the element and what it is
+      ui.banner = uiEl('div', '', FLOAT + 'top:12px;left:50%;transform:translateX(-50%);display:none;align-items:center;gap:10px;border-radius:14px;padding:8px 10px 8px 14px;max-width:calc(100vw - 24px)', 'mark-banner');
+      ui.banner.setAttribute('role', 'status');
+      const bannerText = uiEl('span', 'Click the element that holds the result', 'font-weight:500');
+      const esc = uiEl('span', 'Esc', 'font:500 11px/1.5 ui-monospace,Consolas,monospace;background:' + K.line + ';border-radius:4px;padding:0 5px;color:' + K.text);
+      const target = uiIcon('target', 16);
+      target.style.color = K.violetSoft;
+      ui.banner.append(target, bannerText, esc, uiButton('Cancel', 'cancel-mark-result', cancelMarkResult, 'quiet'));
+      ui.hl = uiEl('div', '', 'position:fixed;box-sizing:border-box;display:none;pointer-events:none;border:2px solid ' + K.violet + ';border-radius:3px;background:rgba(145,71,255,.12)');
+      ui.tip = uiEl('div', '', FLOAT + 'display:none;pointer-events:none;border-radius:8px;padding:4px 9px;font-weight:500;font-size:12px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap');
+      el.append(ui.banner, ui.hl, ui.tip);
     }
-    ui.body = uiEl('div', '', IS_TOP ? 'display:block;margin-top:8px' : 'display:block');
+    ui.body = uiEl('div', '', IS_TOP ? 'display:block;margin-top:10px' : 'display:block');
     if (IS_TOP) {
-      ui.last = uiEl('ol', '', 'margin:0 0 8px;padding:0 0 0 18px;opacity:.85;display:none', 'last-steps');
+      ui.last = uiEl('ul', '', 'list-style:none;display:none;flex-direction:column;gap:2px;margin-bottom:10px', 'last-steps');
       ui.body.appendChild(ui.last);
     }
-    ui.offer = uiEl('div', '', 'display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px');
+    ui.offer = uiEl('div', '', 'display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px');
     ui.body.appendChild(ui.offer);
     if (IS_TOP) {
-      ui.result = uiEl('div', '', 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px');
-      ui.finish = uiButton('Finish and save', 'finish', finishClicked, PRIMARY_STYLE);
-      ui.body.append(ui.result, ui.finish);
+      ui.result = uiEl('div', '', 'display:flex;flex-direction:column;gap:8px;margin-bottom:10px');
+      ui.finish = uiButton('Finish and save', 'finish', finishPressed, 'primary');
+      ui.sheet = uiEl('div', '', 'display:none;flex-direction:column;gap:10px', 'finish-sheet');
+      ui.body.append(ui.result, ui.finish, ui.sheet);
     }
-    ui.status = uiEl('p', '', 'margin:6px 0 0;padding:0;display:none');
+    ui.status = uiEl('p', '', 'margin-top:8px;display:none;color:' + K.muted);
     ui.status.setAttribute('aria-live', 'polite');
     ui.body.appendChild(ui.status);
     el.appendChild(ui.body);
@@ -726,27 +847,69 @@ export const CAPTURE_SCRIPT = `
     showOrHideFrameRoot();
   }
 
+  // The first step of a recording that is not done: 0 record, 1 choose the result, 2 save
+  function phaseNow() {
+    if (sheetOpen) return 2;
+    if (markingResult || lastMark !== null || panelState.zone) return 1;
+    return 0;
+  }
+
+  function stepIcon(label) {
+    const word = String(label).split(' ')[0];
+    return word === 'type' ? 'type' : word === 'select' ? 'select' : 'click';
+  }
+
   function renderPanel() {
     if (!root || !IS_TOP) return;
     const stateKnown = hasPanelBinding();
-    ui.count.textContent = stateKnown ? panelState.steps + (panelState.steps === 1 ? ' step' : ' steps') : '';
+    const collapsed = panelState.collapsed;
+    const look = collapsed ? 'bubble' : 'card';
+    if (look !== rootLook) {
+      rootLook = look;
+      root.style.cssText = collapsed ? BUBBLE_ROOT : TOP_STYLE;
+    }
+    const countText = stateKnown ? panelState.steps + (panelState.steps === 1 ? ' step' : ' steps') : '';
+    ui.count.textContent = countText;
+    ui.bubbleCount.textContent = stateKnown ? String(panelState.steps) : '';
+    ui.bubble.setAttribute('aria-label', 'Expand the recorder panel' + (countText ? ' (' + countText + ')' : ''));
+    ui.header.style.display = collapsed ? 'none' : 'flex';
+    ui.progress.style.display = collapsed ? 'none' : 'flex';
+    ui.phase.style.display = collapsed ? 'none' : 'block';
+    ui.bubble.style.display = collapsed ? 'inline-flex' : 'none';
+    const phase = phaseNow();
+    ui.bars.forEach((bar, index) => { bar.style.background = index <= phase ? K.violet : K.tray; });
+    ui.phase.textContent = PHASES[phase];
     ui.last.textContent = '';
-    panelState.last.forEach((label) => ui.last.appendChild(uiEl('li', label, 'margin:0;padding:0')));
-    ui.last.style.display = panelState.last.length > 0 ? 'block' : 'none';
-    ui.body.style.display = panelState.collapsed ? 'none' : 'block';
-    ui.toggle.textContent = panelState.collapsed ? '+' : '-';
-    ui.toggle.setAttribute('aria-expanded', panelState.collapsed ? 'false' : 'true');
-    ui.toggle.setAttribute('aria-label', panelState.collapsed ? 'Expand the recorder panel' : 'Collapse the recorder panel');
+    panelState.last.forEach((label, index) => {
+      const now = index === panelState.last.length - 1;
+      const chip = uiEl('span', '', 'display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;flex:none;background:' + (now ? K.violet : K.line) + ';color:' + (now ? '#fff' : K.violetSoft));
+      chip.appendChild(uiIcon(stepIcon(label), 13));
+      const row = uiEl('li', '', 'display:flex;align-items:center;gap:9px;padding:4px 6px;border-radius:8px;min-width:0;' + (now ? 'background:' + K.raised : ''));
+      row.append(chip, uiEl('span', label, 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px'));
+      ui.last.appendChild(row);
+    });
+    ui.last.style.display = panelState.last.length > 0 && !sheetOpen ? 'flex' : 'none';
+    ui.body.style.display = collapsed ? 'none' : 'block';
+    ui.toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    ui.toggle.setAttribute('aria-label', 'Collapse the recorder panel');
     // Without the finish binding (a page recorded by other means) the button and the counter are not offered
-    ui.finish.style.display = hasFinishBinding() ? 'block' : 'none';
+    ui.finish.style.display = hasFinishBinding() && !sheetOpen ? 'inline-flex' : 'none';
+    ui.result.style.display = sheetOpen ? 'none' : 'flex';
+    ui.sheet.style.display = sheetOpen ? 'flex' : 'none';
     if (panelState.ending && !saving) {
       saving = true;
-      setStatus('Saving…', true);
+      setStatus('Saving\u2026', true);
     }
     ui.finish.disabled = saving;
     ui.finish.style.opacity = saving ? '.6' : '1';
+    Array.from(ui.sheet.querySelectorAll('button')).forEach((button) => {
+      button.disabled = saving;
+      button.style.opacity = saving ? '.6' : '1';
+    });
     renderResult();
     renderOffer();
+    // The offer to name a variable is for the recording, not for the end sheet
+    ui.offer.style.display = sheetOpen || offerMode === 'none' ? 'none' : 'flex';
   }
 
   async function refreshState() {
@@ -780,21 +943,79 @@ export const CAPTURE_SCRIPT = `
     return pending;
   }
 
-  async function finishClicked() {
+  // With a Studio, the end of the recording is a sheet that says what the tool is and what happens next
+  function finishPressed() {
+    if (saving) return;
+    if (panelState.studio) openSheet();
+    else finishWith('save');
+  }
+
+  async function openSheet() {
+    let summary = null;
+    try {
+      summary = await window.__daemonizePanel({ type: 'summary' });
+    } catch (e) {
+      // The page is going away
+    }
+    const kind = lastMark ? lastMark.kind : panelState.zone ? panelState.zone.kind : '';
+    ui.sheet.textContent = '';
+    const head = uiEl('div', '', 'display:flex;align-items:center;gap:8px');
+    const done = uiIcon('check', 16);
+    done.style.color = K.green;
+    head.append(done, uiEl('strong', 'Your tool is ready', 'font-weight:600;font-size:14px'));
+    const facts = uiEl('div', '', 'display:flex;flex-wrap:wrap;gap:6px');
+    const steps = summary && typeof summary.steps === 'number' ? summary.steps : panelState.steps;
+    facts.appendChild(uiPill(steps + (steps === 1 ? ' step' : ' steps')));
+    const names = summary && Array.isArray(summary.variables) ? summary.variables : [];
+    if (names.length > 0) facts.appendChild(uiPill(names.length === 1 ? 'Variable: ' + names[0] : names.length + ' variables', 'violet'));
+    if (kind) facts.appendChild(uiPill('Result: ' + kind, 'green'));
+    ui.sheet.append(head, facts);
+    if (summary && summary.secrets > 0) {
+      ui.sheet.appendChild(uiEl('p', summary.secrets === 1 ? '1 secret is kept out of the tool.' : summary.secrets + ' secrets are kept out of the tool.', 'font-size:12px;color:' + K.muted));
+    }
+    if (!kind) {
+      const note = uiEl('p', 'No result chosen yet. ', 'font-size:12px;color:' + K.muted);
+      note.appendChild(uiButton('Choose one', 'sheet-choose', () => { closeSheet(); startMarkResult(); }, 'quiet'));
+      ui.sheet.appendChild(note);
+    }
+    const row = uiEl('div', '', 'display:flex;gap:8px;flex-wrap:wrap');
+    row.append(
+      uiButton('Test first', 'finish-test', () => finishWith('test'), 'quiet'),
+      uiButton('Save only', 'finish-save', () => finishWith('save'), 'quiet'),
+      uiButton('Back', 'sheet-back', closeSheet, 'quiet'),
+    );
+    ui.sheet.append(uiButton('Save and add to Kiro', 'finish-kiro', () => finishWith('kiro'), 'primary', 'check'), row);
+    sheetOpen = true;
+    setStatus('');
+    renderPanel();
+    const first = ui.sheet.querySelector('[data-daemonize-action=finish-kiro]');
+    if (first) first.focus();
+  }
+
+  function closeSheet() {
+    sheetOpen = false;
+    ui.sheet.textContent = '';
+    renderPanel();
+    ui.finish.focus();
+  }
+
+  async function finishWith(intent) {
     if (saving) return;
     saving = true;
     ui.finish.disabled = true;
-    setStatus('Saving…', true);
+    setStatus('Saving\u2026', true);
+    renderPanel();
     try {
       flushLive();
       await Promise.all(Array.from(outstanding));
-      const result = await window.__daemonizeFinish();
+      const result = await window.__daemonizeFinish({ intent });
       if (!result || !result.ok) throw new Error((result && result.error) || 'Could not finish the recording');
       renderPanel();
     } catch (e) {
       saving = false;
       ui.finish.disabled = false;
       setStatus((e && e.message) || 'Could not finish the recording', false);
+      renderPanel();
     }
   }
 
@@ -853,9 +1074,9 @@ export const CAPTURE_SCRIPT = `
     offerMode = 'offer';
     ui.offer.style.display = 'flex';
     const label = offer.rowText !== undefined ? 'Selected: ' + offer.rowText : 'Field: ' + offer.label;
-    const text = uiEl('span', label, 'opacity:.85;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap');
+    const text = uiEl('span', label, 'color:' + K.muted + ';max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap');
     text.title = label;
-    ui.offer.append(uiButton('Make variable', 'make-variable', () => askName(offer)), text);
+    ui.offer.append(uiButton('Make variable', 'make-variable', () => askName(offer), 'quiet'), text);
     showOrHideFrameRoot();
   }
 
@@ -868,12 +1089,13 @@ export const CAPTURE_SCRIPT = `
   function askName(offer) {
     offerMode = 'naming';
     ui.offer.textContent = '';
-    const input = uiEl('input', '', 'font:inherit;color:#111827;background:#fff;border:1px solid #9ca3af;border-radius:4px;padding:2px 6px;margin:0;box-sizing:border-box;width:max(220px,' + (offer.suggestion.length + 4) + 'ch);max-width:min(360px,60vw)', 'variable-name');
+    const input = uiEl('input', '', 'all:initial;font:13px/1.3 ' + FONT + ';color:' + K.text + ';background:' + K.neutral + ';border:1px solid ' + K.line + ';border-radius:10px;padding:6px 10px;margin:0;box-sizing:border-box;width:max(220px,' + (offer.suggestion.length + 4) + 'ch);max-width:min(360px,60vw)', 'variable-name');
     input.type = 'text';
     input.value = offer.suggestion;
     input.title = offer.suggestion;
 
-    const ok = uiButton('OK', 'confirm-variable', confirm);
+    const ok = uiButton('OK', 'confirm-variable', confirm, 'primary');
+    ok.style.width = 'auto';
     const message = uiEl('span', '', 'flex-basis:100%');
 
     async function confirm() {
@@ -909,61 +1131,102 @@ export const CAPTURE_SCRIPT = `
     const key = [markingResult, kind, lastMark !== null].join('|');
     if (key === resultKey) return;
     resultKey = key;
+    const hadFocus = ui.result.contains(document.activeElement);
     ui.result.textContent = '';
+    ui.banner.style.display = markingResult ? 'flex' : 'none';
     if (markingResult) {
-      ui.result.append(
-        uiEl('span', 'Click the element that holds the result', 'flex:1'),
-        uiButton('Cancel', 'cancel-mark-result', cancelMarkResult)
-      );
+      ui.result.appendChild(uiEl('span', 'Pick the result in the page.', 'color:' + K.muted));
       return;
     }
-    ui.result.appendChild(uiButton(kind ? 'Choose another result' : 'Choose the result to capture', 'mark-result', startMarkResult));
     if (lastMark) {
-      const select = uiEl('select', '', 'font:inherit;color:#111827;margin:0', 'result-kind');
+      ui.result.appendChild(uiEl('span', 'Result zone', 'font-size:12px;color:' + K.muted));
+      const tabs = uiEl('div', '', 'display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:' + K.tray + ';padding:4px;border-radius:12px', 'result-kind');
+      tabs.setAttribute('role', 'group');
+      tabs.setAttribute('aria-label', 'Result zone');
       RESULT_KINDS.forEach((k) => {
-        const option = document.createElement('option');
-        option.value = k;
-        option.textContent = k;
-        select.appendChild(option);
+        const tab = uiButton(k, 'result-kind-' + k, async () => {
+          lastMark.kind = k;
+          await window.__daemonizeMarkResult({ info: lastMark.info, kind: lastMark.kind });
+          refreshState();
+          renderPanel();
+        }, 'tab', k);
+        const pressed = lastMark.kind === k;
+        tab.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+        if (pressed) {
+          tab.style.background = K.neutral;
+          tab.style.color = K.text;
+        }
+        tabs.appendChild(tab);
       });
-      select.value = lastMark.kind;
-      select.addEventListener('change', async () => {
-        lastMark.kind = select.value;
-        await window.__daemonizeMarkResult({ info: lastMark.info, kind: lastMark.kind });
-        refreshState();
-      });
-      ui.result.append(uiEl('span', 'Result zone:', 'opacity:.85'), select);
+      ui.result.appendChild(tabs);
     } else if (kind) {
-      ui.result.appendChild(uiEl('span', 'Result zone: ' + kind, 'opacity:.85'));
+      ui.result.appendChild(uiEl('span', 'Result zone: ' + kind, 'color:' + K.muted));
+    }
+    ui.result.appendChild(uiButton(kind ? 'Choose another result' : 'Choose the result to capture', 'mark-result', startMarkResult, 'quiet', 'target'));
+    if (hadFocus) {
+      const again = ui.result.querySelector('[aria-pressed=true]') || ui.result.querySelector('button');
+      if (again) again.focus();
     }
   }
 
   function startMarkResult() {
     markingResult = true;
+    sheetOpen = false;
     ensureFrameRoot();
-    renderResult();
+    renderPanel();
     setStatus('Click the element that holds the result (Esc to cancel)', true);
+  }
+
+  function hideHover() {
+    if (!IS_TOP || !ui.hl) return;
+    ui.hl.style.display = 'none';
+    ui.tip.style.display = 'none';
   }
 
   function cancelMarkResult() {
     markingResult = false;
-    renderResult();
+    hideHover();
+    renderPanel();
     setStatus('');
   }
 
+  // The element that would be chosen under the pointer, outlined, with the kind the tool would return
+  function showHover(target) {
+    if (!IS_TOP || !ui.hl) return;
+    const el = resultZoneElement(target);
+    const rect = el.getBoundingClientRect();
+    const kind = suggestResultKind(el);
+    ui.hl.style.left = rect.left + 'px';
+    ui.hl.style.top = rect.top + 'px';
+    ui.hl.style.width = rect.width + 'px';
+    ui.hl.style.height = rect.height + 'px';
+    ui.hl.style.display = 'block';
+    const snippet = collapse(el.textContent).slice(0, 40);
+    ui.tip.textContent = kind === 'text' && snippet ? kind + ' \u00b7 "' + snippet + '"' : kind;
+    ui.tip.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - 200)) + 'px';
+    ui.tip.style.top = (rect.top > 34 ? rect.top - 30 : rect.bottom + 6) + 'px';
+    ui.tip.style.display = 'block';
+  }
+
+  document.addEventListener('mousemove', (e) => {
+    if (!markingResult || !e.isTrusted || inUi(e.target)) return;
+    showHover(e.target);
+  }, true);
+
   async function finishMarkResult(target) {
     markingResult = false;
+    hideHover();
     const el = resultZoneElement(target);
     const info = resultInfoOf(el);
     const kind = suggestResultKind(el);
     const result = await window.__daemonizeMarkResult({ info, kind });
     if (!result || !result.ok) {
-      renderResult();
+      renderPanel();
       setStatus((result && result.error) || 'Could not set the result zone', false);
       return;
     }
     lastMark = { info, kind };
-    renderResult();
+    renderPanel();
     setStatus('Result zone set', false);
     refreshState();
   }

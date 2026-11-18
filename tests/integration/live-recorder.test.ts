@@ -230,7 +230,7 @@ describe('LiveRecorder (record in a real browser, then replay)', () => {
   it('ends once, whatever the reason, and describes its panel without any typed value', async () => {
     const recorder = new WorkflowRecorder('Panel state');
     const live = new LiveRecorder(page, recorder);
-    expect(live.panelState()).toEqual({ steps: 0, last: [], collapsed: false, ending: false });
+    expect(live.panelState()).toEqual({ steps: 0, last: [], collapsed: false, ending: false, studio: false });
 
     for (const label of ['type A', 'click B', 'click C', 'click D']) {
       live.handle({ actionType: 'click', info: { role: 'button', name: label, css: 'button' }, label });

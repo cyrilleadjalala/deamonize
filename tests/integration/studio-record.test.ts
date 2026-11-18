@@ -168,6 +168,8 @@ describe('Studio recording with a real browser, record() and the Compile_Runner'
     expect(await pageOf().evaluate(() => document.cookie)).toContain(COOKIE_VALUE);
     await clickSignIn();
     await pageOf().getByRole('button', { name: 'Finish and save' }).click();
+    // In a Studio recording the button opens the end sheet; "Save only" ends it without a next step
+    await pageOf().getByRole('button', { name: 'Save only' }).click();
 
     const { seen, last } = await follow(isFinal);
     expect(last.state).toBe('done');

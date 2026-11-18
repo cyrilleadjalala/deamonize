@@ -111,7 +111,7 @@ describe('Result_Zone on a web page: record → compile → call over MCP', () =
           await page.keyboard.press('Alt+Shift+R');
           await page.locator('#orders td').first().click();
           await page.locator('[data-daemonize-action=result-kind]').waitFor();
-          expect(await page.locator('[data-daemonize-action=result-kind]').inputValue()).toBe('table');
+          await page.locator('[data-daemonize-action=result-kind-table][aria-pressed=true]').waitFor(); // the suggested kind is the pressed tab
         },
       })
     );
@@ -127,7 +127,7 @@ describe('Result_Zone on a web page: record → compile → call over MCP', () =
           await page.getByRole('button', { name: 'Choose the result to capture' }).click();
           await page.locator('#payload').click();
           await page.locator('[data-daemonize-action=result-kind]').waitFor();
-          expect(await page.locator('[data-daemonize-action=result-kind]').inputValue()).toBe('json');
+          await page.locator('[data-daemonize-action=result-kind-json][aria-pressed=true]').waitFor(); // the suggested kind is the pressed tab
         },
       })
     );

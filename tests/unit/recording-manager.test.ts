@@ -6,7 +6,7 @@ import { FakeCompiler, FakeRecord, MemorySessions } from '../helpers/fake-record
 
 const input: StartInput = { name: 'Find order', url: 'https://shop.test/start', reuseSession: false };
 
-function setup(over: { closeDeadlineMs?: number; scrub?: (t: string) => string } = {}) {
+function setup(over: { closeDeadlineMs?: number; scrub?: (t: string) => string; power?: NonNullable<Parameters<typeof createRecordingManager>[0]['power']> } = {}) {
   const fake = new FakeRecord();
   const compiler = new FakeCompiler();
   const sessions = new MemorySessions();
@@ -16,6 +16,7 @@ function setup(over: { closeDeadlineMs?: number; scrub?: (t: string) => string }
     compiler,
     scrub: over.scrub ?? ((t) => t),
     record: fake.fn,
+    ...(over.power === undefined ? {} : { power: over.power }),
     ...(over.closeDeadlineMs === undefined ? {} : { closeDeadlineMs: over.closeDeadlineMs }),
   });
   return { fake, compiler, sessions, manager };
@@ -215,5 +216,64 @@ describe('Recording_Manager', () => {
     fake.fail(new Error('failed with synthetic-secret-value'));
     await settled();
     expect(manager.status().error).not.toContain('synthetic-secret-value');
+  });
+
+  describe('"Save and add to Kiro" on the end sheet', () => {
+    const fakePower = (over: { homeExists?: boolean; failWith?: string } = {}) => {
+      const installs: Array<{ scope: unknown; confirmationId: unknown }> = [];
+      const power = {
+        info: async () => ({ kiroHomeExists: over.homeExists ?? true }) as never,
+        preview: async (request: { scope: unknown }) => ({ confirmationId: 'c1', kiroPath: '/home/.kiro', scope: request.scope }) as never,
+        install: async (request: { scope: unknown; confirmationId: unknown }) => {
+          if (over.failWith !== undefined) throw new Error(over.failWith);
+          installs.push({ scope: request.scope, confirmationId: request.confirmationId });
+          return {} as never;
+        },
+      };
+      return { power, installs };
+    };
+    const record = async (intent: 'save' | 'test' | 'kiro', power?: ReturnType<typeof fakePower>['power']) => {
+      const ctx = setup(power === undefined ? {} : { power });
+      ctx.manager.start(input);
+      ctx.fake.steps = 2;
+      ctx.fake.intent = intent;
+      await settled();
+      ctx.fake.end('panel');
+      ctx.fake.succeed();
+      await settled();
+      return ctx;
+    };
+
+    it('installs the tool in the global Kiro before the state is done', async () => {
+      const { power, installs } = fakePower();
+      const { manager } = await record('kiro', power);
+      expect(installs).toEqual([{ scope: 'global', confirmationId: 'c1' }]);
+      expect(manager.status()).toMatchObject({ state: 'done', intent: 'kiro', kiro: { added: true, scope: 'global' } });
+    });
+
+    it('falls back to the open project when Kiro has no home folder', async () => {
+      const { power, installs } = fakePower({ homeExists: false });
+      await record('kiro', power);
+      expect(installs[0]?.scope).toBe('project');
+    });
+
+    it('says why it failed and still ends in done: the tool is built', async () => {
+      const { power } = fakePower({ failWith: 'No write access' });
+      const { manager } = await record('kiro', power);
+      const status = manager.status();
+      expect(status.state).toBe('done');
+      expect(status.kiro?.added).toBe(false);
+      expect(status.kiro?.message).toContain('No write access');
+    });
+
+    it('installs nothing for "Save only" and "Test first"', async () => {
+      for (const intent of ['save', 'test'] as const) {
+        const { power, installs } = fakePower();
+        const { manager } = await record(intent, power);
+        expect(installs).toEqual([]);
+        expect(manager.status().kiro).toBeUndefined();
+        expect(manager.status().intent).toBe(intent === 'test' ? 'test' : undefined);
+      }
+    });
   });
 });

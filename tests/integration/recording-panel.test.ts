@@ -207,6 +207,81 @@ describe('recording panel, offer, live flush and finish binding (fake SPA)', () 
     expect(set.workflows[0].steps.map((s) => s.actionType)).toEqual(['type']);
   });
 
+  it('picks the result in the page: an outline and the guessed kind follow the pointer, then six tabs correct the kind', async () => {
+    const { live } = await attach();
+    await page.locator('#to-clients').click();
+    await page.locator('[data-daemonize-action=mark-result]').click();
+    // The banner says what to do and the phase bar moves to "Choose the result"
+    await expect.poll(() => page.locator('[data-daemonize-action=mark-banner]').isVisible()).toBe(true);
+    await expect.poll(panelText).toContain('2 · Choose the result');
+    // Hovering the list outlines it and names the kind that would be chosen
+    await page.locator('#list li').first().hover();
+    await expect.poll(panelText).toContain('list');
+    await expect.poll(() => page.locator('[data-daemonize-ui] div[style*="pointer-events: none"]').first().isVisible()).toBe(true);
+    await page.locator('#list li').first().click();
+
+    const group = page.locator('[data-daemonize-action=result-kind]');
+    await group.waitFor();
+    expect(await group.getAttribute('role')).toBe('group');
+    expect(await group.locator('button').count()).toBe(6);
+    await expect.poll(() => page.locator('[data-daemonize-action=result-kind-list]').getAttribute('aria-pressed')).toBe('true');
+    // The click that chose the result is not a step; the kind can be corrected with one click
+    await page.locator('[data-daemonize-action=result-kind-json]').click();
+    await expect.poll(() => page.locator('[data-daemonize-action=result-kind-json]').getAttribute('aria-pressed')).toBe('true');
+    await expect.poll(() => live.panelState().zone?.kind).toBe('json');
+  });
+
+  it('collapses into a bubble that keeps the count, and opens again', async () => {
+    await attach();
+    await page.locator('#long').click();
+    await page.keyboard.type('Acme');
+    await page.locator('#email').click();
+    await page.locator('[data-daemonize-action=toggle-panel]').click();
+    const bubble = page.locator('[data-daemonize-action=expand-panel]');
+    await expect.poll(() => bubble.isVisible()).toBe(true);
+    expect(await page.locator('[data-daemonize-action=finish]').isVisible()).toBe(false);
+    expect(await bubble.getAttribute('aria-label')).toMatch(/Expand the recorder panel \(\d+ steps?\)/);
+    await bubble.click();
+    await expect.poll(() => page.locator('[data-daemonize-action=finish]').isVisible()).toBe(true);
+  });
+
+  it('writes the recorded steps as a journal with an icon for each', async () => {
+    await attach();
+    await page.locator('#long').click();
+    await page.keyboard.type('Acme');
+    await page.locator('#email').click();
+    const rows = page.locator('[data-daemonize-action=last-steps] li');
+    await expect.poll(() => rows.count()).toBe(1);
+    expect(await rows.first().locator('svg').count()).toBe(1);
+    expect(await rows.first().textContent()).toMatch(/^type/);
+  });
+
+  it('in a Studio recording, "Finish and save" opens the end sheet and the next step chosen there reaches Node', async () => {
+    const recorder = new WorkflowRecorder('Sheet');
+    const live = new LiveRecorder(page, recorder, { studio: true });
+    await page.goto(`${baseUrl}/clients`);
+    await live.attach();
+    await page.locator('#search').click();
+    await page.keyboard.type('ada');
+    await page.locator('#to-login').focus();
+    await expect.poll(() => live.stepCount, { timeout: 3000 }).toBe(1);
+
+    await page.getByRole('button', { name: 'Finish and save' }).click();
+    const sheet = page.locator('[data-daemonize-action=finish-sheet]');
+    await expect.poll(() => sheet.isVisible()).toBe(true);
+    await expect.poll(panelText).toContain('Your tool is ready');
+    await expect.poll(panelText).toContain('3 · Save the tool');
+    expect(live.stepCount).toBe(1); // nothing is saved yet
+    // Back returns to the panel; the session is still open
+    await page.locator('[data-daemonize-action=sheet-back]').click();
+    await expect.poll(() => sheet.isVisible()).toBe(false);
+
+    await page.getByRole('button', { name: 'Finish and save' }).click();
+    await page.getByRole('button', { name: 'Save and add to Kiro' }).click();
+    expect(await live.ended).toBe('panel');
+    expect(live.finishIntent).toBe('kiro');
+  });
+
   it('keeps the panel out of the screen hash', async () => {
     await attach();
     const { screenId } = await import('../../src/state/screen-hasher.js').then((m) => ({ screenId: (raw: string) => new m.ScreenHasher().computeId({ type: 'dom', raw, normalized: raw, capturedAt: 0 }) }));

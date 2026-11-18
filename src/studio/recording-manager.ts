@@ -3,7 +3,7 @@
  * idle|done|error -> recording -> saving -> compiling -> done, with error reachable from the three active states.
  */
 import { storageStateValues, makeScrubber } from './redact.js';
-import type { CompileRunner, RecordingManager, RecordingStatus, RecordingState, SessionStore, StartInput, StartOutcome, StopOutcome } from './contracts.js';
+import type { CompileRunner, PowerInstaller, RecordingManager, RecordingStatus, RecordingState, SessionStore, StartInput, StartOutcome, StopOutcome } from './contracts.js';
 import { InertRecordingManager } from './inert-services.js';
 import {
   COMPILE_FAILED,
@@ -11,6 +11,8 @@ import {
   RECORD_BUSY,
   RECORD_FAILED,
   RECORD_NOT_RUNNING,
+  KIRO_ADDED,
+  KIRO_NOT_ADDED,
   SESSION_NOT_CAPTURED,
   SESSION_NOT_FOUND,
   SESSION_NOT_SAVED,
@@ -20,6 +22,8 @@ import {
 /** What the manager needs from the live recorder (a structural subset of `LiveRecorder`). */
 export interface LiveLike {
   readonly stepCount: number;
+  /** What the user chose on the end sheet of the panel. */
+  readonly finishIntent?: 'save' | 'test' | 'kiro';
   panelState(): { last: string[] };
 }
 export interface BrowserLike {
@@ -58,6 +62,8 @@ export interface RecordingManagerDeps {
   compiler: CompileRunner;
   /** Removes known secret values and paths from a text. */
   scrub: (text: string) => string;
+  /** Adds the built tool to Kiro when the user chose "Save and add to Kiro" on the end sheet of the panel. */
+  power?: Pick<PowerInstaller, 'info' | 'preview' | 'install'>;
   /** Test seam: replaces the real `record()`. */
   record?: RecordFn;
   /** Passed to `record()` as `launch` (test seam for the Browser_Launcher). */
@@ -82,6 +88,8 @@ class StudioRecordingManager implements RecordingManager {
   private error: string | undefined;
   private recoveryFile: string | undefined;
   private sessionNote: string | undefined;
+  private intent: 'test' | 'kiro' | undefined;
+  private kiro: RecordingStatus['kiro'];
   private pendingSession: unknown;
   private running: Promise<void> | undefined;
 
@@ -95,6 +103,8 @@ class StudioRecordingManager implements RecordingManager {
     this.error = undefined;
     this.recoveryFile = undefined;
     this.sessionNote = undefined;
+    this.intent = undefined;
+    this.kiro = undefined;
     this.pendingSession = undefined;
     this.live = undefined;
     this.browser = undefined;
@@ -127,6 +137,8 @@ class StudioRecordingManager implements RecordingManager {
       ...(state === 'error' && this.error !== undefined ? { error: this.error } : {}),
       ...(state === 'error' && this.recoveryFile !== undefined ? { recoveryFile: this.recoveryFile } : {}),
       ...(this.sessionNote === undefined ? {} : { sessionNote: this.sessionNote }),
+      ...(state === 'done' && this.intent !== undefined ? { intent: this.intent } : {}),
+      ...(state === 'done' && this.kiro !== undefined ? { kiro: this.kiro } : {}),
     };
   }
 
@@ -233,6 +245,8 @@ class StudioRecordingManager implements RecordingManager {
       this.cleanup();
       return;
     }
+    // The click on "Save and add to Kiro" is the consent: the tool is installed before the Studio shows 'done'
+    if (this.intent === 'kiro') await this.addToKiro();
     this.state = 'done';
     if (this.pendingSession !== undefined && key !== undefined) {
       try {
@@ -242,6 +256,22 @@ class StudioRecordingManager implements RecordingManager {
       }
     }
     this.cleanup();
+  }
+
+  private async addToKiro(): Promise<void> {
+    const power = this.deps.power;
+    if (power === undefined) return;
+    try {
+      // The Kiro of this computer when it has a home folder, else the open project
+      const info = await power.info();
+      const scope = info.kiroHomeExists ? 'global' : 'project';
+      const preview = await power.preview({ scope });
+      await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope });
+      this.kiro = { added: true, message: KIRO_ADDED, scope };
+    } catch (err) {
+      const reason = err instanceof Error ? this.plain(err.message) : '';
+      this.kiro = { added: false, message: `${KIRO_NOT_ADDED} ${reason}`.trim() };
+    }
   }
 
   private fail(err: unknown, noSteps: boolean): void {
@@ -268,6 +298,8 @@ class StudioRecordingManager implements RecordingManager {
     if (this.live === undefined) return;
     try {
       this.snapshot = this.read(this.live);
+      const intent = this.live.finishIntent;
+      if (intent === 'test' || intent === 'kiro') this.intent = intent;
     } catch {
       // The page is gone: keep the last snapshot
     }

@@ -117,6 +117,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     recorder = new WorkflowRecorder(options.label);
     live = new LiveRecorder(page, recorder, {
       captureNetwork: options.captureNetwork ?? true,
+      ...(options.windowMode === 'studio' ? { studio: true } : {}),
       ...(options.visual === false ? {} : { visual: { workflowFile: options.out } }),
     });
     await live.attach();

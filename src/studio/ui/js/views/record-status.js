@@ -134,6 +134,16 @@ export async function renderRecordStatus() {
             h('a', { class: 'btn', href: href('credentials'), text: COPY.addCredentials })),
           connectCard()
         );
+        // The end sheet of the panel in the page asked for a next step: take it, the user does not click twice
+        if (s?.intent === 'test') {
+          /** @type {HTMLElement | null} */ (outcome.querySelector('#test-it'))?.click();
+        } else if (s?.intent === 'kiro') {
+          // The tool was added to Kiro by the Studio itself: say so, or say why not and leave the connect card to try again
+          if (typeof s?.kiro?.message === 'string') {
+            outcome.prepend(h('p', { id: 'kiro-result', class: s.kiro.added ? 'muted' : 'error-text', role: s.kiro.added ? 'status' : 'alert', text: s.kiro.message }));
+          }
+          outcome.querySelector('#connect-card')?.scrollIntoView({ block: 'center' });
+        }
       } else {
         finalShown = true;
         outcome.replaceChildren(

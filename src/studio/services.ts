@@ -54,8 +54,6 @@ export function createServices(overrides: Partial<StudioServices> | undefined, i
         scrub,
         paths: [info.cwd, homedir(), tmpdir(), ...(appData.dir === undefined ? [] : [appData.dir])],
       }));
-  const recording =
-    overrides?.recording ?? (info.sample ? new InertRecordingManager() : createRecordingManager({ workflowFile: info.workflowFile, sessions, compiler, scrub }));
   const home = info.home ?? homedir();
   const locator = overrides?.locator ?? (info.sample ? new InertApplicationLocator(info.outDir) : createApplicationLocator({ baseOutDir: info.outDir, apps: createAppNames({ appData }), loadSet: info.loadSet }));
   const power =
@@ -71,5 +69,7 @@ export function createServices(overrides: Partial<StudioServices> | undefined, i
         records: createInstallRecords({ appData }),
         autoAdd: createAutoAddStore({ appData }),
       }));
+  const recording =
+    overrides?.recording ?? (info.sample ? new InertRecordingManager() : createRecordingManager({ workflowFile: info.workflowFile, sessions, compiler, scrub, power }));
   return { appData, vault, sessions, recording, compiler, power, locator };
 }

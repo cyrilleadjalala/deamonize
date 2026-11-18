@@ -121,7 +121,9 @@ function applyEntry(
   }
   if (entry.description !== undefined) {
     const description = cleanDescription(entry.description);
-    if (description === undefined) skipped.push(`${where}: description is empty, or has markup, a link or an instruction`);
+    // The description the user wrote is kept over a suggestion
+    if (workflow.description?.trim()) skipped.push(`${where}: description kept, the workflow already has one written by the user`);
+    else if (description === undefined) skipped.push(`${where}: description is empty, or has markup, a link or an instruction`);
     else {
       workflow.description = description;
       applied.push(`${where}: description`);

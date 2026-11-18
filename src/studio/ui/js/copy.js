@@ -173,6 +173,12 @@ export const COPY = {
 };
 
 export { COPY_SECRETS, allSecretsCopyTexts } from './copy-secrets.js';
+export { COPY_RECORD, allRecordCopyTexts } from './copy-record.js';
+export { COPY_EDITOR, allEditorCopyTexts } from './copy-editor.js';
+export { COPY_COMPILE, allCompileCopyTexts } from './copy-compile.js';
+import { allRecordCopyTexts } from './copy-record.js';
+import { allEditorCopyTexts } from './copy-editor.js';
+import { allCompileCopyTexts } from './copy-compile.js';
 /** Texts that are the explicit technical option and are exempt from the plain-language lint. */
 export const TECHNICAL_TEXTS = new Set([COPY.copyMcp, COPY.copyMcpDone]);
 
@@ -285,5 +291,6 @@ export function allCopyTexts() {
   for (const kind of SECRET_KINDS) texts.push(kindWord(kind));
   texts.push(configuredText(true), configuredText(false), stepCountText(0), stepCountText(1), stepCountText(7));
   for (const status of [0, 400, 401, 403, 500, 503]) texts.push(reasonFor(status));
+  texts.push(...allRecordCopyTexts(), ...allEditorCopyTexts(), ...allCompileCopyTexts());
   return texts;
 }

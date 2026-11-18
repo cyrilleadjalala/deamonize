@@ -3,6 +3,7 @@ import { h } from '../dom.js';
 import { api, ApiError } from '../api.js';
 import { announce } from '../components.js';
 import { COPY } from '../copy.js';
+import { foreignOriginText } from '../copy-record.js';
 import { applicationKey, validateName, validateUrl } from '../validate.js';
 
 /**
@@ -113,11 +114,59 @@ function buildForm(onCancel) {
     }, 400);
   };
   urlInput.addEventListener('input', updateHint);
-
   let pending = false;
+
+  // Another application than the one this folder holds: the message shows 300 ms after the last keystroke and the start button waits
+  const ORIGIN_MS = 300;
+  const URL_DESCRIBED_BY = 'action-url-help action-url-error';
+  /** @type {string | undefined} */
+  let heldOrigin;
+  /** @type {HTMLElement | null} */
+  let originNote = null;
+  let originTimer = 0;
+  /** @param {unknown} value @returns {string | undefined} */
+  const originOf = (value) => {
+    if (typeof value !== 'string') return undefined;
+    try {
+      const origin = new URL(value.trim()).origin;
+      return origin === 'null' ? undefined : origin;
+    } catch {
+      return undefined;
+    }
+  };
+  const checkOrigin = () => {
+    const wanted = originOf(urlInput.value);
+    const foreign = heldOrigin !== undefined && wanted !== undefined && wanted !== heldOrigin;
+    if (foreign && heldOrigin !== undefined) {
+      if (originNote === null) {
+        originNote = h('p', { class: 'error-text action-url-origin', id: 'action-url-origin', role: 'alert' });
+        urlError.after(originNote);
+      }
+      originNote.textContent = foreignOriginText(heldOrigin);
+      urlInput.setAttribute('aria-describedby', `${URL_DESCRIBED_BY} action-url-origin`);
+    } else if (originNote !== null) {
+      originNote.remove();
+      originNote = null;
+      urlInput.setAttribute('aria-describedby', URL_DESCRIBED_BY);
+    }
+    submit.disabled = pending || originNote !== null;
+  };
+  urlInput.addEventListener('input', () => {
+    window.clearTimeout(originTimer);
+    originTimer = window.setTimeout(checkOrigin, ORIGIN_MS);
+  });
+  api
+    .overviewFresh()
+    .then((overview) => {
+      const target = overview?.targets?.[0];
+      if (target !== undefined && (target.type === undefined || target.type === 'web') && Number(target.workflows) >= 1) heldOrigin = originOf(target.start);
+      if (heldOrigin !== undefined) checkOrigin();
+    })
+    .catch(() => undefined);
+
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    if (pending) return;
+    if (pending || originNote !== null) return;
     unmark();
     const name = validateName(nameInput.value);
     const url = validateUrl(urlInput.value);
@@ -149,7 +198,7 @@ function buildForm(onCancel) {
       if (status === 400 && body?.field === 'name') {
         mark(nameInput, nameError, message);
         nameInput.focus();
-      } else if (status === 400 && body?.field === 'url') {
+      } else if ((status === 400 || status === 409) && body?.field === 'url') {
         mark(urlInput, urlError, message);
         urlInput.focus();
       } else {
@@ -159,7 +208,7 @@ function buildForm(onCancel) {
       formError.replaceChildren(h('p', { text: err instanceof ApiError && err.status !== 0 ? err.message : COPY.unreachable }));
     } finally {
       pending = false;
-      submit.disabled = false;
+      submit.disabled = originNote !== null;
       submit.textContent = COPY.startRecording;
     }
   });

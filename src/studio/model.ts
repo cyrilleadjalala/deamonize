@@ -7,7 +7,7 @@
  * the install commands of the sandbox, a screen snapshot, or an inline picture. Secrets appear by name only.
  */
 import { basename } from 'node:path';
-import type { HttpRecipe, SecretReference, Workflow, WorkflowSet, WorkflowStep } from '../types.js';
+import type { HttpRecipe, SecretReference, WhenOmitted, Workflow, WorkflowSet, WorkflowStep } from '../types.js';
 import { clipText, type PbtRunResult } from './pbt-result.js';
 import { httpSecretSplit } from '../compiler/tool-description.js';
 
@@ -326,7 +326,10 @@ export interface WorkflowView {
   description?: string;
   target: { name: string; type: 'web' | 'tui' };
   risk: { read: number; write: number; delete: number; highest: 'read' | 'write' | 'delete' };
-  variables: Array<{ name: string; type: string; description?: string; optional: boolean }>;
+  /** whenOmitted only for an optional Variable: 'useRecorded' when the file has none. */
+  variables: Array<{ name: string; type: string; description?: string; optional: boolean; whenOmitted?: WhenOmitted }>;
+  /** Path of the start page of this workflow (no query or fragment), only when it differs from the set startUrl (10.12). */
+  startPage?: string;
   /** Required for the compiled mode, with `status` when the environment of the server is known. */
   secrets: SecretName[];
   /** Recorded in HTTP recipes but not read by the compiled mode. */
@@ -360,7 +363,9 @@ export function buildWorkflowView(set: WorkflowSet, workflow: Workflow, outputs:
       type: v.type ?? 'string',
       ...(text(v.description, 300) === undefined ? {} : { description: text(v.description, 300) }),
       optional: v.optional === true,
+      ...(v.optional === true ? { whenOmitted: v.whenOmitted ?? ('useRecorded' as const) } : {}),
     })),
+    ...(workflow.startUrl !== undefined && workflow.startUrl !== set.startUrl && displayUrl(workflow.startUrl) !== undefined ? { startPage: displayUrl(workflow.startUrl) } : {}),
     secrets: required,
     unusedSecrets: unused,
     secretsBasis: !outputs.flags.compiled ? ('not-compiled' as const) : http ? ('http' as const) : ('ui-only' as const),

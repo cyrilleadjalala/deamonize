@@ -15,3 +15,4 @@ export const BODY_MUST_BE_EMPTY = 'This request takes no data.';
 export const FIELD_NOT_BOOLEAN = 'Use true or false.';
 export const KIRO_ADDED = 'The tool was added to Kiro.';
 export const KIRO_NOT_ADDED = 'The tool was built, but it could not be added to Kiro.';
+/** The refusal of a second application ("This folder already holds actions for <origin>. ...") is `foreignOriginMessage` in workflow/origin-guard.ts. */

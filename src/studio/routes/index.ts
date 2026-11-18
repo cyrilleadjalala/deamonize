@@ -4,6 +4,7 @@ import { powerRoutes } from './power.js';
 import { recordRoutes } from './record.js';
 import { secretRoutes } from './secrets.js';
 import { sessionRoutes } from './sessions.js';
+import { workflowRoutes } from './workflows.js';
 import type { RouteFactory } from './types.js';
 
-export const DEFAULT_ROUTES: RouteFactory[] = [recordRoutes, sessionRoutes, secretRoutes, compileRoutes, powerRoutes];
+export const DEFAULT_ROUTES: RouteFactory[] = [recordRoutes, sessionRoutes, secretRoutes, compileRoutes, powerRoutes, workflowRoutes];

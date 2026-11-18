@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline/promises';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Browser, Page } from 'playwright';
@@ -7,6 +7,9 @@ import { launchBrowser, type LaunchFn } from '../../recorder/browser-launcher.js
 import { LiveRecorder, type EndReason, type NetworkStepReport } from '../../recorder/live-recorder.js';
 import { WorkflowRecorder } from '../../recorder/workflow-recorder.js';
 import { saveWorkflow } from './save-workflow.js';
+import { deserializeWorkflowSet } from '../../workflow/workflow-set.js';
+import { checkSameOrigin } from '../../workflow/origin-guard.js';
+import { LOAD_UNREADABLE } from '../../studio/messages/common.js';
 import type { SandboxSpec } from '../../types.js';
 import { extractWebZone } from '../../replay/runtime/web-steps.js';
 import { dataSchemaFor } from '../../schema/data-schema.js';
@@ -48,6 +51,8 @@ export interface RecordOptions {
   windowMode?: 'terminal' | 'studio';
   /** Called right after the live recorder is attached. */
   onLive?: (live: LiveRecorder) => void;
+  /** True when ~/.kiro exists now; passed to the Live_Recorder for the install scope choice of the panel. */
+  kiroHomeExists?: boolean;
   /** Called with the launched browser. */
   onBrowser?: (browser: Browser) => void;
   /** Called when the session ends, before the end of the recording is completed. */
@@ -79,6 +84,8 @@ export interface RecordSummary {
  * Workflow set file (created when missing, merged when it already exists).
  */
 export async function record(options: RecordOptions): Promise<RecordSummary> {
+  // One file holds one application: refuse another origin before any browser opens
+  await preflightOrigin(options);
   // A launcher failure propagates here, before anything is written
   const { browser } = await launchBrowser({ headless: options.headless ?? false, launch: options.launch });
   options.onBrowser?.(browser);
@@ -118,6 +125,7 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     live = new LiveRecorder(page, recorder, {
       captureNetwork: options.captureNetwork ?? true,
       ...(options.windowMode === 'studio' ? { studio: true } : {}),
+      ...(options.kiroHomeExists === undefined ? {} : { kiroHomeExists: options.kiroHomeExists }),
       ...(options.visual === false ? {} : { visual: { workflowFile: options.out } }),
     });
     await live.attach();
@@ -185,6 +193,22 @@ export async function record(options: RecordOptions): Promise<RecordSummary> {
     closing = true;
     await browser.close().catch(() => { });
   }
+}
+
+/**
+ * Tolerant read of the Workflow_File before the browser: no file or no workflow proceeds; an unreadable or invalid
+ * file or another origin throws, and nothing is launched or written.
+ */
+async function preflightOrigin(options: Pick<RecordOptions, 'out' | 'url'>): Promise<void> {
+  let existing;
+  try {
+    existing = deserializeWorkflowSet(await readFile(options.out, 'utf-8'));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw new Error(LOAD_UNREADABLE);
+  }
+  const check = checkSameOrigin(existing, options.url);
+  if (!check.ok) throw new Error(check.message);
 }
 
 /** What the replay needs in its environment, and the typed values that are stored as typed. */

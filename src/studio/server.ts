@@ -380,8 +380,8 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
       compileWasRunning = running;
       return status;
     },
-    tryStart: () => {
-      const started = baseCompiler.tryStart();
+    tryStart: (compileOptions) => {
+      const started = baseCompiler.tryStart(compileOptions);
       if (started) compileWasRunning = true;
       return started;
     },
@@ -392,6 +392,7 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
         await refreshActive();
       }
     },
+    options: () => baseCompiler.options(),
     close: () => baseCompiler.close(),
   };
   await refreshActive();

@@ -83,7 +83,7 @@ export interface RecordingStatus {
   /** Only in state 'done', when the user chose a next step on the end sheet of the panel in the page. */
   intent?: 'test' | 'kiro';
   /** Only after the intent 'kiro': whether the tool was added to Kiro, with a plain message and where. */
-  kiro?: { added: boolean; message: string; scope?: 'global' | 'project' };
+  kiro?: { added: boolean; message: string; scope?: InstallScope; missingSecrets?: string[]; requiredSecrets?: string[] };
 }
 /** Already validated. */
 export interface StartInput {
@@ -114,12 +114,22 @@ export interface CompileStatus {
   error?: string;
 }
 export type CompileOutcome = { ok: true } | { ok: false; message: string; outputMayBeIncomplete: boolean };
+/** The options of a compile: normalized, never written to a file. */
+export interface CompileOptionsInput {
+  http: 'off' | 'auto';
+  healSupport: boolean;
+}
 export interface CompileRunner {
   status(): CompileStatus;
-  /** Sync: false when a compile is running (route answers 409). Otherwise starts and returns true. */
-  tryStart(): boolean;
-  /** For the RecordingManager: waits for a running compile, then runs one and resolves with its outcome. */
+  /**
+   * Sync: false when a compile is running (route answers 409). Otherwise starts and returns true.
+   * options given: they become the stored options when the compile starts. Absent: the stored options.
+   */
+  tryStart(options?: CompileOptionsInput): boolean;
+  /** For the RecordingManager: waits for a running compile, then runs one with the stored options and resolves with its outcome. */
   runExclusive(): Promise<CompileOutcome>;
+  /** The stored options; { http: 'off', healSupport: false } until a request stores others. */
+  options(): CompileOptionsInput;
   /** Kills a running installation. */
   close(): Promise<void>;
 }

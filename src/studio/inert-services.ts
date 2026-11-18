@@ -14,6 +14,7 @@ import {
   type ApplicationLocator,
   type AutoAddOutcome,
   type AutoAddState,
+  type CompileOptionsInput,
   type CompileOutcome,
   type CompileRunner,
   type CompileStatus,
@@ -110,8 +111,11 @@ export class InertCompileRunner implements CompileRunner {
   status(): CompileStatus {
     return { state: 'idle', phase: null };
   }
-  tryStart(): boolean {
+  tryStart(_options?: CompileOptionsInput): boolean {
     return false;
+  }
+  options(): CompileOptionsInput {
+    return { http: 'off', healSupport: false };
   }
   async runExclusive(): Promise<CompileOutcome> {
     return { ok: false, message: 'Compiling is not available.', outputMayBeIncomplete: false };

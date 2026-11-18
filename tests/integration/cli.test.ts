@@ -135,6 +135,8 @@ describe('CLI: record → compile → merge', () => {
       'mcp-server.ts',
       'mcp.json',
       'name-map.json',
+      'omission.js',
+      'omission.ts',
       'openapi.json',
       'package.json',
       'plugin.json',

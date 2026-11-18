@@ -186,6 +186,10 @@ export const api = {
   /** Same as `overview` but read again from the server. */
   overviewFresh: async () => normalizeOverview(await getFresh('/api/overview')),
   workflowsFresh: () => getFresh('/api/workflows'),
+  /** @param {object} body see POST /api/workflows/update */
+  workflowUpdate: (body) => postJson('/api/workflows/update', body),
+  /** @param {string} id */
+  workflowDelete: (id) => postJson('/api/workflows/delete', { id }),
   // ----- recording and sessions ------------------------------------------------------------------------------
   recordStart: (payload) => postJson('/api/record/start', payload),
   recordStatus: () => getFresh('/api/record/status'),
@@ -200,7 +204,8 @@ export const api = {
   secretSave: (name, value, signal) => postJson('/api/secrets', { name, value }, signal),
   secretForget: (name, signal) => postJson('/api/secrets/forget', { name }, signal),
   // ----- compile and connect -----------------------------------------------------------------------------------
-  compileStart: () => postJson('/api/compile', {}),
+  /** @param {{ http?: 'off' | 'auto', healSupport?: boolean }} [options] */
+  compileStart: (options) => postJson('/api/compile', options ?? {}),
   compileStatus: () => getFresh('/api/compile/status'),
   powerInfo: () => getFresh('/api/power/info'),
   powerSnippet: () => getFresh('/api/power/snippet'),

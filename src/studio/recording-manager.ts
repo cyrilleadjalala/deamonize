@@ -5,6 +5,7 @@
 import { storageStateValues, makeScrubber } from './redact.js';
 import type { CompileRunner, PowerInstaller, RecordingManager, RecordingStatus, RecordingState, SessionStore, StartInput, StartOutcome, StopOutcome } from './contracts.js';
 import { InertRecordingManager } from './inert-services.js';
+import { normalizeSecretNames, resolveInstallScope } from './install-scope.js';
 import {
   COMPILE_FAILED,
   NOTHING_RECORDED,
@@ -24,6 +25,8 @@ export interface LiveLike {
   readonly stepCount: number;
   /** What the user chose on the end sheet of the panel. */
   readonly finishIntent?: 'save' | 'test' | 'kiro';
+  /** Where the user chose to add the tool (only after the intent 'kiro'). Kept in memory, written to no file. */
+  readonly finishScope?: 'global' | 'project';
   panelState(): { last: string[] };
 }
 export interface BrowserLike {
@@ -42,6 +45,8 @@ export interface RecordCallOptions {
   signal: AbortSignal;
   sessionStorageState?: string;
   captureSessionState?: (state: unknown) => void | Promise<void>;
+  /** Whether the Kiro home folder existed when the recording started (false when `power.info` failed). */
+  kiroHomeExists?: boolean;
   onLive: (live: LiveLike) => void;
   onBrowser: (browser: BrowserLike) => void;
   onEnding: (reason: EndReason) => void;
@@ -89,6 +94,7 @@ class StudioRecordingManager implements RecordingManager {
   private recoveryFile: string | undefined;
   private sessionNote: string | undefined;
   private intent: 'test' | 'kiro' | undefined;
+  private finishScope: 'global' | 'project' | undefined;
   private kiro: RecordingStatus['kiro'];
   private pendingSession: unknown;
   private running: Promise<void> | undefined;
@@ -104,6 +110,7 @@ class StudioRecordingManager implements RecordingManager {
     this.recoveryFile = undefined;
     this.sessionNote = undefined;
     this.intent = undefined;
+    this.finishScope = undefined;
     this.kiro = undefined;
     this.pendingSession = undefined;
     this.live = undefined;
@@ -193,6 +200,8 @@ class StudioRecordingManager implements RecordingManager {
         // The route validated the address already
       }
       const record = this.deps.record ?? defaultRecord;
+      // No installer means no await here: record() still starts in the same turn as before
+      const kiroHomeExists = this.deps.power === undefined ? false : await this.homeExists();
       recordResult = await record({
         url: input.url,
         name: host,
@@ -201,6 +210,7 @@ class StudioRecordingManager implements RecordingManager {
         headless: false,
         windowMode: 'studio',
         signal: controller.signal,
+        kiroHomeExists,
         ...(sessionPath === undefined ? {} : { sessionStorageState: sessionPath }),
         ...(capture
           ? {
@@ -258,16 +268,33 @@ class StudioRecordingManager implements RecordingManager {
     this.cleanup();
   }
 
+  /** `power.info` at the start of a recording: a failure, or no installer, counts as no home folder. */
+  private async homeExists(): Promise<boolean> {
+    const power = this.deps.power;
+    if (power === undefined) return false;
+    try {
+      return (await power.info()).kiroHomeExists === true;
+    } catch {
+      return false;
+    }
+  }
+
   private async addToKiro(): Promise<void> {
     const power = this.deps.power;
     if (power === undefined) return;
     try {
       // The Kiro of this computer when it has a home folder, else the open project
       const info = await power.info();
-      const scope = info.kiroHomeExists ? 'global' : 'project';
+      const scope = resolveInstallScope(this.finishScope, info.kiroHomeExists === true);
       const preview = await power.preview({ scope });
-      await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope });
-      this.kiro = { added: true, message: KIRO_ADDED, scope };
+      const installed = await power.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope });
+      this.kiro = {
+        added: true,
+        message: KIRO_ADDED,
+        scope,
+        missingSecrets: normalizeSecretNames(installed?.missingSecrets),
+        requiredSecrets: normalizeSecretNames(installed?.requiredSecrets),
+      };
     } catch (err) {
       const reason = err instanceof Error ? this.plain(err.message) : '';
       this.kiro = { added: false, message: `${KIRO_NOT_ADDED} ${reason}`.trim() };
@@ -300,6 +327,8 @@ class StudioRecordingManager implements RecordingManager {
       this.snapshot = this.read(this.live);
       const intent = this.live.finishIntent;
       if (intent === 'test' || intent === 'kiro') this.intent = intent;
+      const scope = this.live.finishScope;
+      if (intent === 'kiro' && (scope === 'global' || scope === 'project')) this.finishScope = scope;
     } catch {
       // The page is gone: keep the last snapshot
     }

@@ -8,6 +8,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { findPlainSecrets, withoutThumbnails } from '../workflow/workflow-set.js';
+import { SKIP_IN_PATH_MESSAGE, findSkippedPathBinding, validateWorkflowScopes } from '../workflow/workflow-scope.js';
 
 // What the generated server needs at run time (it has no Daemonize dependency).
 const SERVER_DEPENDENCIES = {
@@ -92,6 +93,9 @@ const RUNTIME_TOTP = join(
   'totp.ts'
 );
 
+// Which steps a call leaves out for an omitted optional Variable: standalone, imports nothing
+const RUNTIME_OMISSION = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'replay', 'runtime', 'omission.ts');
+
 const RUNTIME_VAULT_FORMAT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'replay', 'runtime', 'vault-format.ts');
 
 // The reader of the vault of Studio: standalone, imports only node:* and ./vault-format.js
@@ -173,6 +177,15 @@ export class Compiler {
    * Returns the CompileResult with all generated artifacts.
    */
   async compile(recorded: WorkflowSet, outputDir: string, options: CompileOptions = {}): Promise<CompileResult> {
+    // Refused before any file is written: a start page of another origin (or on a terminal target), and a skipped Variable in a URL path
+    const scopeError = validateWorkflowScopes(recorded);
+    if (scopeError !== undefined) throw new Error(scopeError);
+    if (httpEnabled(recorded, options)) {
+      for (const workflow of recorded.workflows ?? []) {
+        const hit = findSkippedPathBinding(workflow);
+        if (hit !== undefined) throw new Error(SKIP_IN_PATH_MESSAGE(workflow.id, hit.variable));
+      }
+    }
     const heal = healEnabled(recorded, options);
     let wrote = false;
     const markWriting = (): void => {
@@ -211,6 +224,7 @@ export class Compiler {
     const totpSource = await readFile(RUNTIME_TOTP, 'utf-8');
     const vaultFormatSource = await readFile(RUNTIME_VAULT_FORMAT, 'utf-8');
     const vaultReaderSource = await readFile(RUNTIME_VAULT_READER, 'utf-8');
+    const omissionSource = await readFile(RUNTIME_OMISSION, 'utf-8');
     // Waiting for a pattern of the rendered screen: only a terminal target replays a pty
     const patternWaitSource = set.targetType === 'tui' ? await readFile(RUNTIME_PATTERN_WAIT, 'utf-8') : undefined;
     // Strict Level 2 execution with Playwright: only a web target replays a browser
@@ -270,6 +284,8 @@ export class Compiler {
       vaultFormat: join(outputDir, 'vault-format.js'),
       vaultReaderSource: join(outputDir, 'vault-reader.ts'),
       vaultReader: join(outputDir, 'vault-reader.js'),
+      omissionSource: join(outputDir, 'omission.ts'),
+      omission: join(outputDir, 'omission.js'),
       ...(patternWaitSource === undefined ? {} : { patternWaitSource: join(outputDir, 'pattern-wait.ts'), patternWait: join(outputDir, 'pattern-wait.js') }),
       ...(webStepsSource === undefined ? {} : { webStepsSource: join(outputDir, 'web-steps.ts'), webSteps: join(outputDir, 'web-steps.js') }),
       ...(browserLaunchSource === undefined ? {} : { browserLaunchSource: join(outputDir, 'browser-launch.ts'), browserLaunch: join(outputDir, 'browser-launch.js') }),
@@ -304,6 +320,8 @@ export class Compiler {
       writeFile(files.vaultFormat, this.toJavaScript(vaultFormatSource)),
       writeFile(files.vaultReaderSource, vaultReaderSource),
       writeFile(files.vaultReader, this.toJavaScript(vaultReaderSource)),
+      writeFile(files.omissionSource, omissionSource),
+      writeFile(files.omission, this.toJavaScript(omissionSource)),
       ...(patternWaitSource === undefined ? [] : [
         writeFile(join(outputDir, 'pattern-wait.ts'), patternWaitSource),
         writeFile(join(outputDir, 'pattern-wait.js'), this.toJavaScript(patternWaitSource)),

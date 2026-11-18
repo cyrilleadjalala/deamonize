@@ -16,12 +16,63 @@ Each step is replayed by the most stable means available:
 Server-rendered applications such as Adminer have no fetch/XHR to record: every step stays at Level 2. That is a normal result.
 
 ## Mixed workflows (--http)
-Node etch() runs outside the browser: it moves neither the page to the next screen nor the cookies of the browser. So the plan (planSteps in src/replay/runtime/http-replay.ts) follows one rule:
+
+Node `fetch()` runs outside the browser: it moves neither the page to the next screen nor the cookies of the browser. So the plan (`planSteps` in `src/replay/runtime/http-replay.ts`) follows one rule:
+
 - A workflow where every step has a request, or only fills a field for a later request, runs over HTTP with no browser (unchanged).
-- Otherwise every step up to and including the last browser step runs in the browser (ccessibility), whether it has a request or not. A field-filling step whose value a later request carries is replayed on the page too, so the page receives the value. This keeps the DOM and the cookies of the page in step with the browser steps that follow (a two-step login: password screen, then a code screen).
-- The final suffix, the steps after the last browser step, stays over HTTP. The exception is a request whose uth is storageState: it relies on the cookies of the browser session, the response may rotate them, and CSRF state can be paired with the page. Such a request runs in the browser, together with every step before it. A request with uth 
-one or env:NAME, or with no uth, does not depend on the browser and stays over HTTP.
+- Otherwise every step up to and including the last browser step runs in the browser (`accessibility`), whether it has a request or not. A field-filling step whose value a later request carries is replayed on the page too, so the page receives the value. This keeps the DOM and the cookies of the page in step with the browser steps that follow (a two-step login: password screen, then a code screen).
+- The final suffix, the steps after the last browser step, stays over HTTP. The exception is a request whose `auth` is `storageState`: it relies on the cookies of the browser session, the response may rotate them, and CSRF state can be paired with the page. Such a request runs in the browser, together with every step before it. A request with `auth` `none` or `env:NAME`, or with no `auth`, does not depend on the browser and stays over HTTP.
+- The preparatory steps (steps that only set a state for a later request) are `type`, `select`, `check`, `hover` and `scrollIntoView`.
+
 The fallback to the browser after a failed request depends on the request, not on the risk of the step: only a request that mutates (POST, PUT, PATCH, DELETE) is never repeated, so a GET that fails (a redirect to an HTML login page with status 200, a changed shape) can fall back to Level 2 once.
+
+## Optional Variables and omitted values (`whenOmitted`)
+
+A Variable marked `optional: true` may be left out of a call. A value is omitted when it is absent or `null`; `""`, `0` and `false` are values that were given. `whenOmitted` says what then happens, and only applies to an optional Variable (a file with `whenOmitted` on a required Variable is refused when loaded):
+
+| `whenOmitted` | What the call does when the Variable is left out |
+| --- | --- |
+| `useRecorded` (default when the field is absent) | The step runs with the value recorded during the recording |
+| `skip` | The step is left out. Its index (zero-based, in the workflow) is listed in `skippedSteps` of the result, which is absent when no step was skipped |
+
+A value that is given is always used. This applies to a `type` step (text), a `select` step, a `click` on an option or radio chosen by a Variable, and a `check` step. With `skip`, a checkbox keeps the state it had before the step.
+
+How `skip` is carried out:
+
+- A step is left out when its `variable`, or the `variable` of its `rowBinding`, is omitted. A step that holds a secret, a TOTP code or a recorded request is not left out as a whole: the request handles the omission itself (next point).
+- Over HTTP (`src/replay/runtime/http-replay.ts`), the parts of the recorded request that use an omitted Variable are removed:
+  - a query parameter whose name or value uses it is removed;
+  - a header whose value uses it is removed;
+  - in a JSON or form body, the field or array item that uses it is removed. If the whole body belongs to the omitted Variable, no body is sent and no `content-type` is added;
+  - a text that mixes the placeholder with other text (for example `prefix-{{name}}`) removes the whole entry, not only the placeholder.
+- A Variable that is part of the URL path cannot be left out. `compile` refuses a workflow whose optional `skip` Variable is bound in a request path (`in: "path"`), before it writes any file. If such a request still reaches the runtime, it fails with the HTTP error kind `invalid`.
+- For a step in a table row or list item, an omitted `useRecorded` Variable selects the row by the recorded `key.text` of the step, so the row is still found by its content and never by position. If there is no recorded key text, the call fails with `ROW_VARIABLE_MISSING`.
+
+## The `check` step
+
+A checkbox, an element with `role=checkbox` or an element with `role=switch` is recorded as one `check` step instead of a click. Its `value` is `"true"` or `"false"`, the state seen after the click. If the step has a boolean Variable, the call gives the target state (`true`/`"true"` or `false`/`"false"`); otherwise the recorded value is the target. The runtime (`checkControl` in `src/replay/runtime/web-steps.ts`) reads the control, clicks at most once if it is not in the target state (`needsClick`), then waits until the page shows that state, so running the step twice leaves the control in the target state. A control that is disabled, cannot be found, or does not reach the state fails the step: there is no repair, in STRICT and in HEAL mode. With `--http auto` a `check` step is a preparatory step, like `type` and `select`.
+
+A group of radio buttons can be recorded as one `string` Variable whose `enum` lists the accessible names of the options. The call gives the name, and the runtime clicks the radio with that role and name. Choosing the option that is already selected succeeds.
+
+## One start page and one login per workflow
+
+The workflow set has one `startUrl` and one saved login (`storageState`). A workflow can carry its own, and the compiled server uses it for that tool only:
+
+- `startUrl`: an absolute http(s) address on the same origin as the set's `startUrl`. Absent: the set's address. A request of the `http` level is rebased on the same origin. `compile` refuses a workflow whose `startUrl` is on another origin, and a `startUrl` in a set that has none (a terminal target).
+- `storageState`: the path of a saved login. Absent: the set's value. `null`: this workflow runs with no saved login, and `DAEMONIZE_STORAGE_STATE` is ignored for it.
+
+A workflow file without these fields behaves as before.
+
+## The terminal recorder
+
+After the name of a Variable, the terminal recorder asks one key at a time (Enter takes the default; any other key repeats the question):
+
+1. `optional? (y/n, Enter = n)`
+2. `type? (s/n/b, Enter = s)`: text, number or true/false. A recorded value that cannot be converted is refused and the question is asked again.
+3. Only when the Variable is optional: `if left empty: skip or use the recorded value (s/r, Enter = s)`.
+
+The file only holds what differs from the defaults: `type` when it is not `string`, and `optional` with `whenOmitted` when the Variable is optional.
+
 ## STRICT and HEAL
 
 | | STRICT (default) | HEAL (opt-in) |
@@ -46,6 +97,7 @@ real model in this repository: the tests use a scripted healer.
 | `driftChecked` | `false` when the workflow has no recorded final screen, so `drifted: false` means "not compared" |
 | `healed`, `healedSteps` | Heal mode only (see above) |
 | `levels` | Web: the level used by each step (`http`, `accessibility`, `not_run`) |
+| `skippedSteps` | Zero-based indexes of the steps left out because their optional Variable was omitted with `whenOmitted: "skip"`. Absent when none |
 | `mode` | `strict` or `heal` |
 | `data` | The structured result: table, list, fields, JSON, or the named groups of a terminal regex |
 | `text`, `title` | Visible text and title of the final screen (web), or the text of the result zone |

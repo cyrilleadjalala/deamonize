@@ -1,0 +1,48 @@
+{
+  "version": "1",
+  "targetType": "tui",
+  "targetName": "Task Console",
+  "startCommand": ["node", "./task-console.mjs"],
+  "workflows": [
+    {
+      "id": "22222222-2222-4222-8222-222222222201",
+      "label": "Add a task",
+      "steps": [
+        {
+          "actionType": "type",
+          "selectors": [],
+          "variable": "title",
+          "value": "Buy milk",
+          "label": "Title"
+        },
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "Enter",
+          "label": "Confirm"
+        }
+      ],
+      "variables": [
+        { "name": "title", "type": "string", "description": "Title of the task", "maxLength": 80 },
+        { "name": "urgent", "type": "boolean", "optional": true }
+      ],
+      "observedPayloads": [{ "title": "Buy milk", "urgent": false }],
+      "cols": 80,
+      "rows": 24
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222202",
+      "label": "Show the list",
+      "steps": [
+        {
+          "actionType": "keypress",
+          "selectors": [],
+          "value": "l",
+          "label": "List"
+        }
+      ],
+      "variables": [],
+      "observedPayloads": [{}]
+    }
+  ]
+}

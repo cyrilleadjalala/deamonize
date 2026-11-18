@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Optional fields</title></head>
+<body>
+<h1>Optional fields</h1>
+<label>Name <input id="name" type="text"></label>
+<label>Nickname <input id="nick" type="text"></label>
+<label>Count <input id="count" type="text"></label>
+<button type="button" id="show">Show</button>
+<div id="out" role="status"></div>
+<table id="people">
+  <thead><tr><th>Name</th><th></th></tr></thead>
+  <tbody>
+    <tr><td>Ada</td><td><button type="button" class="remove">Remove</button></td></tr>
+    <tr><td>Bob</td><td><button type="button" class="remove">Remove</button></td></tr>
+  </tbody>
+</table>
+<div id="removed" role="log"></div>
+<script>
+  document.getElementById('show').onclick = () => {
+    const value = (id) => document.getElementById(id).value;
+    document.getElementById('out').textContent = 'name=' + value('name') + ';nick=' + value('nick') + ';count=' + value('count') + ';';
+  };
+  for (const button of document.querySelectorAll('.remove')) {
+    button.onclick = () => {
+      const row = button.closest('tr');
+      document.getElementById('removed').textContent += 'removed ' + row.cells[0].textContent + ';';
+    };
+  }
+</script>
+</body></html>

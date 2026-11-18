@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Strict Level 2 execution of one web step with Playwright, shared by the generated
  * run-time (copied verbatim into the output directory) and the tests.
  *
@@ -338,6 +338,10 @@ async function locateAndAct(
         await act(page, pair.frame, locators[pick] as Locator, step, value, Math.max(300, deadline - Date.now()));
         return;
       } catch (err) {
+        if (err instanceof NonRetryableAction) {
+          // The control was found but cannot reach the state: another locator would not change that
+          throw new StepExecutionError(lastTried, `the action failed on ${pair.description}: ${err.message}`);
+        }
         const message = firstLine(err);
         failed.set(pair.key, `the action failed: ${message}`);
         const risk = step.risk ?? 'read';
@@ -374,6 +378,63 @@ async function locateAndAct(
 // Actions
 // ---------------------------------------------------------------------------
 
+/** 7.4: the target state. true or "true" is checked, false or "false" is unchecked, anything else is the recorded value. */
+export function checkTarget(resolved: string | undefined, recorded: string | undefined): boolean | undefined {
+  const read = (v: string | undefined): boolean | undefined => {
+    if (v === undefined) return undefined;
+    const text = String(v).trim().toLowerCase();
+    return text === 'true' ? true : text === 'false' ? false : undefined;
+  };
+  return read(resolved) ?? read(recorded);
+}
+
+/** 7.12: whether a click is needed. */
+export function needsClick(current: boolean, target: boolean): boolean {
+  return current !== target;
+}
+
+/** Thrown by `act` when retrying on another locator cannot help (a disabled control, a state never reached). */
+export class NonRetryableAction extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NonRetryableAction';
+  }
+}
+
+const CHECK_ROLES = ['checkbox', 'switch', 'menuitemcheckbox'];
+
+/** The state of a check control: `checked` of an input, else aria-checked === 'true' of a checkbox, switch or menuitemcheckbox. */
+async function readChecked(locator: Locator, timeout: number): Promise<{ checked: boolean; disabled: boolean }> {
+  return locator.evaluate(
+    (el: Element, roles: string[]) => {
+      const role = el.getAttribute('role');
+      const native = el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio');
+      const checked = native ? (el as HTMLInputElement).checked : (role !== null && roles.includes(role) || role === 'radio') && el.getAttribute('aria-checked') === 'true';
+      const disabled = (el as HTMLInputElement).disabled === true || el.getAttribute('aria-disabled') === 'true';
+      return { checked, disabled };
+    },
+    CHECK_ROLES,
+    { timeout }
+  );
+}
+
+/** Put a check control in the target state: click at most once, then wait until the page shows it (7.4, 7.5, 7.8, 7.12). */
+export async function checkControl(locator: Locator, target: boolean | undefined, timeout: number): Promise<void> {
+  if (target === undefined) throw new NonRetryableAction('the check step has no true or false value');
+  const until = Date.now() + timeout;
+  let state = await readChecked(locator, timeout);
+  if (!needsClick(state.checked, target)) return;
+  if (state.disabled) throw new NonRetryableAction('the control is disabled');
+  await locator.click({ timeout });
+  for (; ;) {
+    state = await readChecked(locator, Math.max(1, until - Date.now())).catch(() => state);
+    if (!needsClick(state.checked, target)) return;
+    if (Date.now() >= until) break;
+    await sleep(Math.min(POLL_MS, Math.max(1, until - Date.now())));
+  }
+  throw new NonRetryableAction(`the control did not become ${target ? 'checked' : 'unchecked'}`);
+}
+
 async function act(
   page: Page,
   frame: Frame,
@@ -385,6 +446,9 @@ async function act(
   switch (step.actionType) {
     case 'click':
       await locator.click({ timeout });
+      return;
+    case 'check':
+      await checkControl(locator, checkTarget(value, step.value), timeout);
       return;
     case 'hover':
       await locator.hover({ timeout });

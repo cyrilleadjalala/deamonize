@@ -32,8 +32,9 @@ describe('buildRowLocator', () => {
     expect(locator.containerSelectorCandidates.slice(0, 3)).toEqual(['div.card', '[role=article]', 'article']);
   });
 
-  it('fails instead of falling back to the recorded text when the Variable has no value', () => {
-    expect(() => buildRowLocator({ container: { kind: 'row' }, key: { text: 'Ada' }, variable: 'customer' }, {}))
+  it('falls back to the recorded key (2.11) and otherwise fails when the Variable has no value', () => {
+    expect(buildRowLocator({ container: { kind: 'row' }, key: { text: 'Ada' }, variable: 'customer' }, {}).hasText).toBe('Ada');
+    expect(() => buildRowLocator({ container: { kind: 'row' }, variable: 'customer' }, {}))
       .toThrow(/ROW_VARIABLE_MISSING/);
     expect(() => buildRowLocator({ container: { kind: 'row' }, variable: 'customer' }, { customer: '  ' }))
       .toThrow(RowResolutionError);

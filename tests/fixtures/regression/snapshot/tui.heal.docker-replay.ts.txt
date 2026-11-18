@@ -1,0 +1,209 @@
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { Step, Final, Limits } from "./replay.js";
+import { resolveTimeoutMs } from "./settle.js";
+import { missingSecrets, secretEnvName, secretVariables } from "./step-plan.js";
+import { withResolvedSecrets } from "./vault-reader.js";
+
+// Level 1 (--http) is not compiled in.
+const HTTP_SECRET_VARIABLES = (_steps: Step[]): string[] => [];
+const HTTP_MISSING_SECRETS = (_steps: Step[], _env?: Record<string, string | undefined>): string[] => [];
+
+// Heal mode is not compiled in.
+const HEAL_SUPPORT = false;
+const MODEL_ENV_NAMES: string[] = [];
+
+const DEFAULT_IMAGE = "task-console-sandbox";
+const WEB_TARGET = false;
+const STORAGE_STATE_RECORDED: string | undefined = undefined;
+// A terminal program needs nothing from the network.
+const DEFAULT_NETWORK = "none";
+// The set may ask for more: mounts (added to those of --mount) and the working directory of the program.
+const SET_MOUNTS: string[] = [];
+const SET_WORKDIR: string | undefined = undefined;
+// Read-only file system with a scratch /tmp; the program runs as an unprivileged user.
+const EXTRA_FLAGS: string[] = ["--read-only","--tmpfs","/tmp"];
+const HOST_COMMAND: string[] | undefined = ["node","./task-console.mjs"];
+
+const DOCKER = process.env.DAEMONIZE_DOCKER ?? "docker";
+const NETWORK = process.env.DAEMONIZE_SANDBOX_NETWORK ?? DEFAULT_NETWORK;
+const IMAGE = process.env.DAEMONIZE_SANDBOX_IMAGE ?? DEFAULT_IMAGE;
+const MEMORY_MB = Number(process.env.DAEMONIZE_SANDBOX_MEMORY_MB ?? 512);
+const CPUS = Number(process.env.DAEMONIZE_SANDBOX_CPUS ?? 1);
+// JSON arrays set by the user: the only folders of the host the container can see, e.g. ["/data:/data:ro"]
+const MOUNTS: string[] = [...new Set([...SET_MOUNTS, ...(JSON.parse(process.env.DAEMONIZE_SANDBOX_MOUNTS ?? "[]") as string[])])];
+// What to start inside the container, when it differs from what was recorded on the host.
+const COMMAND: string[] | undefined = process.env.DAEMONIZE_SANDBOX_COMMAND
+  ? JSON.parse(process.env.DAEMONIZE_SANDBOX_COMMAND)
+  : undefined;
+const URL_OVERRIDE = process.env.DAEMONIZE_SANDBOX_URL;
+const STARTUP_ALLOWANCE_MS = 20000;
+
+// A failed step comes back with its screenshot as data: keep it on the host, where the caller can open it.
+function keepScreenshot(result: Record<string, unknown>): Record<string, unknown> {
+  const failure = result.failure as Record<string, unknown> | undefined;
+  if (failure === undefined || failure === null || typeof failure.screenshotData !== "string") return result;
+  try {
+    const dir = join(tmpdir(), "daemonize-failures");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, "fail-" + Date.now() + "-" + String(failure.stepIndex) + ".png");
+    writeFileSync(path, Buffer.from(failure.screenshotData, "base64"));
+    failure.screenshot = path;
+  } catch {
+    delete failure.screenshot;
+  }
+  delete failure.screenshotData;
+  return result;
+}
+
+// Where the container sees the saved login
+const STORAGE_STATE_IN_CONTAINER = "/run/daemonize/storage-state.json";
+
+// The saved login on the host: DAEMONIZE_STORAGE_STATE, else the one recorded (relative to this folder). Web targets only.
+function resolveHostStorageState(): string | undefined {
+  if (!WEB_TARGET) return undefined;
+  if (process.env.DAEMONIZE_STORAGE_STATE) return resolve(process.env.DAEMONIZE_STORAGE_STATE);
+  if (STORAGE_STATE_RECORDED) return resolve(dirname(fileURLToPath(import.meta.url)), STORAGE_STATE_RECORDED);
+  return undefined;
+}
+
+// The arguments of docker run. Secrets are named without a value (docker reads them from this process's environment),
+// so no secret appears on a command line; the saved login is a read-only bind mount, never part of the image.
+// Where heal keeps its files on the host: the cache folder (read and written) and the recorded thumbnails (read-only).
+export type HealMounts = { cacheDir: string; cacheFile: string; anchorsDir: string };
+const HEAL_CACHE_IN_CONTAINER = "/run/daemonize/heal";
+const ANCHORS_IN_CONTAINER = "/run/daemonize/anchors";
+
+export function buildDockerArgs(options: { name: string; timeoutEnv: string[]; steps: Step[]; storagePath?: string; mode?: "strict" | "heal"; heal?: HealMounts }): string[] {
+  const secretEnv = [...new Set([
+    ...options.steps.filter((s) => s.secretRef !== undefined).map((s) => secretEnvName(s.secretRef as string)),
+    ...HTTP_SECRET_VARIABLES(options.steps),
+  ])].flatMap((variable) => ["-e", variable]);
+  // A terminal size set on the host applies in the container too (the recorded size travels in the request)
+  const sizeEnv = WEB_TARGET ? [] : ["DAEMONIZE_COLS", "DAEMONIZE_ROWS"].flatMap((variable) => /^[0-9]+$/.test(process.env[variable]?.trim() ?? "") ? ["-e", variable + "=" + process.env[variable]!.trim()] : []);
+  const mode = options.mode === "heal" ? "heal" : "strict";
+  // The settings of the model by name only (docker copies the value from this process), and only for a heal
+  const modelEnv = mode === "heal" && HEAL_SUPPORT ? MODEL_ENV_NAMES.flatMap((variable) => ["-e", variable]) : [];
+  // The cache is the one thing a heal writes; the thumbnails are read-only, like the saved login
+  const healMounts = mode === "heal" && HEAL_SUPPORT && options.heal !== undefined
+    ? [
+        "-v", options.heal.cacheDir + ":" + HEAL_CACHE_IN_CONTAINER,
+        "-e", "DAEMONIZE_HEAL_CACHE=" + HEAL_CACHE_IN_CONTAINER + "/" + options.heal.cacheFile,
+        "-v", options.heal.anchorsDir + ":" + ANCHORS_IN_CONTAINER + ":ro",
+        "-e", "DAEMONIZE_ANCHORS_DIR=" + ANCHORS_IN_CONTAINER
+      ]
+    : [];
+  return [
+    "run", "--rm", "-i", "--name", options.name,
+    // Never download an image implicitly: it must have been built on purpose
+    "--pull", "never",
+    "--network", NETWORK,
+    "--memory", MEMORY_MB + "m", "--cpus", String(CPUS),
+    "--pids-limit", "256", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+    ...EXTRA_FLAGS,
+    ...(SET_WORKDIR === undefined ? [] : ["-w", SET_WORKDIR]),
+    ...options.timeoutEnv,
+    ...sizeEnv,
+    "-e", "DAEMONIZE_MODE=" + mode,
+    ...secretEnv,
+    ...modelEnv,
+    ...healMounts,
+    ...(options.storagePath === undefined ? [] : ["-v", options.storagePath + ":" + STORAGE_STATE_IN_CONTAINER + ":ro", "-e", "DAEMONIZE_STORAGE_STATE=" + STORAGE_STATE_IN_CONTAINER]),
+    ...MOUNTS.flatMap((mount) => ["-v", mount]),
+    IMAGE
+  ];
+}
+
+// A terminal program replayed with a network (git clone, psql...) is allowed, but it is not the default: say so once.
+let warnedNetwork = false;
+function warnNetworkOnce(): void {
+  if (warnedNetwork || WEB_TARGET || NETWORK === "none") return;
+  warnedNetwork = true;
+  console.error("daemonize warning: the sandbox of this terminal program runs with the network " + NETWORK + " (a terminal program has none by default). It can reach the network and the services of the host.");
+}
+export async function replayInDocker(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}) {
+  const startedAt = Date.now();
+  warnNetworkOnce();
+  // Resolved here, so the container applies the same value; the step timeout travels as an environment variable
+  const REPLAY_TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });
+  const timeoutEnv = ["-e", "DAEMONIZE_TIMEOUT_MS=" + REPLAY_TIMEOUT_MS];
+  if (process.env.DAEMONIZE_STEP_TIMEOUT_MS) timeoutEnv.push("-e", "DAEMONIZE_STEP_TIMEOUT_MS=" + process.env.DAEMONIZE_STEP_TIMEOUT_MS);
+  const fail = (error: string) => ({ success: false, error, elapsedMs: Date.now() - startedAt });
+
+  // A secret that is not set fails the call before the container starts; the container receives the values from this environment, never on the command line
+  // Resolved once per call: the environment first, then the vault of the application, then the generic vault
+  const env = await withResolvedSecrets(process.env, [...secretVariables(steps), ...HTTP_SECRET_VARIABLES(steps)]);
+  const missing = [...new Set([...missingSecrets(steps, env), ...HTTP_MISSING_SECRETS(steps, env)])];
+  if (missing.length > 0) {
+    return { success: false, error: "missing_secret", failure: { missingSecret: missing[0], missing }, elapsedMs: Date.now() - startedAt };
+  }
+
+  if (HOST_COMMAND && !COMMAND && HOST_COMMAND.some((part) => /^[A-Za-z]:[\\/]/.test(part))) {
+    return fail("sandbox: the program was recorded with a path of the host; set DAEMONIZE_SANDBOX_COMMAND to its command line inside the container");
+  }
+
+  // The saved login stays on the host: the container gets that one file, read-only, by absolute path.
+  // Its path is not a secret; its content is never read or logged here.
+  const storagePath = resolveHostStorageState();
+  if (storagePath !== undefined && !(existsSync(storagePath) && statSync(storagePath).isFile())) {
+    return { success: false, error: "storage_state_missing", failure: { path: storagePath }, elapsedMs: Date.now() - startedAt };
+  }
+
+  const name = "daemonize-" + Math.random().toString(36).slice(2, 10);
+  // Heal mode: the cache and the thumbnails are folders of this server's output directory (or DAEMONIZE_HEAL_CACHE)
+  const mode = process.env.DAEMONIZE_MODE?.trim().toLowerCase() === "heal" ? "heal" : "strict";
+  let heal: HealMounts | undefined;
+  if (mode === "heal" && HEAL_SUPPORT) {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const cacheFile = process.env.DAEMONIZE_HEAL_CACHE ? resolve(process.env.DAEMONIZE_HEAL_CACHE) : join(here, ".daemonize", "heal-cache.json");
+    const anchorsDir = join(here, ".daemonize", "anchors");
+    try {
+      mkdirSync(dirname(cacheFile), { recursive: true });
+      mkdirSync(anchorsDir, { recursive: true });
+      heal = { cacheDir: dirname(cacheFile), cacheFile: basename(cacheFile), anchorsDir };
+    } catch {
+      heal = undefined;
+    }
+  }
+  const dockerArgs = buildDockerArgs({ name, timeoutEnv, steps, storagePath, mode, heal });
+
+  return new Promise<Record<string, unknown>>((resolve) => {
+    const child = spawn(DOCKER, dockerArgs, { stdio: ["pipe", "pipe", "pipe"], env });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (result: Record<string, unknown>) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => {
+      spawn(DOCKER, ["kill", name], { stdio: "ignore" }).on("error", () => {});
+      finish(fail("timeout"));
+    }, REPLAY_TIMEOUT_MS + STARTUP_ALLOWANCE_MS);
+
+    child.stdout.on("data", (data) => (stdout += data));
+    child.stderr.on("data", (data) => (stderr += data));
+    child.on("error", (err) => finish(fail("sandbox_unavailable: cannot run " + DOCKER + " (" + err.message + ")")));
+    child.on("close", (code) => {
+      const lastLine = stdout.trim().split("\n").pop() ?? "";
+      try {
+        finish(keepScreenshot(JSON.parse(lastLine)));
+        return;
+      } catch {
+        // Not a result: the container could not run
+      }
+      const detail = stderr.trim().split("\n").slice(-3).join(" ");
+      const unavailable = /Cannot connect to the Docker daemon|error during connect|No such image|pull access denied/i.test(stderr);
+      finish(fail((unavailable ? "sandbox_unavailable: " : "sandbox failed (exit " + code + "): ") + detail));
+    });
+    // The container may end before it has read everything
+    child.stdin.on("error", () => {});
+    child.stdin.end(JSON.stringify({ steps, args, final, limits: { callMs: REPLAY_TIMEOUT_MS }, command: COMMAND, url: URL_OVERRIDE }));
+  });
+}

@@ -1,0 +1,968 @@
+{
+  "loaded": {
+    "startUrl": "https://desk.example.test/customers",
+    "targetName": "Customer Desk",
+    "targetType": "web",
+    "version": "1",
+    "workflows": [
+      {
+        "id": "11111111-1111-4111-8111-111111111101",
+        "label": "Add customer note",
+        "observedPayloads": [
+          {
+            "customer": "Ada Lovelace",
+            "note": "hello world",
+            "plan": "pro"
+          }
+        ],
+        "steps": [
+          {
+            "actionType": "type",
+            "anchor": {
+              "frame": [],
+              "name": "Note",
+              "role": "textbox"
+            },
+            "label": "Note",
+            "risk": "write",
+            "selectors": [
+              "input[name=\"note\"]"
+            ],
+            "value": "hello world",
+            "variable": "note"
+          },
+          {
+            "actionType": "select",
+            "anchor": {
+              "frame": [],
+              "name": "Plan",
+              "role": "combobox"
+            },
+            "label": "Plan",
+            "risk": "write",
+            "selectors": [
+              "select[name=\"plan\"]"
+            ],
+            "value": "pro",
+            "variable": "plan"
+          },
+          {
+            "actionType": "click",
+            "anchor": {
+              "frame": [],
+              "name": "Open",
+              "role": "button"
+            },
+            "label": "Open",
+            "risk": "read",
+            "rowBinding": {
+              "container": {
+                "kind": "row",
+                "role": "row"
+              },
+              "key": {
+                "column": "Name",
+                "text": "Ada Lovelace"
+              },
+              "variable": "customer"
+            },
+            "selectors": [
+              "tr button"
+            ]
+          },
+          {
+            "actionType": "click",
+            "anchor": {
+              "frame": [],
+              "name": "Save",
+              "role": "button"
+            },
+            "label": "Save",
+            "risk": "write",
+            "selectors": [
+              "#save"
+            ]
+          }
+        ],
+        "variables": [
+          {
+            "description": "Customer name as shown in the list",
+            "name": "customer",
+            "type": "string"
+          },
+          {
+            "enum": [
+              "free",
+              "pro"
+            ],
+            "name": "plan",
+            "type": "string"
+          },
+          {
+            "maxLength": 200,
+            "name": "note",
+            "optional": true,
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "id": "11111111-1111-4111-8111-111111111102",
+        "label": "Add note by API",
+        "observedPayloads": [
+          {
+            "customer": "ada-lovelace",
+            "note": "from the API"
+          }
+        ],
+        "steps": [
+          {
+            "actionType": "type",
+            "anchor": {
+              "frame": [],
+              "name": "Note",
+              "role": "textbox"
+            },
+            "label": "Note",
+            "risk": "write",
+            "selectors": [
+              "input[name=\"note\"]"
+            ],
+            "value": "from the API",
+            "variable": "note"
+          },
+          {
+            "actionType": "click",
+            "anchor": {
+              "frame": [],
+              "name": "Save",
+              "role": "button"
+            },
+            "http": {
+              "auth": "none",
+              "bindings": [
+                {
+                  "in": "path",
+                  "name": "customer",
+                  "variable": "customer"
+                },
+                {
+                  "in": "body",
+                  "name": "text",
+                  "variable": "note"
+                }
+              ],
+              "body": {
+                "kind": "note",
+                "text": {
+                  "$var": "note"
+                }
+              },
+              "bodyFormat": "json",
+              "expectStatus": 201,
+              "headers": {
+                "accept": "application/json"
+              },
+              "method": "POST",
+              "query": {
+                "source": "desk"
+              },
+              "redacted": [],
+              "url": "https://desk.example.test/api/customers/{{customer}}/notes"
+            },
+            "label": "Save",
+            "risk": "write",
+            "selectors": [
+              "#save"
+            ]
+          }
+        ],
+        "variables": [
+          {
+            "name": "customer",
+            "type": "string"
+          },
+          {
+            "name": "note",
+            "optional": true,
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "id": "11111111-1111-4111-8111-111111111103",
+        "label": "Refresh the list",
+        "observedPayloads": [
+          {}
+        ],
+        "steps": [
+          {
+            "actionType": "click",
+            "anchor": {
+              "frame": [],
+              "name": "Refresh",
+              "role": "button"
+            },
+            "label": "Refresh",
+            "risk": "read",
+            "selectors": [
+              "#refresh"
+            ]
+          }
+        ],
+        "variables": []
+      }
+    ]
+  },
+  "options": {
+    "default": {
+      "files": [
+        ".dockerignore",
+        "POWER.md",
+        "browser-launch.js",
+        "browser-launch.ts",
+        "docker-replay.js",
+        "docker-replay.ts",
+        "extract.js",
+        "extract.ts",
+        "mcp-server.js",
+        "mcp-server.ts",
+        "mcp.json",
+        "name-map.json",
+        "openapi.json",
+        "package.json",
+        "plugin.json",
+        "replay.js",
+        "replay.ts",
+        "row-resolver.js",
+        "row-resolver.ts",
+        "sandbox/Dockerfile",
+        "sandbox/image.json",
+        "sandbox/package.json",
+        "screen-hash.js",
+        "screen-hash.ts",
+        "settle.js",
+        "settle.ts",
+        "skills/customer-desk/SKILL.md",
+        "step-plan.js",
+        "step-plan.ts",
+        "totp.js",
+        "totp.ts",
+        "vault-format.js",
+        "vault-format.ts",
+        "vault-reader.js",
+        "vault-reader.ts",
+        "vitest.config.ts",
+        "web-steps.js",
+        "web-steps.ts"
+      ],
+      "nameMap": {
+        "11111111-1111-4111-8111-111111111101": "add_customer_note",
+        "11111111-1111-4111-8111-111111111102": "add_note_by_api",
+        "11111111-1111-4111-8111-111111111103": "refresh_the_list"
+      },
+      "openapi": {
+        "info": {
+          "description": "Generated by Daemonize — MCP server for legacy application",
+          "title": "Customer Desk",
+          "version": "1"
+        },
+        "openapi": "3.1.0",
+        "paths": {
+          "/actions/11111111-1111-4111-8111-111111111101": {
+            "post": {
+              "operationId": "add_customer_note",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": true
+              },
+              "responses": {
+                "200": {
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "description": "Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: \"result_zone_not_found\"` (the steps already ran)."
+                },
+                "400": {
+                  "description": "Payload validation failure"
+                },
+                "504": {
+                  "description": "Replay timeout"
+                }
+              },
+              "summary": "Add customer note",
+              "tags": [
+                "actions"
+              ]
+            }
+          },
+          "/actions/11111111-1111-4111-8111-111111111102": {
+            "post": {
+              "operationId": "add_note_by_api",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": true
+              },
+              "responses": {
+                "200": {
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "description": "Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: \"result_zone_not_found\"` (the steps already ran)."
+                },
+                "400": {
+                  "description": "Payload validation failure"
+                },
+                "504": {
+                  "description": "Replay timeout"
+                }
+              },
+              "summary": "Add note by API",
+              "tags": [
+                "actions"
+              ]
+            }
+          },
+          "/actions/11111111-1111-4111-8111-111111111103": {
+            "post": {
+              "operationId": "refresh_the_list",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": true
+              },
+              "responses": {
+                "200": {
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "description": "Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: \"result_zone_not_found\"` (the steps already ran)."
+                },
+                "400": {
+                  "description": "Payload validation failure"
+                },
+                "504": {
+                  "description": "Replay timeout"
+                }
+              },
+              "summary": "Refresh the list",
+              "tags": [
+                "actions"
+              ]
+            }
+          }
+        }
+      },
+      "sandboxImage": {
+        "copy": [
+          "replay.js",
+          "screen-hash.js",
+          "settle.js",
+          "extract.js",
+          "row-resolver.js",
+          "step-plan.js",
+          "totp.js",
+          "vault-format.js",
+          "vault-reader.js",
+          "web-steps.js",
+          "browser-launch.js"
+        ],
+        "tag": "customer-desk-sandbox",
+        "targetType": "web"
+      },
+      "texts": {}
+    },
+    "heal": {
+      "files": [
+        ".dockerignore",
+        "POWER.md",
+        "browser-launch.js",
+        "browser-launch.ts",
+        "docker-replay.js",
+        "docker-replay.ts",
+        "extract.js",
+        "extract.ts",
+        "heal/cache.js",
+        "heal/cache.ts",
+        "heal/heal-step.js",
+        "heal/heal-step.ts",
+        "heal/healer.js",
+        "heal/healer.ts",
+        "heal/marks.js",
+        "heal/marks.ts",
+        "heal/providers/anthropic.js",
+        "heal/providers/anthropic.ts",
+        "heal/providers/index.js",
+        "heal/providers/index.ts",
+        "heal/providers/openai-compatible.js",
+        "heal/providers/openai-compatible.ts",
+        "heal/providers/openai.js",
+        "heal/providers/openai.ts",
+        "heal/providers/shared.js",
+        "heal/providers/shared.ts",
+        "heal/providers/text.js",
+        "heal/providers/text.ts",
+        "mcp-server.js",
+        "mcp-server.ts",
+        "mcp.json",
+        "name-map.json",
+        "openapi.json",
+        "package.json",
+        "plugin.json",
+        "replay.js",
+        "replay.ts",
+        "row-resolver.js",
+        "row-resolver.ts",
+        "sandbox/Dockerfile",
+        "sandbox/image.json",
+        "sandbox/package.json",
+        "screen-hash.js",
+        "screen-hash.ts",
+        "settle.js",
+        "settle.ts",
+        "skills/customer-desk/SKILL.md",
+        "step-plan.js",
+        "step-plan.ts",
+        "totp.js",
+        "totp.ts",
+        "vault-format.js",
+        "vault-format.ts",
+        "vault-reader.js",
+        "vault-reader.ts",
+        "vitest.config.ts",
+        "web-steps.js",
+        "web-steps.ts"
+      ],
+      "nameMap": {
+        "11111111-1111-4111-8111-111111111101": "add_customer_note",
+        "11111111-1111-4111-8111-111111111102": "add_note_by_api",
+        "11111111-1111-4111-8111-111111111103": "refresh_the_list"
+      },
+      "openapi": {
+        "info": {
+          "description": "Generated by Daemonize — MCP server for legacy application",
+          "title": "Customer Desk",
+          "version": "1"
+        },
+        "openapi": "3.1.0",
+        "paths": {
+          "/actions/11111111-1111-4111-8111-111111111101": {
+            "post": {
+              "operationId": "add_customer_note",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": true
+              },
+              "responses": {
+                "200": {
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "description": "Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: \"result_zone_not_found\"` (the steps already ran)."
+                },
+                "400": {
+                  "description": "Payload validation failure"
+                },
+                "504": {
+                  "description": "Replay timeout"
+                }
+              },
+              "summary": "Add customer note",
+              "tags": [
+                "actions"
+              ]
+            }
+          },
+          "/actions/11111111-1111-4111-8111-111111111102": {
+            "post": {
+              "operationId": "add_note_by_api",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": true
+              },
+              "responses": {
+                "200": {
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "description": "Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: \"result_zone_not_found\"` (the steps already ran)."
+                },
+                "400": {
+                  "description": "Payload validation failure"
+                },
+                "504": {
+                  "description": "Replay timeout"
+                }
+              },
+              "summary": "Add note by API",
+              "tags": [
+                "actions"
+              ]
+            }
+          },
+          "/actions/11111111-1111-4111-8111-111111111103": {
+            "post": {
+              "operationId": "refresh_the_list",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": true
+              },
+              "responses": {
+                "200": {
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "description": "Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: \"result_zone_not_found\"` (the steps already ran)."
+                },
+                "400": {
+                  "description": "Payload validation failure"
+                },
+                "504": {
+                  "description": "Replay timeout"
+                }
+              },
+              "summary": "Refresh the list",
+              "tags": [
+                "actions"
+              ]
+            }
+          }
+        }
+      },
+      "sandboxImage": {
+        "copy": [
+          "replay.js",
+          "screen-hash.js",
+          "settle.js",
+          "extract.js",
+          "row-resolver.js",
+          "step-plan.js",
+          "totp.js",
+          "vault-format.js",
+          "vault-reader.js",
+          "web-steps.js",
+          "browser-launch.js",
+          "heal"
+        ],
+        "tag": "customer-desk-sandbox",
+        "targetType": "web"
+      },
+      "texts": {}
+    },
+    "http": {
+      "files": [
+        ".dockerignore",
+        "POWER.md",
+        "browser-launch.js",
+        "browser-launch.ts",
+        "docker-replay.js",
+        "docker-replay.ts",
+        "extract.js",
+        "extract.ts",
+        "http-replay.js",
+        "http-replay.ts",
+        "mcp-server.js",
+        "mcp-server.ts",
+        "mcp.json",
+        "name-map.json",
+        "openapi.json",
+        "package.json",
+        "plugin.json",
+        "replay.js",
+        "replay.ts",
+        "row-resolver.js",
+        "row-resolver.ts",
+        "sandbox/Dockerfile",
+        "sandbox/image.json",
+        "sandbox/package.json",
+        "screen-hash.js",
+        "screen-hash.ts",
+        "settle.js",
+        "settle.ts",
+        "skills/customer-desk/SKILL.md",
+        "step-plan.js",
+        "step-plan.ts",
+        "totp.js",
+        "totp.ts",
+        "vault-format.js",
+        "vault-format.ts",
+        "vault-reader.js",
+        "vault-reader.ts",
+        "vitest.config.ts",
+        "web-steps.js",
+        "web-steps.ts"
+      ],
+      "nameMap": {
+        "11111111-1111-4111-8111-111111111101": "add_customer_note",
+        "11111111-1111-4111-8111-111111111102": "add_note_by_api",
+        "11111111-1111-4111-8111-111111111103": "refresh_the_list"
+      },
+      "openapi": {
+        "info": {
+          "description": "Generated by Daemonize — MCP server for legacy application",
+          "title": "Customer Desk",
+          "version": "1"
+        },
+        "openapi": "3.1.0",
+        "paths": {
+          "/actions/11111111-1111-4111-8111-111111111101": {
+            "post": {
+              "operationId": "add_customer_note",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": true
+              },
+              "responses": {
+                "200": {
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "description": "Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: \"result_zone_not_found\"` (the steps already ran)."
+                },
+                "400": {
+                  "description": "Payload validation failure"
+                },
+                "504": {
+                  "description": "Replay timeout"
+                }
+              },
+              "summary": "Add customer note",
+              "tags": [
+                "actions"
+              ]
+            }
+          },
+          "/actions/11111111-1111-4111-8111-111111111102": {
+            "post": {
+              "operationId": "add_note_by_api",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": true
+              },
+              "responses": {
+                "200": {
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "description": "Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: \"result_zone_not_found\"` (the steps already ran)."
+                },
+                "400": {
+                  "description": "Payload validation failure"
+                },
+                "504": {
+                  "description": "Replay timeout"
+                }
+              },
+              "summary": "Add note by API",
+              "tags": [
+                "actions"
+              ]
+            }
+          },
+          "/actions/11111111-1111-4111-8111-111111111103": {
+            "post": {
+              "operationId": "refresh_the_list",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": true
+              },
+              "responses": {
+                "200": {
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "description": "Structured content of the resulting screen. `drifted` is true when that screen differs from the one recorded (limited to the recorded zone, if any); `driftChecked` is false when no final screen was recorded, in which case `drifted` is false. When the workflow has a Result_Zone, `data` holds the structured content of that zone and `text` only its text; a zone that matches nothing returns `success: false` with `error: \"result_zone_not_found\"` (the steps already ran)."
+                },
+                "400": {
+                  "description": "Payload validation failure"
+                },
+                "504": {
+                  "description": "Replay timeout"
+                }
+              },
+              "summary": "Refresh the list",
+              "tags": [
+                "actions"
+              ]
+            }
+          }
+        }
+      },
+      "sandboxImage": {
+        "copy": [
+          "replay.js",
+          "screen-hash.js",
+          "settle.js",
+          "extract.js",
+          "row-resolver.js",
+          "step-plan.js",
+          "totp.js",
+          "vault-format.js",
+          "vault-reader.js",
+          "web-steps.js",
+          "browser-launch.js",
+          "http-replay.js"
+        ],
+        "tag": "customer-desk-sandbox",
+        "targetType": "web"
+      },
+      "texts": {}
+    }
+  },
+  "trace": [
+    {
+      "planSteps": [
+        "ui",
+        "ui",
+        "ui",
+        "ui"
+      ],
+      "steps": [
+        {
+          "index": 0,
+          "locatorsWithArguments": {
+            "ok": [
+              "getByRole('textbox', { name: 'Note', exact: true })",
+              "css: input[name=\"note\"]"
+            ]
+          },
+          "locatorsWithoutArguments": {
+            "ok": [
+              "getByRole('textbox', { name: 'Note', exact: true })",
+              "css: input[name=\"note\"]"
+            ]
+          },
+          "request": null,
+          "rowLocator": null
+        },
+        {
+          "index": 1,
+          "locatorsWithArguments": {
+            "ok": [
+              "getByRole('combobox', { name: 'Plan', exact: true })",
+              "css: select[name=\"plan\"]"
+            ]
+          },
+          "locatorsWithoutArguments": {
+            "ok": [
+              "getByRole('combobox', { name: 'Plan', exact: true })",
+              "css: select[name=\"plan\"]"
+            ]
+          },
+          "request": null,
+          "rowLocator": null
+        },
+        {
+          "index": 2,
+          "locatorsWithArguments": {
+            "ok": [
+              "getByRole('button', { name: 'Open', exact: true }) in the row containing 'Grace Hopper'",
+              "css: tr button in the row containing 'Grace Hopper'"
+            ]
+          },
+          "locatorsWithoutArguments": {
+            "ok": [
+              "row of the step: ROW_VARIABLE_MISSING: no value for the variable \"customer\" that selects the row"
+            ]
+          },
+          "request": null,
+          "rowLocator": {
+            "ok": {
+              "column": "Name",
+              "containerSelectorCandidates": [
+                "[role=row]",
+                "tr"
+              ],
+              "hasText": "Grace Hopper"
+            }
+          }
+        },
+        {
+          "index": 3,
+          "locatorsWithArguments": {
+            "ok": [
+              "getByRole('button', { name: 'Save', exact: true })",
+              "#save"
+            ]
+          },
+          "locatorsWithoutArguments": {
+            "ok": [
+              "getByRole('button', { name: 'Save', exact: true })",
+              "#save"
+            ]
+          },
+          "request": null,
+          "rowLocator": null
+        }
+      ],
+      "workflow": "11111111-1111-4111-8111-111111111101"
+    },
+    {
+      "planSteps": [
+        "prep",
+        "http"
+      ],
+      "steps": [
+        {
+          "index": 0,
+          "locatorsWithArguments": {
+            "ok": [
+              "getByRole('textbox', { name: 'Note', exact: true })",
+              "css: input[name=\"note\"]"
+            ]
+          },
+          "locatorsWithoutArguments": {
+            "ok": [
+              "getByRole('textbox', { name: 'Note', exact: true })",
+              "css: input[name=\"note\"]"
+            ]
+          },
+          "request": null,
+          "rowLocator": null
+        },
+        {
+          "index": 1,
+          "locatorsWithArguments": {
+            "ok": [
+              "getByRole('button', { name: 'Save', exact: true })",
+              "#save"
+            ]
+          },
+          "locatorsWithoutArguments": {
+            "ok": [
+              "getByRole('button', { name: 'Save', exact: true })",
+              "#save"
+            ]
+          },
+          "request": {
+            "ok": {
+              "body": "{\"text\":\"sample note\",\"kind\":\"note\"}",
+              "headers": {
+                "accept": "application/json",
+                "content-type": "application/json"
+              },
+              "method": "POST",
+              "url": "https://desk.example.test/api/customers/Grace%20Hopper/notes?source=desk"
+            }
+          },
+          "rowLocator": null
+        }
+      ],
+      "workflow": "11111111-1111-4111-8111-111111111102"
+    },
+    {
+      "planSteps": [
+        "ui"
+      ],
+      "steps": [
+        {
+          "index": 0,
+          "locatorsWithArguments": {
+            "ok": [
+              "getByRole('button', { name: 'Refresh', exact: true })",
+              "#refresh"
+            ]
+          },
+          "locatorsWithoutArguments": {
+            "ok": [
+              "getByRole('button', { name: 'Refresh', exact: true })",
+              "#refresh"
+            ]
+          },
+          "request": null,
+          "rowLocator": null
+        }
+      ],
+      "workflow": "11111111-1111-4111-8111-111111111103"
+    }
+  ]
+}

@@ -126,7 +126,10 @@ describe('relational locators for dynamic lists and tables', () => {
     const missing = await resolveRowStep(page, del, { customer: 'Nobody' }).catch((e: Error) => e);
     expect((missing as Error).message).toMatch(/ROW_NOT_FOUND: no row matches "Nobody"/);
 
-    await expect(resolveRowStep(page, del, {})).rejects.toThrow(/ROW_VARIABLE_MISSING/);
+    // 2.10 and 2.11: the Variable is omitted, so the recorded key selects the row; with no key it still fails
+    expect((await resolveRowStep(page, del, {}))?.hasText).toBe('Ada');
+    const keyless = { ...del, rowBinding: { ...del.rowBinding!, key: undefined } } as WorkflowStep;
+    await expect(resolveRowStep(page, keyless, {})).rejects.toThrow(/ROW_VARIABLE_MISSING/);
   }, 60000);
 
   it('binds a card to a Variable made from a text selected in it, and resolves it in shuffled cards', async () => {

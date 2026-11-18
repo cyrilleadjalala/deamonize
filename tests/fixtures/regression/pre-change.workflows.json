@@ -1,0 +1,116 @@
+{
+  "version": "1",
+  "targetType": "web",
+  "targetName": "Customer Desk",
+  "startUrl": "https://desk.example.test/customers",
+  "workflows": [
+    {
+      "id": "11111111-1111-4111-8111-111111111101",
+      "label": "Add customer note",
+      "steps": [
+        {
+          "actionType": "type",
+          "selectors": ["input[name=\"note\"]"],
+          "variable": "note",
+          "value": "hello world",
+          "label": "Note",
+          "anchor": { "role": "textbox", "name": "Note", "frame": [] },
+          "risk": "write"
+        },
+        {
+          "actionType": "select",
+          "selectors": ["select[name=\"plan\"]"],
+          "variable": "plan",
+          "value": "pro",
+          "label": "Plan",
+          "anchor": { "role": "combobox", "name": "Plan", "frame": [] },
+          "risk": "write"
+        },
+        {
+          "actionType": "click",
+          "selectors": ["tr button"],
+          "label": "Open",
+          "anchor": { "role": "button", "name": "Open", "frame": [] },
+          "rowBinding": {
+            "container": { "kind": "row", "role": "row" },
+            "key": { "text": "Ada Lovelace", "column": "Name" },
+            "variable": "customer"
+          },
+          "risk": "read"
+        },
+        {
+          "actionType": "click",
+          "selectors": ["#save"],
+          "label": "Save",
+          "anchor": { "role": "button", "name": "Save", "frame": [] },
+          "risk": "write"
+        }
+      ],
+      "variables": [
+        { "name": "customer", "type": "string", "description": "Customer name as shown in the list" },
+        { "name": "plan", "type": "string", "enum": ["free", "pro"] },
+        { "name": "note", "type": "string", "optional": true, "maxLength": 200 }
+      ],
+      "observedPayloads": [
+        { "customer": "Ada Lovelace", "plan": "pro", "note": "hello world" }
+      ]
+    },
+    {
+      "id": "11111111-1111-4111-8111-111111111102",
+      "label": "Add note by API",
+      "steps": [
+        {
+          "actionType": "type",
+          "selectors": ["input[name=\"note\"]"],
+          "variable": "note",
+          "value": "from the API",
+          "label": "Note",
+          "anchor": { "role": "textbox", "name": "Note", "frame": [] },
+          "risk": "write"
+        },
+        {
+          "actionType": "click",
+          "selectors": ["#save"],
+          "label": "Save",
+          "anchor": { "role": "button", "name": "Save", "frame": [] },
+          "risk": "write",
+          "http": {
+            "method": "POST",
+            "url": "https://desk.example.test/api/customers/{{customer}}/notes",
+            "query": { "source": "desk" },
+            "body": { "text": { "$var": "note" }, "kind": "note" },
+            "bodyFormat": "json",
+            "headers": { "accept": "application/json" },
+            "auth": "none",
+            "expectStatus": 201,
+            "bindings": [
+              { "variable": "customer", "in": "path", "name": "customer" },
+              { "variable": "note", "in": "body", "name": "text" }
+            ],
+            "redacted": []
+          }
+        }
+      ],
+      "variables": [
+        { "name": "customer", "type": "string" },
+        { "name": "note", "type": "string", "optional": true }
+      ],
+      "observedPayloads": [{ "customer": "ada-lovelace", "note": "from the API" }]
+    },
+    {
+      "id": "11111111-1111-4111-8111-111111111103",
+      "label": "Refresh the list",
+      "steps": [
+        {
+          "actionType": "click",
+          "selectors": ["#refresh"],
+          "label": "Refresh",
+          "anchor": { "role": "button", "name": "Refresh", "frame": [] },
+          "risk": "read"
+        }
+      ],
+      "variables": [],
+      "observedPayloads": [{}]
+    }
+  ]
+}

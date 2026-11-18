@@ -1,0 +1,309 @@
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { existsSync } from "node:fs";
+import { dirname, resolve as resolvePath } from "node:path";
+import { fileURLToPath } from "node:url";
+import { screenId } from "./screen-hash.js";
+import { waitForEffect, resolveTimeoutMs, resolveStepTimeoutMs, boundStepTimeoutMs, type SettlePage } from "./settle.js";
+import { createWebRun, executeWebStep, captureFailure, captureFinal, extractWebZone, type WebRun } from "./web-steps.js";
+import { boundText, redactDeep, zoneFailureResult, type ExtractorLike } from "./extract.js";
+import { missingSecrets, secretValues, redactSecrets, runStepsStrict, describeFailure, failureResult, StepExecutionError, HealUnavailableError, HealFailedError, healEligible, hasNoDomTarget, parseMode, resolveStepValue, secretVariables, type ReplayMode } from "./step-plan.js";
+import { withResolvedSecrets } from "./vault-reader.js";
+import { launchReplayBrowser } from "./browser-launch.js";
+import { planSteps, recipeMutates, runHttpStep, withRecordedDefaults, rebaseOrigin, missingHttpSecrets, httpSecretValues, httpSecretNames, secretVariable, buildHttpResult, httpFailureResult, scrub } from "./http-replay.js";
+
+const START_URL = "https://desk.example.test/customers";
+const STORAGE_STATE: string | undefined = undefined;
+
+export type Step = {
+  actionType: string;
+  selectors: string[];
+  value?: string;
+  variable?: string;
+  label?: string;
+  timeoutMs?: number;
+  // Level 2 (web): see step-plan.ts
+  anchor?: any;
+  rowBinding?: any;
+  risk?: "read" | "write" | "delete";
+  // Level 3 (web): see step-plan.ts. A write or delete step is healed only with allowHeal.
+  allowHeal?: boolean;
+  visual?: any;
+  secretRef?: string;
+  totp?: boolean;
+  // Terminal: wait for a pattern of the rendered screen instead of a moment of silence, see pattern-wait.ts
+  waitFor?: any;
+  // Level 1 (web, compiled with --http): see http-replay.ts
+  http?: any;
+};
+
+// Where a replay starts when it runs in a sandbox that cannot reach the recorded one.
+export type Overrides = { command?: string[]; url?: string };
+
+// Timeouts of a call, in the order they apply: the call (_timeoutMs), DAEMONIZE_TIMEOUT_MS, the workflow, the set, 30 s.
+export type Limits = { callMs?: number; workflowMs?: number; setMs?: number };
+
+// What the call is compared with to tell whether the application still looks as recorded.
+// finalZone limits the comparison: a CSS selector (web) or a rectangle of the screen (terminal).
+export type Zone = { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } };
+export type ResultZone = Zone & { extractor?: ExtractorLike };
+// cols and rows: the terminal size the workflow was recorded at (terminal targets); absent in old files.
+export type Final = { finalScreenId?: string; finalZone?: Zone; resultZone?: ResultZone; workflowId?: string; cols?: number; rows?: number };
+
+const MAX_TEXT_LENGTH = 20000;
+
+// Without a recorded final screen nothing can be compared: drifted is false and driftChecked says so.
+function driftFields(hash: string | undefined, final: Final): { drifted: boolean; driftChecked: boolean } {
+  if (final.finalScreenId === undefined) return { drifted: false, driftChecked: false };
+  return { drifted: hash !== final.finalScreenId, driftChecked: true };
+}
+
+function resolveValue(step: Step, args: Record<string, unknown>): string | undefined {
+  if (step.variable !== undefined) {
+    const supplied = args[step.variable];
+    return supplied === undefined || supplied === null ? step.value : String(supplied);
+  }
+  return step.value;
+}
+
+// Where the saved login is: DAEMONIZE_STORAGE_STATE (in a container, the read-only mount), else the recorded one, relative to this folder.
+function resolveStorageState(): string | undefined {
+  if (process.env.DAEMONIZE_STORAGE_STATE) return resolvePath(process.env.DAEMONIZE_STORAGE_STATE);
+  if (STORAGE_STATE) return resolvePath(dirname(fileURLToPath(import.meta.url)), STORAGE_STATE);
+  return undefined;
+}
+
+// Timeout of a step (its action and the wait on its effect): the step's own, DAEMONIZE_STEP_TIMEOUT_MS, 8 s.
+const STEP_TIMEOUT_MS = resolveStepTimeoutMs({ env: process.env.DAEMONIZE_STEP_TIMEOUT_MS });
+
+// strict (the default) or heal; anything but the exact word "heal" is strict
+const MODE: ReplayMode = parseMode(process.env.DAEMONIZE_MODE);
+// The steps of this call that a heal performed, and the heal session of the call
+type HealTrack = { healedSteps: Array<{ stepIndex: number; source: string }>; session?: any };
+
+function errorParts(err: unknown): { tried: string[]; reason: string } {
+  if (err instanceof StepExecutionError || err instanceof HealUnavailableError || err instanceof HealFailedError) return { tried: err.tried, reason: err.reason };
+  return { tried: [], reason: (err as Error)?.message ?? String(err) };
+}
+
+// The result of a step that failed: the strict diagnostic, and what heal mode adds to it
+async function stepFailureResult(webRun: WebRun, outcome: { stepIndex: number; step: Step; tried: string[]; reason: string; cause?: unknown }, startedAt: number, extra: Record<string, unknown> = {}) {
+  const shot = await captureFailure(webRun, outcome.stepIndex);
+  const failure = describeFailure({
+    stepIndex: outcome.stepIndex,
+    step: outcome.step,
+    tried: outcome.tried,
+    reason: outcome.reason,
+    screenshot: shot.screenshot,
+    thumbnail: shot.thumbnail,
+    secrets: webRun.secrets
+  });
+  let failed: Record<string, unknown> = { ...failureResult(failure, Date.now() - startedAt), ...extra };
+  // Heal mode was asked for but cannot run: said as such, not as a plain strict failure
+  if (outcome.cause instanceof HealUnavailableError) failed = { ...failed, error: "heal_unavailable" };
+  // Heal ran and found nothing
+  else if (outcome.cause instanceof HealFailedError) failed = { ...failed, heal: outcome.cause.heal };
+  // In a container the host keeps the picture: it travels in the result and the host saves it
+  return shot.data === undefined ? failed : { ...failed, failure: { ...(failed.failure as object), screenshotData: shot.data } };
+}
+
+// What a call reports about heal: always present in heal mode, absent in strict mode
+function modeFields(track: HealTrack): Record<string, unknown> {
+  return { mode: MODE, ...(MODE === "heal" ? { healed: track.healedSteps.length > 0, healedSteps: track.healedSteps } : {}) };
+}
+
+// The result of a call that ends on a page: its title, visible text (or the data of the Result_Zone) and the drift check.
+async function finishWeb(webRun: WebRun, page: Page, final: Final, startedAt: number, deadline: number, extra: Record<string, unknown> = {}) {
+  // The steps may have moved to another page (a pop-up)
+  const last = webRun.pages[webRun.current];
+  const finalPage = last !== undefined && !last.isClosed() ? last : page;
+  // A Result_Zone limits the result to one element and extracts its structured data; without one, the whole visible text
+  let text: string;
+  let data: unknown;
+  if (final.resultZone === undefined) {
+    text = await finalPage.evaluate(() => document.body.innerText);
+  } else {
+    // The steps already ran: a zone that cannot be read is reported as such, strictly
+    const read = await extractWebZone(finalPage, final.resultZone, boundStepTimeoutMs(STEP_TIMEOUT_MS, deadline - Date.now()));
+    if (!read.ok) return zoneFailureResult(read, Date.now() - startedAt);
+    text = read.text;
+    data = redactDeep(typeof read.data === "string" ? boundText(read.data) : read.data, (value) => redactSecrets(value, webRun.secrets));
+  }
+  // The same screen as at recording time: the whole page, or only the zone when there is one
+  let hash: string | undefined;
+  if (final.finalScreenId !== undefined) {
+    const zone = final.finalZone?.selector;
+    // A zone that matches nothing leaves hash undefined, which counts as drift
+    const raw = zone === undefined
+      ? await finalPage.content()
+      : (await finalPage.locator(zone).count()) === 0
+        ? undefined
+        : await finalPage.locator(zone).first().evaluate((el: Element) => el.outerHTML, { timeout: STEP_TIMEOUT_MS }).catch(() => undefined);
+    hash = raw === undefined ? undefined : screenId("dom", raw);
+  }
+  // DAEMONIZE_SCREENSHOT=final: a picture of the last screen (never while a password or code field shows)
+  const finalShot = process.env.DAEMONIZE_SCREENSHOT === "final" ? await captureFinal(finalPage) : {};
+  return {
+    success: true,
+    screenType: "dom",
+    title: redactSecrets(await finalPage.title(), webRun.secrets),
+    text: redactSecrets(boundText(text, MAX_TEXT_LENGTH), webRun.secrets),
+    ...(final.resultZone === undefined ? {} : { data }),
+    ...driftFields(hash, final),
+    ...finalShot,
+    ...extra,
+    elapsedMs: Date.now() - startedAt
+  };
+}
+async function runStep(webRun: WebRun, step: Step, _index: number, args: Record<string, unknown>, timeoutMs: number, _track: HealTrack, _final: Final, env: Record<string, string | undefined>): Promise<void> {
+  try {
+    await executeWebStep(webRun, step, args, { timeoutMs, env });
+  } catch (err) {
+    if (err instanceof StepExecutionError && err.healable && healEligible(step, MODE)) {
+      throw new HealUnavailableError(err.tried, "heal mode was requested but this server was compiled without --heal-support (recompile with: daemonize compile --heal-support). The deterministic locators had failed: " + err.reason);
+    }
+    throw err;
+  }
+}
+
+async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides, track: HealTrack) {
+  const startedAt = Date.now();
+  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });
+  const deadline = startedAt + TIMEOUT_MS;
+  // A secret that is not set fails the call before any step runs; only the name of its variable is reported
+  // A step kept on the page never reads its recorded {"$secret":NAME} references: only the steps run over HTTP need them
+  const plan = planSteps(steps);
+  const httpSteps = steps.filter((_, index) => plan[index] === "http");
+  const httpVariables = httpSteps.flatMap((step) => httpSecretNames(step.http).map(secretVariable));
+  const env = await withResolvedSecrets(process.env, [...secretVariables(steps), ...httpVariables]);
+  const missing = [...new Set([...missingSecrets(steps, env), ...missingHttpSecrets(httpSteps, env)])];
+  if (missing.length > 0) {
+    return { success: false, error: "missing_secret", failure: { missingSecret: missing[0], missing }, elapsedMs: Date.now() - startedAt };
+  }
+  // The saved login is referenced by path and read into memory only; its content is never logged
+  const storagePath = resolveStorageState();
+  if (storagePath !== undefined && !existsSync(storagePath)) {
+    return { success: false, error: "storage_state_missing", failure: { path: storagePath }, elapsedMs: Date.now() - startedAt };
+  }
+  const variables = withRecordedDefaults(steps, args);
+  // The level each step ran at; a field-filling step that only fed a request counts as http
+  const levels: string[] = plan.map((mode) => (mode === "ui" ? "accessibility" : "http"));
+  const secrets: string[] = [...secretValues(steps, env), ...httpSecretValues(httpSteps, env)];
+  let levelFallback = false;
+  let session: { browser: Browser; context: BrowserContext; page: Page; webRun: WebRun } | undefined;
+  let timer: NodeJS.Timeout | undefined;
+
+  // The browser starts when a step first needs it, on the application as the requests left it
+  const openBrowser = async () => {
+    if (session !== undefined) return session;
+    const browser = await launchReplayBrowser(chromium);
+    try {
+      const context = await browser.newContext(storagePath !== undefined ? { storageState: storagePath } : {});
+      const page = await context.newPage();
+      const webRun = createWebRun(context, page);
+      webRun.secrets.push(...secrets);
+      await page.goto(overrides.url ?? START_URL, { timeout: Math.max(1, deadline - Date.now()) });
+      await waitForEffect(page as unknown as SettlePage, { timeoutMs: boundStepTimeoutMs(STEP_TIMEOUT_MS, deadline - Date.now()) });
+      session = { browser, context, page, webRun };
+      return session;
+    } catch (err) {
+      await browser.close().catch(() => {});
+      throw err;
+    }
+  };
+
+  try {
+    const run = async () => {
+      let lastHttp: { data: unknown; drifted: boolean; driftChecked: boolean } | undefined;
+      // Field-filling steps skipped because a later request carries their value
+      const deferred: number[] = [];
+      const stepTimeout = (step: Step) => boundStepTimeoutMs(resolveStepTimeoutMs({ step: step.timeoutMs, env: process.env.DAEMONIZE_STEP_TIMEOUT_MS }), deadline - Date.now());
+      // Level 2 for one step; a failure stops the call, as in strict mode
+      const ui = async (index: number): Promise<Record<string, unknown> | undefined> => {
+        const open = await openBrowser();
+        try {
+          await runStep(open.webRun, steps[index], index, variables, stepTimeout(steps[index]), track, final, env);
+          return undefined;
+        } catch (err) {
+          return await stepFailureResult(open.webRun, { stepIndex: index, step: steps[index], ...errorParts(err), cause: err }, startedAt, { levels, ...(levelFallback ? { levelFallback: true } : {}) });
+        }
+      };
+
+      for (let index = 0; index < steps.length; index++) {
+        const step = steps[index];
+        if (plan[index] === "prep") {
+          deferred.push(index);
+          continue;
+        }
+        if (plan[index] === "http") {
+          const recipe = { ...step.http, url: rebaseOrigin(step.http.url, START_URL, overrides.url) };
+          // With a browser open, its current cookies are the login; else the saved login file
+          const state = session !== undefined ? await session.context.storageState() : storagePath;
+          const outcome = await runHttpStep(recipe, variables, env, { timeoutMs: stepTimeout(step), storageState: state });
+          secrets.push(...outcome.secrets.filter((s) => !secrets.includes(s)));
+          if (session !== undefined) session.webRun.secrets.push(...outcome.secrets.filter((s) => !session!.webRun.secrets.includes(s)));
+          if (outcome.ok) {
+            lastHttp = outcome;
+            continue;
+          }
+          // A write or delete request may have reached the server: another level could do the action twice
+          if (recipeMutates(step.http)) {
+            return httpFailureResult({ stepIndex: index, step, outcome, levels: levels.map((l, i) => (i > index ? "not_run" : l)), elapsedMs: Date.now() - startedAt });
+          }
+          // A read step is repeated on the page, strictly
+          levelFallback = true;
+          levels[index] = "accessibility";
+          lastHttp = undefined;
+        }
+        for (const earlier of deferred.splice(0)) {
+          levels[earlier] = "accessibility";
+          const failed = await ui(earlier);
+          if (failed !== undefined) return failed;
+        }
+        const failed = await ui(index);
+        if (failed !== undefined) return failed;
+        lastHttp = undefined;
+      }
+
+      // The call ends on an HTTP step: the response is the result
+      if (lastHttp !== undefined) {
+        return buildHttpResult({ ...lastHttp, resultZone: final.resultZone, levels, levelFallback, secrets, elapsedMs: Date.now() - startedAt });
+      }
+      const open = await openBrowser();
+      return await finishWeb(open.webRun, open.page, final, startedAt, deadline, { levels, ...(levelFallback ? { levelFallback: true } : {}) });
+    };
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS);
+    });
+    return await Promise.race([run(), timeout]);
+  } catch (err) {
+    // A Playwright wait (page.goto) that ran out with the call budget is the call timeout
+    const message = (err as Error).name === "TimeoutError" && Date.now() >= deadline - 5 ? "timeout" : scrub((err as Error).message, secrets);
+    return { success: false, error: message, elapsedMs: Date.now() - startedAt };
+  } finally {
+    clearTimeout(timer);
+    const open = session;
+    if (open !== undefined) await open.browser.close().catch(() => {});
+  }
+}
+
+export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}) {
+  const track: HealTrack = { healedSteps: [] };
+  const result = await replayCore(steps, args, final, limits, overrides, track);
+  return { ...modeFields(track), ...result };
+}
+
+if (process.argv.includes("--container")) {
+  let input = "";
+  for await (const chunk of process.stdin) input += chunk;
+  const request = JSON.parse(input) as {
+    steps: Step[];
+    args: Record<string, unknown>;
+    final?: Final;
+    limits?: Limits;
+    command?: string[];
+    url?: string;
+  };
+  const result = await replay(request.steps, request.args, request.final ?? {}, request.limits ?? {}, { command: request.command, url: request.url });
+  process.stdout.write(JSON.stringify(result) + "\n");
+  process.exit(0);
+}

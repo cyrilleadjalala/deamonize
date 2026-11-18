@@ -2,7 +2,7 @@ import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js';
 import _addFormats from 'ajv-formats';
 import { findLiteralSecrets } from '../recorder/redactor.js';
 import { DescriptiveParseError } from '../state/state-machine-builder.js';
-import type { Workflow, WorkflowSet } from '../types.js';
+import type { WorkflowSet } from '../types.js';
 
 // ajv-formats ships as CJS; under NodeNext esModuleInterop the module object
 // itself may not carry call signatures in TypeScript's view.
@@ -49,7 +49,7 @@ export const WorkflowSetSchema: Record<string, unknown> = {
       properties: {
         actionType: {
           type: 'string',
-          enum: ['click', 'keypress', 'form_submit', 'type', 'select', 'hover', 'scrollIntoView', 'switch_page'],
+          enum: ['click', 'keypress', 'form_submit', 'type', 'select', 'hover', 'scrollIntoView', 'switch_page', 'check'],
         },
         selectors: { type: 'array', items: { type: 'string' } },
         value: { type: 'string' },
@@ -67,6 +67,13 @@ export const WorkflowSetSchema: Record<string, unknown> = {
         waitFor: { $ref: '#/$defs/ScreenWait' },
         timeoutMs: { type: 'integer', minimum: 1 },
       },
+      // A check step holds the state to reach: the text true or false
+      allOf: [
+        {
+          if: { properties: { actionType: { const: 'check' } }, required: ['actionType'] },
+          then: { required: ['value'], properties: { value: { enum: ['true', 'false'] } } },
+        },
+      ],
     },
     Variable: {
       type: 'object',
@@ -77,10 +84,18 @@ export const WorkflowSetSchema: Record<string, unknown> = {
         type: { type: 'string', enum: ['string', 'number', 'boolean'] },
         description: { type: 'string' },
         optional: { type: 'boolean' },
+        whenOmitted: { type: 'string', enum: ['useRecorded', 'skip'] },
         enum: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string' } },
         pattern: { type: 'string', minLength: 1 },
         maxLength: { type: 'integer', minimum: 1 },
       },
+      // whenOmitted only means something for an optional Variable
+      allOf: [
+        {
+          if: { required: ['whenOmitted'] },
+          then: { required: ['optional'], properties: { optional: { const: true } } },
+        },
+      ],
     },
     Workflow: {
       type: 'object',
@@ -89,6 +104,9 @@ export const WorkflowSetSchema: Record<string, unknown> = {
       properties: {
         id: { type: 'string', format: 'uuid' },
         label: { type: 'string', minLength: 1 },
+        description: { type: 'string', maxLength: 1000 },
+        startUrl: { type: 'string', minLength: 1, maxLength: 2048, pattern: '^https?://\\S+$' },
+        storageState: { oneOf: [{ type: 'string', minLength: 1, maxLength: 1024 }, { type: 'null' }] },
         steps: { type: 'array', minItems: 1, items: { $ref: '#/$defs/Step' } },
         variables: { type: 'array', items: { $ref: '#/$defs/Variable' } },
         finalScreenId: { type: 'string', pattern: '^[0-9a-f]{16}$' },
@@ -352,6 +370,54 @@ export const WorkflowSetSchema: Record<string, unknown> = {
   },
 };
 
+interface SchemaErrorLike {
+  instancePath: string;
+  message?: string;
+  keyword?: string;
+  params?: Record<string, unknown>;
+}
+
+const FIELD_MESSAGES: Record<string, string> = {
+  description: 'description must be a text of at most 1000 characters',
+  startUrl: 'startUrl must be an absolute http or https address of at most 2048 characters',
+  storageState: 'storageState must be a file path of at most 1024 characters, or null',
+};
+
+/**
+ * Maps an Ajv error to a sentence that names the workflow id and the Variable or field it is about.
+ * An error outside a workflow keeps the message of the validator.
+ */
+export function describeSchemaError(set: unknown, error: SchemaErrorLike): string {
+  const base = error.message ?? 'Unknown validation error';
+  const parts = (error.instancePath ?? '').split('/').slice(1);
+  if (parts[0] !== 'workflows' || parts.length < 2) return base;
+  const workflows = (set as { workflows?: unknown } | null)?.workflows;
+  const workflow = Array.isArray(workflows) ? (workflows[Number(parts[1])] as Record<string, any> | undefined) : undefined;
+  const id = typeof workflow?.id === 'string' ? workflow.id : `#${parts[1]}`;
+  const head = `workflow "${id}"`;
+  if (parts[2] === 'variables' && parts.length >= 4) {
+    const variable = Array.isArray(workflow?.variables) ? (workflow.variables[Number(parts[3])] as Record<string, unknown> | undefined) : undefined;
+    const name = typeof variable?.name === 'string' ? variable.name : `#${parts[3]}`;
+    const field = parts[4];
+    if (field === 'whenOmitted') return `${head}, variable "${name}": whenOmitted must be useRecorded or skip`;
+    if ((field === 'optional' && variable?.whenOmitted !== undefined) || (field === undefined && error.params?.missingProperty === 'optional')) {
+      return `${head}, variable "${name}": whenOmitted needs optional: true`;
+    }
+    return `${head}, variable "${name}"${field === undefined ? '' : `, ${field}`}: ${base}`;
+  }
+  if (parts[2] === 'steps' && parts.length >= 4) {
+    const step = Array.isArray(workflow?.steps) ? (workflow.steps[Number(parts[3])] as Record<string, unknown> | undefined) : undefined;
+    const where = `${head}, step ${Number(parts[3]) + 1}`;
+    if (step?.actionType === 'check' && (parts[4] === 'value' || (parts[4] === undefined && error.params?.missingProperty === 'value'))) {
+      return `${where}: a check step needs the value "true" or "false"`;
+    }
+    return `${where}${parts[4] === undefined ? '' : `, ${parts[4]}`}: ${base}`;
+  }
+  const field = parts[2];
+  if (field !== undefined && FIELD_MESSAGES[field] !== undefined) return `${head}: ${FIELD_MESSAGES[field]}`;
+  return `${head}${field === undefined ? '' : `, ${field}`}: ${base}`;
+}
+
 let compiled: ValidateFunction | undefined;
 
 function createValidator(): ValidateFunction {
@@ -422,14 +488,27 @@ export function deserializeWorkflowSet(json: string): WorkflowSet {
 
   const validate = createValidator();
   if (!validate(parsed) && validate.errors && validate.errors.length > 0) {
-    const firstError = validate.errors[0];
+    // An `if` error only repeats the error of its `then` branch: the later one says what is wrong
+    const firstError = validate.errors.find((error) => error.keyword !== 'if') ?? validate.errors[0];
     throw new DescriptiveParseError(
       firstError.instancePath ?? '',
       firstError.schemaPath ?? '',
-      firstError.message ?? 'Unknown validation error',
+      describeSchemaError(parsed, firstError),
     );
   }
   const set = parsed as WorkflowSet;
+  set.workflows.forEach((workflow, w) => {
+    if (workflow.startUrl === undefined) return;
+    let protocol = '';
+    try {
+      protocol = new URL(workflow.startUrl).protocol;
+    } catch {
+      // refused below
+    }
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      throw new DescriptiveParseError(`/workflows/${w}/startUrl`, 'workflow-start-url', `workflow "${workflow.id}": startUrl must be an absolute http or https address`);
+    }
+  });
   // The server checks every value against the pattern of its Variable: a pattern that is not an expression would only fail at compile
   set.workflows.forEach((workflow, w) => {
     workflow.variables.forEach((variable, v) => {
@@ -452,18 +531,7 @@ export function deserializeWorkflowSet(json: string): WorkflowSet {
   return set;
 }
 
-/**
- * Merge two Workflow sets: keep the union of their Workflows; when both hold a
- * Workflow with the same id, the one from `newer` replaces the one from `base`.
- * The target settings come from `newer`. Neither input is mutated.
- */
-export function mergeWorkflowSets(base: WorkflowSet, newer: WorkflowSet): WorkflowSet {
-  const byId = new Map<string, Workflow>();
-  for (const workflow of [...base.workflows, ...newer.workflows]) {
-    byId.set(workflow.id, structuredClone(workflow));
-  }
-  return { ...structuredClone(newer), workflows: [...byId.values()] };
-}
+export { mergeWorkflowSets } from './merge.js';
 
 /** A copy of the set without the thumbnail paths of the Visual_Anchors (their rect and intent stay). */
 export function withoutThumbnails(set: WorkflowSet): WorkflowSet {

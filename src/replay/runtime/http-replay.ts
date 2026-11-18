@@ -189,20 +189,40 @@ function secretValue(name: string, env: Env, secrets: string[]): string {
 }
 
 /** Replace the `{{name}}` placeholders of a text; `encode` is applied to each value (path segments). */
-function fillText(text: string, variables: Record<string, unknown>, encode: (value: string) => string = (v) => v): string {
-  return text.replace(PLACEHOLDER, (_, name: string) => encode(String(coerceVariable(name, variables[name], undefined))));
+function fillText(
+  text: string,
+  variables: Record<string, unknown>,
+  encode: (value: string) => string = (v) => v,
+  skipped?: ReadonlySet<string>
+): string {
+  return text.replace(PLACEHOLDER, (_, name: string) => {
+    if (skipped?.has(name)) throw new HttpReplayError('invalid', `no value for the variable "${name}"`);
+    return encode(String(coerceVariable(name, variables[name], undefined)));
+  });
 }
 
-function fillBody(value: unknown, variables: Record<string, unknown>, env: Env, secrets: string[]): unknown {
+/** True when a text holds the `{{name}}` placeholder of a skipped Variable. */
+function mentionsSkipped(text: string, skipped: ReadonlySet<string> | undefined): boolean {
+  if (skipped === undefined || skipped.size === 0) return false;
+  for (const match of text.matchAll(PLACEHOLDER)) if (skipped.has(match[1])) return true;
+  return false;
+}
+
+/** Left out of a body: the leaf of a skipped Variable. */
+const REMOVE = Symbol('remove');
+
+function fillBody(value: unknown, variables: Record<string, unknown>, env: Env, secrets: string[], skipped?: ReadonlySet<string>): unknown {
   if (isSecretRef(value)) return secretValue(value.$secret, env, secrets);
-  if (Array.isArray(value)) return value.map((item) => fillBody(item, variables, env, secrets));
+  if (typeof value === 'string' && mentionsSkipped(value, skipped)) return REMOVE;
+  if (Array.isArray(value)) return value.map((item) => fillBody(item, variables, env, secrets, skipped)).filter((item) => item !== REMOVE);
   if (typeof value === 'object' && value !== null) {
     const record = value as Record<string, unknown>;
     const keys = Object.keys(record);
     if (typeof record.$var === 'string' && keys.every((k) => k === '$var' || k === 'as')) {
+      if (skipped?.has(record.$var)) return REMOVE;
       return coerceVariable(record.$var, variables[record.$var], record.as as string | undefined);
     }
-    return Object.fromEntries(keys.map((k) => [k, fillBody(record[k], variables, env, secrets)]));
+    return Object.fromEntries(keys.map((k) => [k, fillBody(record[k], variables, env, secrets, skipped)] as const).filter(([, v]) => v !== REMOVE));
   }
   return value;
 }
@@ -215,7 +235,7 @@ function hasHeader(headers: Record<string, string>, name: string): boolean {
  * The request a recipe gives for the Payload `variables`. Path values are URL-encoded, query and form
  * values by URLSearchParams, JSON by JSON.stringify. A missing variable or secret is an error that names it.
  */
-export function buildRequest(recipe: HttpRecipeLike, variables: Record<string, unknown>, env: Env): BuiltRequest {
+export function buildRequest(recipe: HttpRecipeLike, variables: Record<string, unknown>, env: Env, skipped?: ReadonlySet<string>): BuiltRequest {
   const method = recipe.method.toUpperCase();
   if (!METHODS.includes(method)) throw new HttpReplayError('invalid', `${method} requests are not replayed directly`);
   const secrets: string[] = [];
@@ -224,11 +244,12 @@ export function buildRequest(recipe: HttpRecipeLike, variables: Record<string, u
   if (parts === null || !/^https?:/i.test(parts[1])) throw new HttpReplayError('invalid', 'the recipe URL is not an absolute http(s) URL');
   const path = parts[2]
     .split('/')
-    .map((segment) => fillText(segment, variables, encodeURIComponent))
+    .map((segment) => fillText(segment, variables, encodeURIComponent, skipped))
     .join('/');
 
   const search = new URLSearchParams();
   for (const [key, raw] of Object.entries(recipe.query ?? {})) {
+    if (!isSecretRef(raw) && (mentionsSkipped(key, skipped) || mentionsSkipped(raw, skipped))) continue;
     search.append(key, isSecretRef(raw) ? secretValue(raw.$secret, env, secrets) : fillText(raw, variables));
   }
   const query = search.toString();
@@ -236,6 +257,7 @@ export function buildRequest(recipe: HttpRecipeLike, variables: Record<string, u
 
   const headers: Record<string, string> = {};
   for (const [name, raw] of Object.entries(recipe.headers ?? {})) {
+    if (!isSecretRef(raw) && mentionsSkipped(raw, skipped)) continue;
     const value = isSecretRef(raw) ? secretValue(raw.$secret, env, secrets) : fillText(raw, variables);
     // A value holding a line break would inject another header
     if (/[\r\n]/.test(value)) throw new HttpReplayError('invalid', `the header "${name}" holds a line break`);
@@ -245,8 +267,10 @@ export function buildRequest(recipe: HttpRecipeLike, variables: Record<string, u
 
   const built: BuiltRequest = { method, url, headers, secrets };
   if (recipe.body !== undefined && method !== 'GET') {
-    const filled = fillBody(recipe.body, variables, env, secrets);
-    if (recipe.bodyFormat === 'form' && typeof filled === 'object' && filled !== null) {
+    const filled = fillBody(recipe.body, variables, env, secrets, skipped);
+    if (filled === REMOVE) {
+      // The whole body belongs to a skipped Variable: no body, no content-type added
+    } else if (recipe.bodyFormat === 'form' && typeof filled === 'object' && filled !== null) {
       const form = new URLSearchParams();
       for (const [key, value] of Object.entries(filled as Record<string, unknown>)) {
         for (const item of Array.isArray(value) ? value : [value]) form.append(key, String(item));
@@ -266,11 +290,12 @@ export function buildRequest(recipe: HttpRecipeLike, variables: Record<string, u
 /** The recorded values of the variables, used for a variable the call does not supply (like Level 2). */
 export function withRecordedDefaults(
   steps: ReadonlyArray<{ variable?: string; value?: string }>,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  skipped?: ReadonlySet<string>
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const step of steps) {
-    if (step.variable !== undefined && step.value !== undefined && !(step.variable in out)) out[step.variable] = step.value;
+    if (step.variable !== undefined && step.value !== undefined && !(step.variable in out) && !skipped?.has(step.variable)) out[step.variable] = step.value;
   }
   for (const [name, value] of Object.entries(args)) {
     if (value !== undefined && value !== null) out[name] = value;
@@ -588,6 +613,8 @@ export interface RunOptions {
   storageState?: string | StorageStateLike;
   nowMs?: number;
   fetchImpl?: typeof fetch;
+  /** Names of omitted Variables to skip: their fields are left out of the request (3.1 to 3.4). */
+  skipped?: ReadonlySet<string>;
 }
 
 export type HttpStepOutcome =
@@ -627,7 +654,7 @@ export async function runHttpStep(
   let built: BuiltRequest;
   const secrets: string[] = [];
   try {
-    built = buildRequest(recipe, variables, env);
+    built = buildRequest(recipe, variables, env, options.skipped);
     secrets.push(...built.secrets);
     const cookie = resolveCookieHeader(built.url, env, options.storageState, options.nowMs);
     if (cookie !== undefined) {
@@ -667,7 +694,7 @@ export interface PlanStepLike {
 /** http: has a recipe. prep: only fills a field (or hovers) for a later request. ui: needs the page (Level 2). */
 export type StepMode = 'http' | 'prep' | 'ui';
 
-const PREPARATORY = new Set(['type', 'select', 'hover', 'scrollIntoView']);
+const PREPARATORY = new Set(['type', 'select', 'check', 'hover', 'scrollIntoView']);
 
 /**
  * The plan before the mixed-workflow rule: a step with a recipe is http. A step that only fills a field is

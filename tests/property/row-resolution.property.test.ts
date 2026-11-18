@@ -229,3 +229,39 @@ describe('Property 13 (browser level): the in-page resolver', () => {
     );
   });
 });
+
+// Feature: user-journey-improvements, Property 6: Row selection by an omitted Variable
+describe('Property 6: Row selection by an omitted Variable', () => {
+  const textArb = fc.string({ minLength: 0, maxLength: 12 });
+  const binding = (key: string | undefined) => ({
+    container: { kind: 'row' as RowKind },
+    ...(key === undefined ? {} : { key: { text: key } }),
+    variable: 'customer',
+  });
+
+  /** **Validates: Requirements 2.10, 2.11** */
+  it('uses the supplied value, else the recorded key, else fails as before', () => {
+    fc.assert(
+      fc.property(fc.option(textArb, { nil: undefined }), fc.option(textArb, { nil: undefined }), (supplied, key) => {
+        const vars = supplied === undefined ? {} : { customer: supplied };
+        let located: string | undefined;
+        let code: string | undefined;
+        try {
+          located = buildRowLocator(binding(key), vars).hasText;
+        } catch (err) {
+          code = (err as RowResolutionError).code;
+        }
+        if (supplied !== undefined) {
+          // A supplied value is the only source, even when empty (2.11)
+          if (supplied.trim() === '') expect(code).toBe('ROW_KEY_EMPTY');
+          else expect(located).toBe(supplied.trim());
+        } else if (key !== undefined && key.trim() !== '') {
+          expect(located).toBe(key.trim());
+        } else {
+          expect(code).toBe('ROW_VARIABLE_MISSING');
+        }
+      }),
+      { numRuns: 200 },
+    );
+  });
+});

@@ -66,7 +66,10 @@ export interface AnnotatedStateGraph extends StateGraph {
 
 // A single step of a recorded workflow
 /** Action types of a recorded step: the user actions plus the preparatory and page-switching steps of the web recorder. */
-export type StepActionType = RecordedAction['actionType'] | 'hover' | 'scrollIntoView' | 'switch_page';
+export type StepActionType = RecordedAction['actionType'] | 'hover' | 'scrollIntoView' | 'switch_page' | 'check';
+
+/** What a call that leaves an optional Variable out does: use the recorded value, or leave the step out. */
+export type WhenOmitted = 'useRecorded' | 'skip';
 
 export interface WorkflowStep {
   actionType: StepActionType;
@@ -200,6 +203,8 @@ export interface WorkflowVariable {
   type?: 'string' | 'number' | 'boolean';   // default 'string'
   description?: string;
   optional?: boolean;
+  /** Only with optional: true. Absent means useRecorded. */
+  whenOmitted?: WhenOmitted;
   /** The only values a call may give (a native select box with a fixed set of options): anything else is refused before the replay. */
   enum?: string[];
   /** Regular expression (JavaScript source, no flags, unicode) the whole value must match: anything else is refused before the replay. Anchor it with ^ and $. */
@@ -217,8 +222,12 @@ export interface FinalZone {
 export interface Workflow {
   id: string;                              // UUID
   label: string;
-  /** What an agent reads as the tool description instead of the label. Not part of the workflow file: set in memory by an accepted suggestion. */
+  /** Stored in the file (0 to 1000 characters). The lead of the tool description when not empty after trimming. */
   description?: string;
+  /** Absolute http(s) URL; same Origin as the set startUrl. Absent: the set startUrl. */
+  startUrl?: string;
+  /** Path of the saved login. Absent: the set value. null: no saved login for this workflow. */
+  storageState?: string | null;
   steps: WorkflowStep[];
   variables: WorkflowVariable[];
   finalScreenId?: ScreenId;                // used for drift detection only
@@ -302,6 +311,8 @@ export interface ReplayResult {
   failure?: StepFailure | PatternTimeoutFailure | { zone: { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } } };
   /** Set with error 'result_zone_not_found' / 'result_extraction_failed': says the action itself already ran. */
   message?: string;
+  /** Zero-based indexes of the steps left out because their Variable was omitted. Absent when none. */
+  skippedSteps?: number[];
   elapsedMs: number;
 }
 

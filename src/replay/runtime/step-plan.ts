@@ -82,7 +82,7 @@ export const MAX_ACCESSIBLE_NAME = 80;
 const SCOPE_KINDS = new Set<string>(['dialog', 'region', 'heading']);
 // A canvas has no accessible content: such a step is located by its coordinates, never by role
 const NON_ROLES = new Set(['', 'generic', 'document', 'canvas']);
-const OPTION_ROLES = new Set(['option']);
+const OPTION_ROLES = new Set(['option', 'radio']);
 
 /** Quote a name for the description of a Playwright call. */
 function q(text: string): string {
@@ -410,6 +410,8 @@ export class StepExecutionError extends Error {
 export function healEligible(step: StepLike, mode: ReplayMode): boolean {
   if (mode !== 'heal') return false;
   if (step.actionType === 'switch_page') return false;
+  // A check step states the wanted state of a control: a look-alike is never a repair (7.10)
+  if (step.actionType === 'check') return false;
   // A step in a table row or list item is found by its Variable: a look-alike row is the wrong row, never a repair
   if (step.rowBinding !== undefined) return false;
   return (step.risk ?? 'read') === 'read' || step.allowHeal === true;

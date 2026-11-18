@@ -1,0 +1,266 @@
+import pty from "node-pty";
+import xtermHeadless from "@xterm/headless";
+import { screenId, cropTerminal } from "./screen-hash.js";
+import { resolveTimeoutMs } from "./settle.js";
+import { compileStepWait, waitForPattern, patternTimeoutResult, type CompiledScreenPattern } from "./pattern-wait.js";
+import { boundText, extractTerminalZone, zoneFailureResult, type ExtractorLike } from "./extract.js";
+
+const START_COMMAND: string[] = ["node","./task-console.mjs"];
+const KEY_SEQUENCES: Record<string, string> = {"Enter":"\r","Tab":"\t","Escape":"\u001b","Backspace":"","Delete":"\u001b[3~","ArrowUp":"\u001b[A","ArrowDown":"\u001b[B","ArrowRight":"\u001b[C","ArrowLeft":"\u001b[D","Home":"\u001b[H","End":"\u001b[F","PageUp":"\u001b[5~","PageDown":"\u001b[6~","Ctrl+A":"\u0001","Ctrl+B":"\u0002","Ctrl+C":"\u0003","Ctrl+D":"\u0004","Ctrl+E":"\u0005","Ctrl+F":"\u0006","Ctrl+G":"\u0007","Ctrl+H":"\b","Ctrl+K":"\u000b","Ctrl+L":"\f","Ctrl+N":"\u000e","Ctrl+O":"\u000f","Ctrl+P":"\u0010","Ctrl+Q":"\u0011","Ctrl+R":"\u0012","Ctrl+S":"\u0013","Ctrl+T":"\u0014","Ctrl+U":"\u0015","Ctrl+V":"\u0016","Ctrl+W":"\u0017","Ctrl+X":"\u0018","Ctrl+Y":"\u0019","Ctrl+Z":"\u001a"};
+
+export type Step = {
+  actionType: string;
+  selectors: string[];
+  value?: string;
+  variable?: string;
+  label?: string;
+  timeoutMs?: number;
+  // Level 2 (web): see step-plan.ts
+  anchor?: any;
+  rowBinding?: any;
+  risk?: "read" | "write" | "delete";
+  // Level 3 (web): see step-plan.ts. A write or delete step is healed only with allowHeal.
+  allowHeal?: boolean;
+  visual?: any;
+  secretRef?: string;
+  totp?: boolean;
+  // Terminal: wait for a pattern of the rendered screen instead of a moment of silence, see pattern-wait.ts
+  waitFor?: any;
+  // Level 1 (web, compiled with --http): see http-replay.ts
+  http?: any;
+};
+
+// Where a replay starts when it runs in a sandbox that cannot reach the recorded one.
+export type Overrides = { command?: string[]; url?: string };
+
+// Timeouts of a call, in the order they apply: the call (_timeoutMs), DAEMONIZE_TIMEOUT_MS, the workflow, the set, 30 s.
+export type Limits = { callMs?: number; workflowMs?: number; setMs?: number };
+
+// What the call is compared with to tell whether the application still looks as recorded.
+// finalZone limits the comparison: a CSS selector (web) or a rectangle of the screen (terminal).
+export type Zone = { selector?: string; rect?: { row: number; col: number; rows: number; cols: number } };
+export type ResultZone = Zone & { extractor?: ExtractorLike };
+// cols and rows: the terminal size the workflow was recorded at (terminal targets); absent in old files.
+export type Final = { finalScreenId?: string; finalZone?: Zone; resultZone?: ResultZone; workflowId?: string; cols?: number; rows?: number };
+
+const MAX_TEXT_LENGTH = 20000;
+
+// Without a recorded final screen nothing can be compared: drifted is false and driftChecked says so.
+function driftFields(hash: string | undefined, final: Final): { drifted: boolean; driftChecked: boolean } {
+  if (final.finalScreenId === undefined) return { drifted: false, driftChecked: false };
+  return { drifted: hash !== final.finalScreenId, driftChecked: true };
+}
+
+function resolveValue(step: Step, args: Record<string, unknown>): string | undefined {
+  if (step.variable !== undefined) {
+    const supplied = args[step.variable];
+    return supplied === undefined || supplied === null ? step.value : String(supplied);
+  }
+  return step.value;
+}
+
+// The documented fallback of a workflow recorded without a size (old files).
+const DEFAULT_COLS = 80;
+const DEFAULT_ROWS = 24;
+
+// DAEMONIZE_COLS / DAEMONIZE_ROWS override the recorded size; anything out of range is ignored.
+function sizeFromEnv(name: string, min: number, max: number): number | undefined {
+  const text = process.env[name]?.trim();
+  if (text === undefined || !/^[0-9]+$/.test(text)) return undefined;
+  const n = Number(text);
+  return n >= min && n <= max ? n : undefined;
+}
+
+const STABLE_MS = 150;
+const MAX_SETTLE_MS = 3000;
+const SILENT_GRACE_MS = 500;
+
+// @xterm/headless is CommonJS: take the class from the default export.
+const { Terminal } = xtermHeadless;
+
+async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides) {
+  const startedAt = Date.now();
+  const TIMEOUT_MS = resolveTimeoutMs({ call: limits.callMs, env: process.env.DAEMONIZE_TIMEOUT_MS, workflow: limits.workflowMs, set: limits.setMs });
+  // The size of the pty and of the screen renderer: the environment, else the recorded size, else 80x24
+  const COLS = sizeFromEnv("DAEMONIZE_COLS", 20, 500) ?? final.cols ?? DEFAULT_COLS;
+  const ROWS = sizeFromEnv("DAEMONIZE_ROWS", 5, 200) ?? final.rows ?? DEFAULT_ROWS;
+  const screen = new Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true, scrollback: 0 });
+  let lastActivityAt = Date.now();
+  let touchedAt = Date.now();
+  let writesSinceTouch = 0;
+  let exited = false;
+  let timer: NodeJS.Timeout | undefined;
+
+  const [command, ...commandArgs] = overrides.command ?? START_COMMAND;
+  const program = pty.spawn(command, commandArgs, { cols: COLS, rows: ROWS, name: "xterm-256color" });
+  const outputListeners = new Set<() => void>();
+  program.onData((data: string) => {
+    screen.write(data);
+    lastActivityAt = Date.now();
+    writesSinceTouch += 1;
+    for (const listener of outputListeners) listener();
+  });
+  program.onExit(() => {
+    exited = true;
+  });
+
+  // Wait until the program has reacted and gone quiet: a moment of silence after its
+  // output, or a longer grace period if it prints nothing, then until the screen is rendered.
+  const settle = async (graceMs = SILENT_GRACE_MS, maxMs = MAX_SETTLE_MS) => {
+    const waitStart = Date.now();
+    for (;;) {
+      const now = Date.now();
+      const done = writesSinceTouch > 0 ? now - lastActivityAt >= STABLE_MS : now - touchedAt >= graceMs;
+      if (done || now - waitStart >= maxMs) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+    await new Promise<void>((resolve) => screen.write("", resolve));
+  };
+
+  const screenText = () => {
+    const buffer = screen.buffer.active;
+    const lines: string[] = [];
+    for (let row = 0; row < ROWS; row++) {
+      lines.push((buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? "").trimEnd());
+    }
+    while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+    return lines.join("\n");
+  };
+
+  // The rendered screen, once everything the program printed so far is drawn.
+  const readScreen = async () => {
+    await new Promise<void>((resolve) => screen.write("", resolve));
+    return screenText();
+  };
+
+  try {
+    const run = async () => {
+      // A program may take a while to start and print its first screen; a terminal
+      // emits set-up sequences first, so wait for text rather than for bytes.
+      const firstTextDeadline = Date.now() + 5000;
+      for (;;) {
+        await new Promise<void>((resolve) => screen.write("", resolve));
+        if (screenText() !== "" || exited || Date.now() >= firstTextDeadline) break;
+        await new Promise<void>((resolve) => setTimeout(resolve, 25));
+      }
+      await settle();
+      // A step with a waitFor waits for its pattern on the rendered screen (up to its timeout, and never past the
+      // time left for the call); the silence rule below is only for steps without one. A pattern that does not
+      // show up stops the replay: no later step runs.
+      const waitForStep = async (step: Step, index: number, wait: CompiledScreenPattern) => {
+        const left = Math.max(1, TIMEOUT_MS - (Date.now() - startedAt));
+        const outcome = await waitForPattern(readScreen, wait, {
+          timeoutMs: Math.min(step.waitFor.timeoutMs, left),
+          subscribe: (listener) => {
+            outputListeners.add(listener);
+            return () => outputListeners.delete(listener);
+          },
+          isClosed: () => exited
+        });
+        return outcome.matched
+          ? undefined
+          : patternTimeoutResult({ stepIndex: index, wait, elapsedMs: outcome.elapsedMs, screenExcerpt: outcome.screenExcerpt }, Date.now() - startedAt);
+      };
+      for (let index = 0; index < steps.length; index++) {
+        const step = steps[index];
+        const value = resolveValue(step, args);
+        const wait = step.waitFor === undefined ? undefined : compileStepWait(step.waitFor);
+        if (wait !== undefined && step.waitFor.when === "before") {
+          const failed = await waitForStep(step, index, wait);
+          if (failed !== undefined) return failed;
+        }
+        switch (step.actionType) {
+          case "type":
+            program.write(value ?? "");
+            break;
+          case "keypress":
+            program.write(KEY_SEQUENCES[value ?? ""] ?? value ?? "");
+            break;
+          case "form_submit":
+            program.write(KEY_SEQUENCES["Enter"]);
+            break;
+          case "select":
+            program.write((value ?? "") + KEY_SEQUENCES["Enter"]);
+            break;
+          default:
+            throw new Error("Unsupported action for a terminal program: " + step.actionType);
+        }
+        touchedAt = Date.now();
+        writesSinceTouch = 0;
+        if (wait !== undefined && step.waitFor.when !== "before") {
+          const failed = await waitForStep(step, index, wait);
+          if (failed !== undefined) return failed;
+        } else {
+          await settle();
+        }
+      }
+      const finalText = screenText();
+      // A Result_Zone limits the result to a crop of the screen and extracts its structured data
+      let text = finalText;
+      let data: unknown;
+      if (final.resultZone !== undefined) {
+        const read = extractTerminalZone(finalText, final.resultZone);
+        if (!read.ok) return zoneFailureResult(read, Date.now() - startedAt);
+        text = read.text;
+        data = typeof read.data === "string" ? boundText(read.data, MAX_TEXT_LENGTH) : read.data;
+      }
+      let hash: string | undefined;
+      if (final.finalScreenId !== undefined) {
+        const rect = final.finalZone?.rect;
+        hash = screenId("terminal", rect === undefined ? finalText : cropTerminal(finalText, rect));
+      }
+      // A screen rendered at another size than the recorded one is never judged equal: the hash alone cannot tell
+      const recordedSize = final.cols !== undefined && final.rows !== undefined ? final.cols + "x" + final.rows : undefined;
+      const replaySize = COLS + "x" + ROWS;
+      const sizeDrift = final.finalScreenId !== undefined && recordedSize !== undefined && recordedSize !== replaySize;
+      return {
+        success: true,
+        screenType: "terminal",
+        text: boundText(text, MAX_TEXT_LENGTH),
+        ...(final.resultZone === undefined ? {} : { data }),
+        ...driftFields(hash, final),
+        ...(sizeDrift ? { drifted: true, driftReason: "terminal size: recorded " + recordedSize + ", replayed at " + replaySize } : {}),
+        terminalSize: { cols: COLS, rows: ROWS },
+        elapsedMs: Date.now() - startedAt
+      };
+    };
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS);
+    });
+    return await Promise.race([run(), timeout]);
+  } catch (err) {
+    return { success: false, error: (err as Error).message, elapsedMs: Date.now() - startedAt };
+  } finally {
+    clearTimeout(timer);
+    if (!exited) {
+      try {
+        program.kill();
+      } catch {
+        // Already gone
+      }
+    }
+    screen.dispose();
+  }
+}
+
+export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}) {
+  const result = await replayCore(steps, args, final, limits, overrides);
+  const heal = process.env.DAEMONIZE_MODE?.trim().toLowerCase() === "heal";
+  return { mode: heal ? "heal" : "strict", ...(heal ? { healed: false, healedSteps: [] } : {}), ...result };
+}
+
+if (process.argv.includes("--container")) {
+  let input = "";
+  for await (const chunk of process.stdin) input += chunk;
+  const request = JSON.parse(input) as {
+    steps: Step[];
+    args: Record<string, unknown>;
+    final?: Final;
+    limits?: Limits;
+    command?: string[];
+    url?: string;
+  };
+  const result = await replay(request.steps, request.args, request.final ?? {}, request.limits ?? {}, { command: request.command, url: request.url });
+  process.stdout.write(JSON.stringify(result) + "\n");
+  process.exit(0);
+}

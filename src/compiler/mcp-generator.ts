@@ -3,6 +3,7 @@ import { defaultNetwork, renderDockerfile } from '../sandbox/dockerfile.js';
 import { describeTool } from './tool-description.js';
 import { propertyToZodSource } from './zod-translator.js';
 import { pickResultZone } from '../replay/runtime/extract.js';
+import { skipListOf, usesWorkflowCall } from '../workflow/workflow-scope.js';
 import type { ResultZone, Workflow, WorkflowSet } from '../types.js';
 
 // The sandbox image of a web target starts from the Playwright image of this exact version,
@@ -872,6 +873,182 @@ const DOCKER_RUNTIME = [
   `}`,
 ];
 
+
+/** A copy of a block of generated lines with some lines replaced (`replace`) or followed by more lines (`after`). Throws when a line is not there. */
+function patchLines(lines: string[], ops: Array<{ at: string; replace?: string[]; after?: string[] }>): string[] {
+  const out = [...lines];
+  for (const op of ops) {
+    const index = out.indexOf(op.at);
+    if (index === -1) throw new Error('mcp-generator: generated line not found: ' + op.at);
+    if (op.replace !== undefined) out.splice(index, 1, ...op.replace);
+    else out.splice(index + 1, 0, ...(op.after ?? []));
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// The call block: only generated when a workflow has a Skip_List, a startUrl or a storageState (usesWorkflowCall).
+// Every variant below is derived from the block it replaces, so a set that uses none of them is emitted unchanged.
+// ---------------------------------------------------------------------------
+const SKIP_STEP_RETURN = [
+  `        if (skippedSet.has(index)) {`,
+  `          skipState.skipped.push(index);`,
+  `          return;`,
+  `        }`,
+];
+const SKIP_STEP_CONTINUE = [
+  `        if (skippedSet.has(index)) {`,
+  `          skipState.skipped.push(index);`,
+  `          continue;`,
+  `        }`,
+];
+const CALL_PARAMS = `call: WorkflowCall, skippedSet: ReadonlySet<number>, skipState: { skipped: number[] }`;
+
+const REPLAY_COMMON_CALL = patchLines(REPLAY_COMMON, [
+  {
+    at: `export type Overrides = { command?: string[]; url?: string };`,
+    after: [
+      ``,
+      `// What one call of a tool adds: the optional Variables left out, the start page and the saved login of its workflow.`,
+      `// A null storageState means this workflow has no saved login.`,
+      `export type WorkflowCall = { skip?: string[]; startUrl?: string; storageState?: string | null };`,
+    ],
+  },
+]);
+
+const WEB_SHARED_CALL = patchLines(WEB_SHARED, [
+  {
+    at: `function resolveStorageState(): string | undefined {`,
+    replace: [
+      `function resolveStorageState(call: WorkflowCall): string | undefined {`,
+      `  // null: this workflow has no saved login, and DAEMONIZE_STORAGE_STATE is ignored too`,
+      `  if (call.storageState === null) return undefined;`,
+    ],
+  },
+  {
+    at: `  if (STORAGE_STATE) return resolvePath(dirname(fileURLToPath(import.meta.url)), STORAGE_STATE);`,
+    replace: [
+      `  const recorded = call.storageState ?? STORAGE_STATE;`,
+      `  if (recorded) return resolvePath(dirname(fileURLToPath(import.meta.url)), recorded);`,
+    ],
+  },
+]);
+
+const WEB_CORE_SIGNATURE = `async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides, track: HealTrack) {`;
+const WEB_CORE_SIGNATURE_CALL = `async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides, track: HealTrack, ${CALL_PARAMS}) {`;
+
+const WEB_RUNTIME_CALL = patchLines(WEB_RUNTIME, [
+  { at: WEB_CORE_SIGNATURE, replace: [WEB_CORE_SIGNATURE_CALL] },
+  { at: `  const storagePath = resolveStorageState();`, replace: [`  const storagePath = resolveStorageState(call);`] },
+  {
+    at: `      await page.goto(overrides.url ?? START_URL, { timeout: TIMEOUT_MS });`,
+    replace: [`      await page.goto(overrides.url ?? call.startUrl ?? START_URL, { timeout: TIMEOUT_MS });`],
+  },
+  { at: `      const outcome = await runStepsStrict(steps, async (step, index) => {`, after: SKIP_STEP_RETURN },
+]);
+
+const WEB_RUNTIME_HTTP_CALL = patchLines(WEB_RUNTIME_HTTP, [
+  { at: WEB_CORE_SIGNATURE, replace: [WEB_CORE_SIGNATURE_CALL] },
+  { at: `  const storagePath = resolveStorageState();`, replace: [`  const storagePath = resolveStorageState(call);`] },
+  {
+    at: `  const variables = withRecordedDefaults(steps, args);`,
+    replace: [
+      `  // An omitted Variable of the Skip_List is never put back from the recording, and never reaches a request`,
+      `  const skipped = omittedSkips(args, call.skip);`,
+      `  const variables = withRecordedDefaults(steps, args, skipped);`,
+    ],
+  },
+  {
+    at: `      await page.goto(overrides.url ?? START_URL, { timeout: Math.max(1, deadline - Date.now()) });`,
+    replace: [`      await page.goto(overrides.url ?? call.startUrl ?? START_URL, { timeout: Math.max(1, deadline - Date.now()) });`],
+  },
+  { at: `        const step = steps[index];`, after: SKIP_STEP_CONTINUE },
+  {
+    at: `          const recipe = { ...step.http, url: rebaseOrigin(step.http.url, START_URL, overrides.url) };`,
+    replace: [`          const recipe = { ...step.http, url: rebaseOrigin(step.http.url, call.startUrl ?? START_URL, overrides.url) };`],
+  },
+  {
+    at: `          const outcome = await runHttpStep(recipe, variables, env, { timeoutMs: stepTimeout(step), storageState: state });`,
+    replace: [`          const outcome = await runHttpStep(recipe, variables, env, { timeoutMs: stepTimeout(step), storageState: state, skipped });`],
+  },
+]);
+
+const TERMINAL_RUNTIME_CALL = patchLines(TERMINAL_RUNTIME, [
+  {
+    at: `async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides) {`,
+    replace: [`async function replayCore(steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, overrides: Overrides, _call: WorkflowCall, skippedSet: ReadonlySet<number>, skipState: { skipped: number[] }) {`],
+  },
+  { at: `        const step = steps[index];`, after: SKIP_STEP_CONTINUE },
+]);
+
+const WEB_REPLAY_ENTRY_CALL = [
+  ``,
+  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}, call: WorkflowCall = {}) {`,
+  `  // Decided once per call: the steps whose optional Variable was left out`,
+  `  const skipState = { skipped: [] as number[] };`,
+  `  const skippedSet = new Set(planSkips(steps, args, call.skip));`,
+  `  const track: HealTrack = { healedSteps: [] };`,
+  `  const result = await replayCore(steps, args, final, limits, overrides, track, call, skippedSet, skipState);`,
+  `  return { ...modeFields(track), ...result, ...(skipState.skipped.length > 0 ? { skippedSteps: skipState.skipped } : {}) } as Record<string, unknown>;`,
+  `}`,
+];
+
+const TERMINAL_REPLAY_ENTRY_CALL = [
+  ``,
+  `export async function replay(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, overrides: Overrides = {}, call: WorkflowCall = {}) {`,
+  `  const skipState = { skipped: [] as number[] };`,
+  `  const skippedSet = new Set(planSkips(steps, args, call.skip));`,
+  `  const result = await replayCore(steps, args, final, limits, overrides, call, skippedSet, skipState);`,
+  `  const heal = process.env.DAEMONIZE_MODE?.trim().toLowerCase() === "heal";`,
+  `  return { mode: heal ? "heal" : "strict", ...(heal ? { healed: false, healedSteps: [] } : {}), ...result, ...(skipState.skipped.length > 0 ? { skippedSteps: skipState.skipped } : {}) } as Record<string, unknown>;`,
+  `}`,
+];
+
+const CONTAINER_ENTRY_CALL = patchLines(CONTAINER_ENTRY, [
+  { at: `    url?: string;`, after: [`    call?: WorkflowCall;`] },
+  {
+    at: `  const result = await replay(request.steps, request.args, request.final ?? {}, request.limits ?? {}, { command: request.command, url: request.url });`,
+    replace: [`  const result = await replay(request.steps, request.args, request.final ?? {}, request.limits ?? {}, { command: request.command, url: request.url }, request.call ?? {});`],
+  },
+]);
+
+const DOCKER_RUNTIME_CALL = patchLines(DOCKER_RUNTIME, [
+  {
+    at: `function resolveHostStorageState(): string | undefined {`,
+    replace: [`function resolveHostStorageState(call: WorkflowCall): string | undefined {`],
+  },
+  {
+    at: `  if (!WEB_TARGET) return undefined;`,
+    after: [`  // null: this workflow has no saved login, and DAEMONIZE_STORAGE_STATE is ignored too`, `  if (call.storageState === null) return undefined;`],
+  },
+  {
+    at: `  if (STORAGE_STATE_RECORDED) return resolve(dirname(fileURLToPath(import.meta.url)), STORAGE_STATE_RECORDED);`,
+    replace: [
+      `  const recorded = call.storageState ?? STORAGE_STATE_RECORDED;`,
+      `  if (recorded) return resolve(dirname(fileURLToPath(import.meta.url)), recorded);`,
+    ],
+  },
+  {
+    at: `export async function replayInDocker(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}) {`,
+    replace: [`export async function replayInDocker(steps: Step[], args: Record<string, unknown>, final: Final = {}, limits: Limits = {}, call: WorkflowCall = {}) {`],
+  },
+  { at: `  const storagePath = resolveHostStorageState();`, replace: [`  const storagePath = resolveHostStorageState(call);`] },
+  {
+    at: `    child.stdin.end(JSON.stringify({ steps, args, final, limits: { callMs: REPLAY_TIMEOUT_MS }, command: COMMAND, url: URL_OVERRIDE }));`,
+    replace: [`    child.stdin.end(JSON.stringify({ steps, args, final, limits: { callMs: REPLAY_TIMEOUT_MS }, command: COMMAND, url: URL_OVERRIDE, call }));`],
+  },
+]);
+
+/** The `call` argument of one tool: names of Variables, a URL, a path or null. Never a value. Empty text when nothing is set. */
+function callLiteralOf(workflow: Workflow): string {
+  const skip = skipListOf(workflow);
+  const call: { skip?: string[]; startUrl?: string; storageState?: string | null } = {};
+  if (skip.length > 0) call.skip = skip;
+  if (workflow.startUrl !== undefined) call.startUrl = workflow.startUrl;
+  if (workflow.storageState !== undefined) call.storageState = workflow.storageState;
+  return Object.keys(call).length === 0 ? '' : JSON.stringify(call);
+}
+
 /**
  * Generates the standalone TypeScript files of an MCP server from an annotated
  * Workflow set: the server (`generate`), the replay of a workflow
@@ -904,9 +1081,10 @@ export class McpGenerator {
     options: GenerateOptions = {}
   ): string {
     this.assertTarget(set);
+    const withCall = usesWorkflowCall(set);
 
     const toolBlocks = set.workflows
-      .map((w) => this.generateToolBlock(set, w, toolNames, httpEnabled(set, options)))
+      .map((w) => this.generateToolBlock(set, w, toolNames, httpEnabled(set, options), withCall))
       .join('\n\n');
 
     const lines: string[] = [
@@ -917,12 +1095,18 @@ export class McpGenerator {
       `import { z } from "zod";`,
       `import { replay } from "./replay.js";`,
       `import { replayInDocker } from "./docker-replay.js";`,
+      ...(withCall ? [`import type { Step, Final, Limits, WorkflowCall } from "./replay.js";`] : []),
       ``,
       `const INPUT_SCHEMAS: Record<string, object> = ${JSON.stringify(this.collectInputSchemas(set, toolNames))};`,
       ``,
       ...VALIDATION_RUNTIME,
       `// DAEMONIZE_SANDBOX=docker replays every call in a throw-away container instead of on this machine.`,
-      `const runReplay = process.env.DAEMONIZE_SANDBOX === "docker" ? replayInDocker : replay;`,
+      ...(withCall
+        ? [
+          `const runReplay = (steps: Step[], args: Record<string, unknown>, final: Final, limits: Limits, call: WorkflowCall = {}) =>`,
+          `  process.env.DAEMONIZE_SANDBOX === "docker" ? replayInDocker(steps, args, final, limits, call) : replay(steps, args, final, limits, {}, call);`,
+        ]
+        : [`const runReplay = process.env.DAEMONIZE_SANDBOX === "docker" ? replayInDocker : replay;`]),
       ``,
       `// DAEMONIZE_MODE=strict (the default) or heal. Every result says which mode produced it; a result that did not`,
       `// get as far as a replay (a refused payload, a sandbox that did not start) is completed here.`,
@@ -954,6 +1138,7 @@ export class McpGenerator {
     this.assertTarget(set);
     const http = httpEnabled(set, options);
     const heal = healEnabled(set, options);
+    const withCall = usesWorkflowCall(set);
 
     const lines: string[] = [
       ...(set.targetType === 'web'
@@ -981,6 +1166,7 @@ export class McpGenerator {
           `import { compileStepWait, waitForPattern, patternTimeoutResult, type CompiledScreenPattern } from "./pattern-wait.js";`,
           `import { boundText, extractTerminalZone, zoneFailureResult, type ExtractorLike } from "./extract.js";`,
         ]),
+      ...(withCall ? [`import { ${set.targetType === 'web' && http ? 'planSkips, omittedSkips' : 'planSkips'} } from "./omission.js";`] : []),
       ``,
       ...(set.targetType === 'web'
         ? [
@@ -992,16 +1178,18 @@ export class McpGenerator {
           `const KEY_SEQUENCES: Record<string, string> = ${JSON.stringify(KEY_SEQUENCES)};`,
         ]),
       ``,
-      ...REPLAY_COMMON,
+      ...(withCall ? REPLAY_COMMON_CALL : REPLAY_COMMON),
       ...(set.targetType === 'web'
         ? [
-          ...WEB_SHARED,
+          ...(withCall ? WEB_SHARED_CALL : WEB_SHARED),
           ...(heal ? WEB_STEP_HEAL : WEB_STEP_STRICT),
-          ...(http ? WEB_RUNTIME_HTTP : WEB_RUNTIME),
-          ...WEB_REPLAY_ENTRY,
+          ...(http ? (withCall ? WEB_RUNTIME_HTTP_CALL : WEB_RUNTIME_HTTP) : withCall ? WEB_RUNTIME_CALL : WEB_RUNTIME),
+          ...(withCall ? WEB_REPLAY_ENTRY_CALL : WEB_REPLAY_ENTRY),
         ]
-        : [...TERMINAL_RUNTIME, ...TERMINAL_REPLAY_ENTRY]),
-      ...CONTAINER_ENTRY,
+        : withCall
+          ? [...TERMINAL_RUNTIME_CALL, ...TERMINAL_REPLAY_ENTRY_CALL]
+          : [...TERMINAL_RUNTIME, ...TERMINAL_REPLAY_ENTRY]),
+      ...(withCall ? CONTAINER_ENTRY_CALL : CONTAINER_ENTRY),
     ];
     return lines.join('\n') + '\n';
   }
@@ -1016,6 +1204,7 @@ export class McpGenerator {
   generateDockerReplay(set: WorkflowSet, imageTag: string, options: GenerateOptions = {}): string {
     this.assertTarget(set);
     const http = httpEnabled(set, options);
+    const withCall = usesWorkflowCall(set);
 
     const terminal = set.targetType === 'tui';
     const lines: string[] = [
@@ -1024,7 +1213,7 @@ export class McpGenerator {
       `import { tmpdir } from "node:os";`,
       `import { basename, dirname, join, resolve } from "node:path";`,
       `import { fileURLToPath } from "node:url";`,
-      `import type { Step, Final, Limits } from "./replay.js";`,
+      withCall ? `import type { Step, Final, Limits, WorkflowCall } from "./replay.js";` : `import type { Step, Final, Limits } from "./replay.js";`,
       `import { resolveTimeoutMs } from "./settle.js";`,
       `import { missingSecrets, secretEnvName, secretVariables } from "./step-plan.js";`,
       `import { withResolvedSecrets } from "./vault-reader.js";`,
@@ -1063,7 +1252,7 @@ export class McpGenerator {
       `const EXTRA_FLAGS: string[] = ${JSON.stringify(terminal ? ['--read-only', '--tmpfs', '/tmp'] : ['--shm-size', '512m'])};`,
       `const HOST_COMMAND: string[] | undefined = ${JSON.stringify(terminal ? set.startCommand : undefined)};`,
       ``,
-      ...DOCKER_RUNTIME,
+      ...(withCall ? DOCKER_RUNTIME_CALL : DOCKER_RUNTIME),
     ];
     return lines.join('\n') + '\n';
   }
@@ -1083,7 +1272,7 @@ export class McpGenerator {
       : { playwright: PLAYWRIGHT_VERSION };
 
     const copy = [
-      'replay.js', 'screen-hash.js', 'settle.js', 'extract.js',
+      'replay.js', 'screen-hash.js', 'settle.js', 'extract.js', 'omission.js',
       ...(terminal
         ? ['pattern-wait.js']
         : ['row-resolver.js', 'step-plan.js', 'totp.js', 'vault-format.js', 'vault-reader.js', 'web-steps.js', 'browser-launch.js', ...(http ? ['http-replay.js'] : []), ...(healEnabled(set, options) ? ['heal'] : [])]),
@@ -1131,11 +1320,14 @@ export class McpGenerator {
     set: WorkflowSet,
     workflow: Workflow,
     toolNames: Map<string, string>,
-    http: boolean
+    http: boolean,
+    withCall = false
   ): string {
     const toolName = toolNames.get(workflow.id) ?? workflow.id;
     const description = `${describeTool(workflow, { http })}\n\nOptional reserved argument _timeoutMs (integer, 1 to 600000): timeout in milliseconds of the whole call; it is not part of the payload.`;
     const zodSchema = this.buildZodSchema(workflow);
+    const callLiteral = withCall ? callLiteralOf(workflow) : '';
+    const callArgument = callLiteral === '' ? '' : `, ${callLiteral}`;
 
     const lines: string[] = [
       `// Tool: ${toolName} (from workflow: ${JSON.stringify(workflow.label)})`,
@@ -1162,7 +1354,7 @@ export class McpGenerator {
       `        isError: true`,
       `      };`,
       `    }`,
-      `    const result = await runReplay(${JSON.stringify(workflow.steps)}, args, ${JSON.stringify(this.finalOf(workflow))}, { callMs: _timeoutMs, workflowMs: ${JSON.stringify(workflow.timeoutMs)}, setMs: ${JSON.stringify(set.timeoutMs)} });`,
+      `    const result = await runReplay(${JSON.stringify(workflow.steps)}, args, ${JSON.stringify(this.finalOf(workflow))}, { callMs: _timeoutMs, workflowMs: ${JSON.stringify(workflow.timeoutMs)}, setMs: ${JSON.stringify(set.timeoutMs)} }${callArgument});`,
       `    return {`,
       `      content: [{ type: "text", text: JSON.stringify(withMode(result)) }],`,
       `      isError: !result.success`,

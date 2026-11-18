@@ -55,7 +55,11 @@ export function buildRowLocator(binding: RowBindingLike, variables: Record<strin
   if (binding.variable !== undefined) {
     raw = variables[binding.variable];
     if (raw === undefined || raw === null) {
-      throw new RowResolutionError('ROW_VARIABLE_MISSING', `no value for the variable "${binding.variable}" that selects the row`);
+      // An omitted optional Variable with "use the recorded value": the recorded key selects the row (2.10)
+      const recorded = binding.key?.text;
+      if (typeof recorded === 'string' && recorded.trim() !== '') {
+        raw = recorded;
+      } else throw new RowResolutionError('ROW_VARIABLE_MISSING', `no value for the variable "${binding.variable}" that selects the row`);
     }
   } else {
     raw = binding.key?.text;

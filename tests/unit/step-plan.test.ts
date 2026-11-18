@@ -63,9 +63,9 @@ describe('planLocators', () => {
     expect(JSON.stringify(plan)).not.toContain('Ada');
   });
 
-  it('refuses to guess the row when the Variable that selects it has no value', () => {
+  it('refuses to guess the row when the Variable that selects it has no value and the binding has no recorded key', () => {
     const plan = planLocators(
-      { actionType: 'click', selectors: ['role=button[name="Delete"]'], rowBinding: { container: {}, key: { text: 'Ada' }, variable: 'customer' } },
+      { actionType: 'click', selectors: ['role=button[name="Delete"]'], rowBinding: { container: {}, variable: 'customer' } },
       {}
     );
     expect(plan).toHaveLength(1);

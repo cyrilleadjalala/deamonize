@@ -1,0 +1,97 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
+import _addFormats from "ajv-formats";
+import { z } from "zod";
+import { replay } from "./replay.js";
+import { replayInDocker } from "./docker-replay.js";
+
+const INPUT_SCHEMAS: Record<string, object> = {"add_a_task":{"type":"object"},"show_the_list":{"type":"object"}};
+
+// ajv-formats ships as CJS; cast to the callable form for TypeScript.
+const addFormats = _addFormats as unknown as (ajv: Ajv2020) => void;
+const ajv = new Ajv2020({ allErrors: true, strict: false });
+addFormats(ajv);
+// Schemas are compiled once at startup, not per call.
+const validators = new Map<string, ValidateFunction>(
+  Object.entries(INPUT_SCHEMAS).map(([tool, schema]) => [tool, ajv.compile(schema)])
+);
+
+// Returns null when the payload is valid, the list of violations otherwise.
+function validatePayload(tool: string, payload: unknown) {
+  const validate = validators.get(tool);
+  if (validate === undefined || validate(payload)) return null;
+  return (validate.errors ?? []).map((err) => ({
+    instancePath: err.instancePath ?? "",
+    schemaPath: err.schemaPath ?? "",
+    message: err.message ?? "Validation error"
+  }));
+}
+
+// DAEMONIZE_SANDBOX=docker replays every call in a throw-away container instead of on this machine.
+const runReplay = process.env.DAEMONIZE_SANDBOX === "docker" ? replayInDocker : replay;
+
+// DAEMONIZE_MODE=strict (the default) or heal. Every result says which mode produced it; a result that did not
+// get as far as a replay (a refused payload, a sandbox that did not start) is completed here.
+const MODE = process.env.DAEMONIZE_MODE?.trim().toLowerCase() === "heal" ? "heal" : "strict";
+function withMode(result: object): object {
+  return { mode: MODE, ...(MODE === "heal" ? { healed: false, healedSteps: [] } : {}), ...result };
+}
+
+const server = new McpServer({
+  name: "Task Console",
+  version: "1.0.0"
+});
+
+// Tool: add_a_task (from workflow: "Add a task")
+server.tool(
+  "add_a_task",
+  "Add a task\n\nOptional reserved argument _timeoutMs (integer, 1 to 600000): timeout in milliseconds of the whole call; it is not part of the payload.",
+  {
+    // Reserved: the timeout of this call. Never part of the inferred payload schema.
+    "_timeoutMs": z.number().int().min(1).max(600000).optional(),
+  },
+  async ({ _timeoutMs, ...args }) => {
+    // The payload is validated against the full inferred schema before any replay.
+    const errors = validatePayload("add_a_task", args);
+    if (errors !== null) {
+      return {
+        content: [{ type: "text", text: JSON.stringify(withMode({ success: false, error: "validation", errors })) }],
+        isError: true
+      };
+    }
+    const result = await runReplay([{"actionType":"type","selectors":[],"variable":"title","value":"Buy milk","label":"Title"},{"actionType":"keypress","selectors":[],"value":"Enter","label":"Confirm"}], args, {"workflowId":"22222222-2222-4222-8222-222222222201","cols":80,"rows":24}, { callMs: _timeoutMs, workflowMs: undefined, setMs: undefined });
+    return {
+      content: [{ type: "text", text: JSON.stringify(withMode(result)) }],
+      isError: !result.success
+    };
+  }
+);
+
+// Tool: show_the_list (from workflow: "Show the list")
+server.tool(
+  "show_the_list",
+  "Show the list\n\nOptional reserved argument _timeoutMs (integer, 1 to 600000): timeout in milliseconds of the whole call; it is not part of the payload.",
+  {
+    // Reserved: the timeout of this call. Never part of the inferred payload schema.
+    "_timeoutMs": z.number().int().min(1).max(600000).optional(),
+  },
+  async ({ _timeoutMs, ...args }) => {
+    // The payload is validated against the full inferred schema before any replay.
+    const errors = validatePayload("show_the_list", args);
+    if (errors !== null) {
+      return {
+        content: [{ type: "text", text: JSON.stringify(withMode({ success: false, error: "validation", errors })) }],
+        isError: true
+      };
+    }
+    const result = await runReplay([{"actionType":"keypress","selectors":[],"value":"l","label":"List"}], args, {"workflowId":"22222222-2222-4222-8222-222222222202"}, { callMs: _timeoutMs, workflowMs: undefined, setMs: undefined });
+    return {
+      content: [{ type: "text", text: JSON.stringify(withMode(result)) }],
+      isError: !result.success
+    };
+  }
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);

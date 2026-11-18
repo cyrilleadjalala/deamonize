@@ -53,3 +53,11 @@ secrets.vault.json.tmp-*
 vault.key
 vault.key.test
 *.storage-state.json.tmp-*
+# Thin Kiro extension: build output, packages and dependencies
+kiro-extension/dist/
+kiro-extension/*.vsix
+kiro-extension/node_modules/
+# Local recordings and agent notes at the repository root (examples/ keep their tracked workflow files)
+/daemonize.workflows.json
+/daemonize.workflows.json.assets/
+/.agents/

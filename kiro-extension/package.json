@@ -1,0 +1,113 @@
+{
+  "name": "daemonize-kiro",
+  "displayName": "Daemonize",
+  "description": "%extension.description%",
+  "version": "0.1.0",
+  "publisher": "daemonize",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/cyrilleadjalala/deamonize.git" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "icon": "media/icon.png",
+  "galleryBanner": { "color": "#19161d", "theme": "dark" },
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": false, "description": "%capabilities.untrusted%" },
+    "virtualWorkspaces": { "supported": false, "description": "%capabilities.virtual%" }
+  },
+  "activationEvents": [
+    "onView:daemonize.actions",
+    "onView:daemonize.credentials",
+    "onView:daemonize.kiro",
+    "onCommand:daemonize.start",
+    "onCommand:daemonize.stop",
+    "onCommand:daemonize.restart",
+    "onCommand:daemonize.openStudio",
+    "onCommand:daemonize.testInStudio",
+    "onCommand:daemonize.newAction",
+    "onCommand:daemonize.finishRecording",
+    "onCommand:daemonize.refresh",
+    "onCommand:daemonize.connectToKiro",
+    "onCommand:daemonize.removeFromKiro",
+    "onCommand:daemonize.setCredential",
+    "onCommand:daemonize.forgetCredential",
+    "onCommand:daemonize.showLog",
+    "onCommand:daemonize.chooseCliFile"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "daemonize", "title": "%container.title%", "icon": "media/daemonize.svg" }
+      ]
+    },
+    "views": {
+      "daemonize": [
+        { "id": "daemonize.actions", "name": "%view.actions%" },
+        { "id": "daemonize.credentials", "name": "%view.credentials%" },
+        { "id": "daemonize.kiro", "name": "%view.kiro%" }
+      ]
+    },
+    "viewsWelcome": [
+      { "view": "daemonize.actions", "contents": "%welcome.noFolder%", "when": "workspaceFolderCount == 0" }
+    ],
+    "commands": [
+      { "command": "daemonize.start", "title": "%command.start%", "category": "Daemonize" },
+      { "command": "daemonize.stop", "title": "%command.stop%", "category": "Daemonize" },
+      { "command": "daemonize.restart", "title": "%command.restart%", "category": "Daemonize", "icon": "$(debug-restart)" },
+      { "command": "daemonize.openStudio", "title": "%command.openStudio%", "category": "Daemonize", "icon": "$(link-external)" },
+      { "command": "daemonize.testInStudio", "title": "%command.testInStudio%", "category": "Daemonize", "icon": "$(play)" },
+      { "command": "daemonize.newAction", "title": "%command.newAction%", "category": "Daemonize", "icon": "$(add)" },
+      { "command": "daemonize.finishRecording", "title": "%command.finishRecording%", "category": "Daemonize", "icon": "$(check)" },
+      { "command": "daemonize.refresh", "title": "%command.refresh%", "category": "Daemonize", "icon": "$(refresh)" },
+      { "command": "daemonize.connectToKiro", "title": "%command.connectToKiro%", "category": "Daemonize", "icon": "$(plug)" },
+      { "command": "daemonize.removeFromKiro", "title": "%command.removeFromKiro%", "category": "Daemonize", "icon": "$(trash)" },
+      { "command": "daemonize.setCredential", "title": "%command.setCredential%", "category": "Daemonize", "icon": "$(key)" },
+      { "command": "daemonize.forgetCredential", "title": "%command.forgetCredential%", "category": "Daemonize", "icon": "$(close)" },
+      { "command": "daemonize.showLog", "title": "%command.showLog%", "category": "Daemonize" },
+      { "command": "daemonize.chooseCliFile", "title": "%command.chooseCliFile%", "category": "Daemonize" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "daemonize.newAction", "when": "view == daemonize.actions", "group": "navigation@1" },
+        { "command": "daemonize.finishRecording", "when": "view == daemonize.actions && daemonize.recording", "group": "navigation@2" },
+        { "command": "daemonize.openStudio", "when": "view == daemonize.actions", "group": "navigation@3" },
+        { "command": "daemonize.refresh", "when": "view == daemonize.actions || view == daemonize.credentials || view == daemonize.kiro", "group": "navigation@4" },
+        { "command": "daemonize.restart", "when": "view == daemonize.actions", "group": "navigation@5" },
+        { "command": "daemonize.connectToKiro", "when": "view == daemonize.kiro", "group": "navigation@1" }
+      ],
+      "view/item/context": [
+        { "command": "daemonize.testInStudio", "when": "view == daemonize.actions && viewItem == action", "group": "inline@1" },
+        { "command": "daemonize.connectToKiro", "when": "view == daemonize.actions && viewItem == action", "group": "inline@2" },
+        { "command": "daemonize.setCredential", "when": "view == daemonize.credentials && viewItem =~ /^secret/", "group": "inline@1" },
+        { "command": "daemonize.forgetCredential", "when": "view == daemonize.credentials && viewItem == secret.configured", "group": "inline@2" },
+        { "command": "daemonize.removeFromKiro", "when": "view == daemonize.kiro && viewItem == install", "group": "inline@1" }
+      ],
+      "commandPalette": [
+        { "command": "daemonize.finishRecording", "when": "daemonize.recording" }
+      ]
+    },
+    "configuration": {
+      "title": "Daemonize",
+      "properties": {
+        "daemonize.cliPath": { "type": "string", "default": "", "scope": "machine", "description": "%config.cliPath%" },
+        "daemonize.nodePath": { "type": "string", "default": "", "scope": "machine", "description": "%config.nodePath%" }
+      }
+    }
+  },
+  "scripts": {
+    "bundle": "node scripts/bundle.mjs",
+    "build": "node scripts/bundle.mjs --production",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package --no-dependencies",
+    "ls": "vsce ls --no-dependencies",
+    "icon": "node scripts/make-icon.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.3"
+  }
+}

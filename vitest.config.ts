@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 // Integration files start browsers, pseudo-terminals, MCP servers and containers. Run all at once on a
@@ -15,6 +16,19 @@ export default defineConfig({
           include: ['tests/unit/**/*.test.ts', 'tests/property/**/*.test.ts'],
           // Some unit files start a real browser (capture-script): closing it can be slow under load
           testTimeout: 30000,
+          hookTimeout: 60000,
+          sequence: { groupOrder: 1 },
+        },
+      },
+      {
+        // Thin Kiro extension: `vscode` exists only inside the editor, so tests import a fake instead
+        extends: true,
+        resolve: { alias: { vscode: fileURLToPath(new URL('./tests/extension/fake-vscode.ts', import.meta.url)) } },
+        test: {
+          name: 'extension',
+          setupFiles: ['./tests/setup/clean-env.ts'],
+          include: ['tests/extension/**/*.test.ts'],
+          testTimeout: 60000,
           hookTimeout: 60000,
           sequence: { groupOrder: 1 },
         },

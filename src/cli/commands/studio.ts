@@ -11,6 +11,22 @@ export interface StudioCommandOptions {
   graph?: string;
   /** Print to this function (default console.log); the URL line carries the token. */
   log?: (line: string) => void;
+  /** Print one JSON line (origin, token, pid) to stdout, send messages to stderr, never open a browser. */
+  machine?: boolean;
+  /** Test seams, used only with `machine`. Default: process.stdout.write and process.stderr.write. */
+  stdout?: (text: string) => void;
+  stderr?: (line: string) => void;
+}
+
+export interface Handshake {
+  origin: string;
+  token: string;
+  pid: number;
+}
+
+/** One line: `JSON.stringify` of exactly these three fields, plus `\n`. */
+export function formatHandshakeLine(h: Handshake): string {
+  return `${JSON.stringify({ origin: h.origin, token: h.token, pid: h.pid })}\n`;
 }
 
 /** The value of `--port`: a whole number from 0 to 65535. */
@@ -33,7 +49,10 @@ function openInBrowser(url: string): void {
  * process alive (the CLI waits for Ctrl+C).
  */
 export async function studio(dir: string, options: StudioCommandOptions): Promise<StudioHandle> {
-  const log = options.log ?? ((line: string) => console.log(line));
+  const machine = options.machine === true;
+  const log = machine
+    ? (options.stderr ?? ((line: string) => void process.stderr.write(`${line}\n`)))
+    : (options.log ?? ((line: string) => console.log(line)));
   const host = options.host ?? '127.0.0.1';
   if (!isLoopbackHost(host)) {
     if (options.allowRemote !== true) {
@@ -50,6 +69,11 @@ export async function studio(dir: string, options: StudioCommandOptions): Promis
     sampleData: options.sample,
     graphFile: options.graph,
   });
+  if (machine) {
+    const write = options.stdout ?? ((text: string) => void process.stdout.write(text));
+    write(formatHandshakeLine({ origin: handle.origin, token: handle.token, pid: process.pid }));
+    return handle;
+  }
   log(`Studio${options.sample ? ' (sample data)' : ''}: ${handle.url}`);
   log('Open that address: the token in it is valid for this run only. Press Ctrl+C to stop.');
   if (options.sample !== true) {

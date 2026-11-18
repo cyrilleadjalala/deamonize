@@ -292,8 +292,10 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .option('--graph <file>', 'State_Graph file to show (default: <dir>/state-graph.json)')
     .option('--open', 'open the address in your browser')
     .option('--sample', 'show built-in fictitious sample data instead of your files')
+    .option('--machine', 'print one JSON line with the address and token to stdout, send messages to stderr and never open a browser (for editor extensions)')
     .action(async (dir: string | undefined, options) => {
       const handle = await deps.studio(dir ?? DEFAULT_OUTPUT_DIR, {
+        machine: options.machine === true,
         workflows: options.workflows,
         port: options.port,
         host: options.host,

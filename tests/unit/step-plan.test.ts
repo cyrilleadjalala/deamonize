@@ -88,6 +88,51 @@ describe('planLocators', () => {
   it('plans nothing for a page switch', () => {
     expect(planLocators({ actionType: 'switch_page', selectors: [], anchor: { role: 'document', name: 'x', frame: [], popup: { page: 1, opens: true } } })).toEqual([]);
   });
+
+  it('falls back between searchbox and combobox for search input steps, preserving parent scope', () => {
+    const asCombobox: StepLike = {
+      actionType: 'type',
+      selectors: ['role=combobox[name="Search site"]', '[name="search"]'],
+      anchor: { role: 'combobox', name: 'Search site', parent: { kind: 'region', name: 'Site header' }, frame: [] },
+      risk: 'write',
+    };
+    const comboboxPlan = planLocators(asCombobox);
+    expect(comboboxPlan.slice(0, 2).map((c) => c.description)).toEqual([
+      "getByRole('combobox', { name: 'Search site', exact: true }) in region 'Site header'",
+      "getByRole('searchbox', { name: 'Search site', exact: true }) in region 'Site header'",
+    ]);
+    expect(comboboxPlan[1]).toMatchObject({
+      kind: 'role',
+      role: { role: 'searchbox', name: 'Search site', exact: true },
+      scope: { kind: 'region', name: 'Site header' },
+    });
+
+    const asSearchbox: StepLike = {
+      actionType: 'keypress',
+      value: 'Enter',
+      selectors: ['role=searchbox[name="Search site"]', '#searchInput'],
+      anchor: { role: 'searchbox', name: 'Search site', frame: [] },
+    };
+    const searchboxPlan = planLocators(asSearchbox);
+    expect(searchboxPlan.slice(0, 2).map((c) => c.description)).toEqual([
+      "getByRole('searchbox', { name: 'Search site', exact: true })",
+      "getByRole('combobox', { name: 'Search site', exact: true })",
+    ]);
+  });
+
+  it('does not emit a searchbox fallback for select actions on a combobox', () => {
+    const plan = planLocators({
+      actionType: 'select',
+      selectors: ['select[name="plan"]'],
+      anchor: { role: 'combobox', name: 'Plan', frame: [] },
+      variable: 'plan',
+      value: 'pro',
+    });
+    expect(plan.map((c) => c.description)).toEqual([
+      "getByRole('combobox', { name: 'Plan', exact: true })",
+      'css: select[name="plan"]',
+    ]);
+  });
 });
 
 describe('decideCandidate', () => {

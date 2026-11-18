@@ -83,6 +83,12 @@ const SCOPE_KINDS = new Set<string>(['dialog', 'region', 'heading']);
 // A canvas has no accessible content: such a step is located by its coordinates, never by role
 const NON_ROLES = new Set(['', 'generic', 'document', 'canvas']);
 const OPTION_ROLES = new Set(['option', 'radio']);
+// Search inputs commonly hydrate between `searchbox` and `combobox` while keeping their accessible name
+const SEARCH_ROLE_SWAP: Record<string, string> = { searchbox: 'combobox', combobox: 'searchbox' };
+
+function alternateSearchRole(actionType: string, role: string): string | undefined {
+  return actionType === 'select' ? undefined : SEARCH_ROLE_SWAP[role];
+}
 
 /** Quote a name for the description of a Playwright call. */
 function q(text: string): string {
@@ -137,19 +143,25 @@ export function planLocators(step: StepLike, variables: Record<string, unknown> 
   const name = byValue ? String(variables[step.variable as string]) : anchor?.name ?? '';
 
   if (anchor !== undefined && !NON_ROLES.has(anchor.role) && name !== '') {
-    const role = { role: anchor.role, name, exact: name.length < MAX_ACCESSIBLE_NAME };
+    const exact = name.length < MAX_ACCESSIBLE_NAME;
     const parent = anchor.parent;
     const scope =
       !rowBound && parent !== undefined && SCOPE_KINDS.has(parent.kind) && parent.name !== ''
         ? { kind: parent.kind as ScopeKind, name: parent.name }
         : undefined;
-    // A control recorded inside a context is never looked for outside it: it could be the other "Save"
-    const call = `getByRole(${q(role.role)}, { name: ${q(name)}${role.exact ? ', exact: true' : ''} })`;
-    if (scope !== undefined) {
-      push({ kind: 'role', role, scope, description: `${call} in ${scope.kind === 'heading' ? 'the section titled' : scope.kind} ${q(scope.name)}` });
-    } else if (parent === undefined || !SCOPE_KINDS.has(parent.kind) || rowBound || parent.name === '') {
-      push({ kind: 'role', role, inRow: rowBound, description: call + inRow });
-    }
+    const pushRole = (roleName: string): void => {
+      const role = { role: roleName, name, exact };
+      // A control recorded inside a context is never looked for outside it: it could be the other "Save"
+      const call = `getByRole(${q(role.role)}, { name: ${q(name)}${role.exact ? ', exact: true' : ''} })`;
+      if (scope !== undefined) {
+        push({ kind: 'role', role, scope, description: `${call} in ${scope.kind === 'heading' ? 'the section titled' : scope.kind} ${q(scope.name)}` });
+      } else if (parent === undefined || !SCOPE_KINDS.has(parent.kind) || rowBound || parent.name === '') {
+        push({ kind: 'role', role, inRow: rowBound, description: call + inRow });
+      }
+    };
+    pushRole(anchor.role);
+    const altRole = alternateSearchRole(step.actionType, anchor.role);
+    if (altRole !== undefined) pushRole(altRole);
   }
 
   // A value taken from the Payload replaces the recorded text: the recorded selectors would pick the recorded option

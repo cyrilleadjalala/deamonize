@@ -12,6 +12,16 @@ const BACKGROUND = ['header', 'main', 'footer'];
 let counter = 0;
 
 /**
+ * Drops `null`, `undefined` and `false` and keeps the order of the rest.
+ * @param {unknown} children one child or a list
+ * @returns {any[]}
+ */
+export function withoutEmpty(children) {
+  const list = Array.isArray(children) ? children : [children];
+  return list.filter((c) => c !== null && c !== undefined && c !== false);
+}
+
+/**
  * @param {{ title: string, content: Node | Node[], opener?: HTMLElement | null, onClose?: () => void }} options
  * @returns {{ element: HTMLElement, body: HTMLElement, close: () => void, setContent: (...nodes: Node[]) => void, focusFirst: () => void }}
  */
@@ -24,9 +34,9 @@ export function openDialog({ title, content, opener, onClose }) {
   let closed = false;
 
   const setContent = (...nodes) => {
-    body.replaceChildren(...nodes);
+    body.replaceChildren(...withoutEmpty(nodes));
   };
-  setContent(...(Array.isArray(content) ? content : [content]));
+  setContent(...withoutEmpty(content));
 
   const focusables = () => /** @type {HTMLElement[]} */ ([...box.querySelectorAll(FOCUSABLE)]).filter((el) => !el.hasAttribute('hidden'));
   const focusFirst = () => {

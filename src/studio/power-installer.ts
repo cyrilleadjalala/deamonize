@@ -99,6 +99,8 @@ interface Plan {
   entry: ServerEntry;
   replacesEntry: boolean;
   missing: string[];
+  /** Sorted names of every secret the tool needs (names only). */
+  required: string[];
   otherScopeInstalled?: InstallScope;
 }
 interface Confirmation {
@@ -208,6 +210,7 @@ export class StudioPowerInstaller implements PowerInstaller {
       serverName: plan.slug,
       placeholders: secretPlaceholders(plan.entry),
       missingSecrets: plan.missing,
+      requiredSecrets: plan.required,
       backup: plan.existing !== undefined,
       ...(plan.otherScopeInstalled === undefined ? {} : { otherScopeInstalled: plan.otherScopeInstalled }),
     };
@@ -217,6 +220,7 @@ export class StudioPowerInstaller implements PowerInstaller {
     written: string[];
     placeholders: string[];
     missingSecrets: string[];
+    requiredSecrets: string[];
     scope: InstallScope;
     autoAddSaved?: boolean;
   }> {
@@ -248,6 +252,7 @@ export class StudioPowerInstaller implements PowerInstaller {
       written: result.written,
       placeholders: secretPlaceholders(plan.entry),
       missingSecrets: plan.missing,
+      requiredSecrets: plan.required,
       scope,
       ...(autoAddSaved === undefined ? {} : { autoAddSaved }),
     };
@@ -547,6 +552,7 @@ export class StudioPowerInstaller implements PowerInstaller {
       entry,
       replacesEntry: isPlainObject(servers) && has(servers, source.slug),
       missing,
+      required: [...source.required],
       ...(otherScopeInstalled === undefined ? {} : { otherScopeInstalled }),
     };
   }

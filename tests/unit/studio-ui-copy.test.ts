@@ -41,6 +41,12 @@ describe('Plain-language copy of the first flow', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('words the vault credentials message exactly and keeps it plain', () => {
+    expect(COPY.credentialsFromVault).toBe('This tool will use the passwords you saved in Daemonize. Nothing else to set up.');
+    expect(banned(COPY.credentialsFromVault)).toBe(false);
+    expect((allCopyTexts() as string[]).includes(COPY.credentialsFromVault)).toBe(true);
+  });
+
   it('shows the sentence-case name and the three kind words', () => {
     expect(displayName('CRM_PASSWORD')).toBe('Crm password');
     expect(COPY.kindPassword).toBe('Password');

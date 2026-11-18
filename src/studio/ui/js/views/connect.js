@@ -3,7 +3,8 @@ import { h } from '../dom.js';
 import { api, ApiError } from '../api.js';
 import { announce, chip, copyButton } from '../components.js';
 import { COPY } from '../copy.js';
-import { openDialog } from '../dialog.js';
+import { openDialog, withoutEmpty } from '../dialog.js';
+import { credentialsNotice } from '../credentials-notice.js';
 import { href } from '../router.js';
 
 /** A file path or folder, in the one element the plain-language lint skips. @param {string} text */
@@ -12,7 +13,7 @@ const path = (text) => h('code', { class: 'path', text });
 /** What a failed request says: the action that failed, the server's plain reason when it has one. No value is ever shown. */
 function failure(actionFailed, answer, err) {
   const reason = err ? (err instanceof ApiError && err.status !== 0 ? err.message : COPY.unreachable) : typeof answer?.error === 'string' ? answer.error : null;
-  return [h('p', { text: actionFailed }), reason ? h('p', { class: 'muted', text: reason }) : null];
+  return withoutEmpty([h('p', { text: actionFailed }), reason ? h('p', { class: 'muted', text: reason }) : null]);
 }
 
 /** @param {unknown} scope */
@@ -250,12 +251,17 @@ function showSuccess(dialog, preview, result, wantsAutoAdd) {
   const missing = Array.isArray(result?.missingSecrets) ? result.missingSecrets : Array.isArray(preview?.missingSecrets) ? preview.missingSecrets : [];
   const closeButton = h('button', { type: 'button', class: 'btn btn-primary', id: 'connect-close', text: COPY.close, onclick: () => dialog.close() });
   dialog.element.querySelector('.dialog-title')?.replaceChildren(COPY.connectedTitle);
+  const notice = credentialsNotice(result, preview);
   dialog.setContent(
     h('p', { text: COPY.connectedLead }),
     h('ul', { class: 'plain-list' }, ...written.map((p) => h('li', null, path(String(p))))),
-    placeholders.length > 0
+    notice === 'placeholders'
       ? h('div', { class: 'connect-placeholders' }, h('p', { text: COPY.placeholdersLead }), h('ul', { class: 'plain-list' }, ...placeholders.map((n) => h('li', null, chip(String(n), 'secret')))))
-      : h('p', { class: 'muted', text: COPY.noPlaceholders }),
+      : notice === 'vault'
+        ? h('p', { class: 'muted connect-vault', text: COPY.credentialsFromVault })
+        : notice === 'none'
+          ? h('p', { class: 'muted', text: COPY.noPlaceholders })
+          : null,
     missing.length > 0
       ? h('div', { class: 'notice connect-missing', role: 'note' },
           h('p', { text: COPY.missingLead }),

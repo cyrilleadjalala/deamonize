@@ -120,6 +120,16 @@ describe('Power_Installer (fake home)', () => {
     expect(preview.kiroPath.endsWith('.kiro')).toBe(true);
   });
 
+  it('lists the sorted required names in the preview and the install answer, saved or not, and never a value', async () => {
+    h.stored.add('PASSWORD');
+    const { preview, result } = await fullInstall(h, 'global');
+    expect(preview.requiredSecrets).toEqual(['PASSWORD', 'TOTP']);
+    expect(result.requiredSecrets).toEqual(['PASSWORD', 'TOTP']);
+    expect(preview.missingSecrets).toEqual(['TOTP']);
+    for (const name of result.missingSecrets) expect(result.requiredSecrets).toContain(name);
+    expect(JSON.stringify([preview, result])).not.toContain(FAKE_SECRET_VALUE);
+  });
+
   it('reports a stored secret as configured and drops its placeholder', async () => {
     h.stored.add('PASSWORD');
     const { preview } = await fullInstall(h, 'global');

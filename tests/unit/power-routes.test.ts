@@ -104,6 +104,8 @@ describe('Power routes through the Studio', () => {
     const done = await call(local, 'POST', '/api/power/install', { confirmationId: json(preview.text).confirmationId, kiroPath: json(preview.text).kiroPath, scope: 'global', autoAdd: true });
     expect(done.status).toBe(200);
     expect(typeof json(done.text).autoAddSaved).toBe('boolean');
+    expect(json(preview.text).requiredSecrets).toEqual(['PASSWORD', 'TOTP']);
+    expect(json(done.text).requiredSecrets).toEqual(['PASSWORD', 'TOTP']);
     const snippet = await call(local, 'GET', '/api/power/snippet');
     for (const res of [info, refused, state, off, preview, done, snippet]) expect(res.text).not.toContain(FAKE_SECRET_VALUE);
     const removed = await call(local, 'POST', '/api/power/remove', { scope: 'global' });

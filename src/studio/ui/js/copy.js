@@ -135,6 +135,7 @@ export const COPY = {
   connectedLead: 'These files were written:',
   placeholdersLead: 'These names were added without any value. Each one must be set on the computer where Kiro runs, and Kiro may ask you to approve it in its settings:',
   noPlaceholders: 'This tool needs no credentials.',
+  credentialsFromVault: 'This tool will use the passwords you saved in Daemonize. Nothing else to set up.',
   copyMcp: 'Copy MCP configuration',
   copyMcpDone: 'MCP configuration copied',
   copyMcpFailed: 'The settings could not be loaded.',

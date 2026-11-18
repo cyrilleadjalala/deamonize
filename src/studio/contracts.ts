@@ -157,6 +157,8 @@ export interface PowerPreview {
   placeholders: string[];
   /** Secret_Names with no value yet, for the warning. */
   missingSecrets: string[];
+  /** Sorted Secret_Names the tool needs, saved or not. Names only. */
+  requiredSecrets: string[];
   /** True when settings/mcp.json exists and will be copied. */
   backup: boolean;
   otherScopeInstalled?: InstallScope;
@@ -184,6 +186,7 @@ export interface PowerInstaller {
     written: string[];
     placeholders: string[];
     missingSecrets: string[];
+    requiredSecrets: string[];
     scope: InstallScope;
     /** Only when `autoAdd` was requested: false when the consent could not be stored. */
     autoAddSaved?: boolean;

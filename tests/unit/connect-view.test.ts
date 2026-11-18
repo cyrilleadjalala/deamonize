@@ -198,6 +198,65 @@ describe('connect screen (real Chromium, stubbed api)', () => {
     expect(await page.locator('.connect-missing').count()).toBe(0);
   });
 
+  const FROM_VAULT = 'This tool will use the passwords you saved in Daemonize. Nothing else to set up.';
+  const NO_CREDENTIALS = 'This tool needs no credentials.';
+  const installAndRead = async (): Promise<string> => {
+    await open();
+    await page.locator('#connect-btn').click();
+    await page.locator('#connect-confirm').click();
+    await page.waitForSelector('#connect-close');
+    return dialogText();
+  };
+
+  it('never prints null or undefined on the success screen and shows the right credentials sentence', async () => {
+    // all secrets saved: no placeholder, names required
+    reset({ install: { status: 200, body: { ...baseInstall, requiredSecrets: ['PASSWORD', 'TOTP'] } } });
+    let text = await installAndRead();
+    expect(text).toContain(FROM_VAULT);
+    expect(text).not.toContain(NO_CREDENTIALS);
+    expect(text).not.toMatch(/\b(null|undefined)\b/);
+    expect(await page.locator('.connect-missing').count()).toBe(0);
+    await lintAndPaths();
+    await page.locator('#connect-close').click();
+
+    // a secret with a placeholder
+    reset({ install: { status: 200, body: { ...baseInstall, placeholders: ['DAEMONIZE_SECRET_PASSWORD'], requiredSecrets: ['PASSWORD'] } } });
+    text = await installAndRead();
+    expect(text).toContain('DAEMONIZE_SECRET_PASSWORD');
+    expect(text).not.toContain(FROM_VAULT);
+    expect(text).not.toContain(NO_CREDENTIALS);
+    await page.locator('#connect-close').click();
+
+    // no secret at all
+    reset({ install: { status: 200, body: { ...baseInstall, requiredSecrets: [] } } });
+    text = await installAndRead();
+    expect(text).toContain(NO_CREDENTIALS);
+    expect(text).not.toContain(FROM_VAULT);
+    expect(text).not.toMatch(/\b(null|undefined)\b/);
+    await page.locator('#connect-close').click();
+
+    // an older server: the answers have no field at all, so no sentence
+    reset();
+    text = await installAndRead();
+    expect(text).not.toContain(NO_CREDENTIALS);
+    expect(text).not.toContain(FROM_VAULT);
+    expect(text).not.toMatch(/\b(null|undefined)\b/);
+    await page.locator('#connect-close').click();
+
+    // an older install answer: the field is read from the preview
+    reset({ preview: { status: 200, body: { ...basePreview, requiredSecrets: ['PASSWORD'] } } });
+    text = await installAndRead();
+    expect(text).toContain(FROM_VAULT);
+    await page.locator('#connect-close').click();
+
+    // a mix of saved and missing: both the sentence and the missing notice
+    reset({ install: { status: 200, body: { ...baseInstall, missingSecrets: ['TOTP'], requiredSecrets: ['PASSWORD', 'TOTP'] } } });
+    text = await installAndRead();
+    expect(text).toContain(FROM_VAULT);
+    expect(await page.locator('.connect-missing').textContent()).toContain('TOTP');
+    expect(text).not.toMatch(/\b(null|undefined)\b/);
+  });
+
   it('shows "Remove from Kiro" only with an install, and the reload reminder after removal', async () => {
     reset();
     await open();

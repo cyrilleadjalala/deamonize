@@ -97,6 +97,9 @@ const RUNTIME_VAULT_FORMAT = join(dirname(fileURLToPath(import.meta.url)), '..',
 // The reader of the vault of Studio: standalone, imports only node:* and ./vault-format.js
 const RUNTIME_VAULT_READER = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'replay', 'runtime', 'vault-reader.ts');
 
+// The launcher of the browser of a web replay: standalone, imports nothing
+const RUNTIME_BROWSER_LAUNCH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'replay', 'runtime', 'browser-launch.ts');
+
 const RUNTIME_PATTERN_WAIT = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -212,6 +215,7 @@ export class Compiler {
     const patternWaitSource = set.targetType === 'tui' ? await readFile(RUNTIME_PATTERN_WAIT, 'utf-8') : undefined;
     // Strict Level 2 execution with Playwright: only a web target replays a browser
     const webStepsSource = set.targetType === 'web' ? await readFile(RUNTIME_WEB_STEPS, 'utf-8') : undefined;
+    const browserLaunchSource = set.targetType === 'web' ? await readFile(RUNTIME_BROWSER_LAUNCH, 'utf-8') : undefined;
     // Level 1 (--http): the runtime that executes recorded requests, copied verbatim like the other run-time modules
     const httpReplaySource = http ? await readFile(RUNTIME_HTTP_REPLAY, 'utf-8') : undefined;
     const kiroPower = this.kiroPowerGenerator.generate(set, toolNames, outputDir, options);
@@ -268,6 +272,7 @@ export class Compiler {
       vaultReader: join(outputDir, 'vault-reader.js'),
       ...(patternWaitSource === undefined ? {} : { patternWaitSource: join(outputDir, 'pattern-wait.ts'), patternWait: join(outputDir, 'pattern-wait.js') }),
       ...(webStepsSource === undefined ? {} : { webStepsSource: join(outputDir, 'web-steps.ts'), webSteps: join(outputDir, 'web-steps.js') }),
+      ...(browserLaunchSource === undefined ? {} : { browserLaunchSource: join(outputDir, 'browser-launch.ts'), browserLaunch: join(outputDir, 'browser-launch.js') }),
       ...(httpReplaySource === undefined ? {} : { httpReplaySource: join(outputDir, 'http-replay.ts'), httpReplay: join(outputDir, 'http-replay.js') }),
       plugin: join(outputDir, 'plugin.json'),
       mcp: join(outputDir, 'mcp.json'),
@@ -306,6 +311,10 @@ export class Compiler {
       ...(webStepsSource === undefined ? [] : [
         writeFile(join(outputDir, 'web-steps.ts'), webStepsSource),
         writeFile(join(outputDir, 'web-steps.js'), this.toJavaScript(webStepsSource)),
+      ]),
+      ...(browserLaunchSource === undefined ? [] : [
+        writeFile(join(outputDir, 'browser-launch.ts'), browserLaunchSource),
+        writeFile(join(outputDir, 'browser-launch.js'), this.toJavaScript(browserLaunchSource)),
       ]),
       ...(httpReplaySource === undefined ? [] : [
         writeFile(join(outputDir, 'http-replay.ts'), httpReplaySource),

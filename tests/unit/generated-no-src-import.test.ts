@@ -69,4 +69,7 @@ describe('generated reader files do not import from src/', () => {
       }
     }
   });
+  it.each(['browser-launch.ts', 'browser-launch.js'])('%s has no import at all', async (name) => {
+    expect(specifiers(name, await readFile(join(dir, name), 'utf-8'))).toEqual([]);
+  });
 });

@@ -138,6 +138,8 @@ describe('CLI: record → compile → merge', () => {
       'openapi.json',
       'package.json',
       'plugin.json',
+      'browser-launch.js',
+      'browser-launch.ts',
       'replay.js',
       'replay.ts',
       'row-resolver.js',

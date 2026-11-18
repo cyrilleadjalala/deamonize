@@ -113,8 +113,7 @@ describe('McpGenerator', () => {
     const replay = new McpGenerator().generateReplay(set);
 
     expect(replay).toContain('export async function replay(');
-    expect(replay).toContain('chromium.launch');
-    expect(replay).toContain('--no-sandbox');
+    expect(replay).toContain('launchReplayBrowser(chromium)');
     expect(replay).toContain('overrides.url ?? START_URL');
     expect(replay).toContain('process.argv.includes("--container")');
     // The result is the only thing written to stdout in the container

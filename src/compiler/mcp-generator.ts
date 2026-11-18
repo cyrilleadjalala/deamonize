@@ -298,12 +298,7 @@ const WEB_RUNTIME = [
   `  if (storagePath !== undefined && !existsSync(storagePath)) {`,
   `    return { success: false, error: "storage_state_missing", failure: { path: storagePath }, elapsedMs: Date.now() - startedAt };`,
   `  }`,
-  `  const browser = await chromium.launch({`,
-  `    headless: true,`,
-  `    executablePath: process.env.DAEMONIZE_CHROMIUM_PATH || undefined,`,
-  `    // Inside a container the container is the sandbox; Chromium's own cannot start there`,
-  `    args: process.env.DAEMONIZE_IN_CONTAINER ? ["--no-sandbox"] : []`,
-  `  });`,
+  `  const browser = await launchReplayBrowser(chromium);`,
   `  let timer: NodeJS.Timeout | undefined;`,
   `  try {`,
   `    const context = await browser.newContext(storagePath !== undefined ? { storageState: storagePath } : {});`,
@@ -373,11 +368,7 @@ const WEB_RUNTIME_HTTP = [
   `  // The browser starts when a step first needs it, on the application as the requests left it`,
   `  const openBrowser = async () => {`,
   `    if (session !== undefined) return session;`,
-  `    const browser = await chromium.launch({`,
-  `      headless: true,`,
-  `      executablePath: process.env.DAEMONIZE_CHROMIUM_PATH || undefined,`,
-  `      args: process.env.DAEMONIZE_IN_CONTAINER ? ["--no-sandbox"] : []`,
-  `    });`,
+  `    const browser = await launchReplayBrowser(chromium);`,
   `    try {`,
   `      const context = await browser.newContext(storagePath !== undefined ? { storageState: storagePath } : {});`,
   `      const page = await context.newPage();`,
@@ -977,6 +968,7 @@ export class McpGenerator {
           `import { boundText, redactDeep, zoneFailureResult, type ExtractorLike } from "./extract.js";`,
           `import { missingSecrets, secretValues, redactSecrets, runStepsStrict, describeFailure, failureResult, StepExecutionError, HealUnavailableError, HealFailedError, healEligible, hasNoDomTarget, parseMode, resolveStepValue, secretVariables, type ReplayMode } from "./step-plan.js";`,
           `import { withResolvedSecrets } from "./vault-reader.js";`,
+          `import { launchReplayBrowser } from "./browser-launch.js";`,
           ...(http
             ? [`import { planSteps, recipeMutates, runHttpStep, withRecordedDefaults, rebaseOrigin, missingHttpSecrets, httpSecretValues, httpSecretNames, secretVariable, buildHttpResult, httpFailureResult, scrub } from "./http-replay.js";`]
             : []),
@@ -1094,7 +1086,7 @@ export class McpGenerator {
       'replay.js', 'screen-hash.js', 'settle.js', 'extract.js',
       ...(terminal
         ? ['pattern-wait.js']
-        : ['row-resolver.js', 'step-plan.js', 'totp.js', 'vault-format.js', 'vault-reader.js', 'web-steps.js', ...(http ? ['http-replay.js'] : []), ...(healEnabled(set, options) ? ['heal'] : [])]),
+        : ['row-resolver.js', 'step-plan.js', 'totp.js', 'vault-format.js', 'vault-reader.js', 'web-steps.js', 'browser-launch.js', ...(http ? ['http-replay.js'] : []), ...(healEnabled(set, options) ? ['heal'] : [])]),
     ];
     const dockerfile = renderDockerfile({ targetType: set.targetType, copy, sandbox: set.sandbox, playwrightVersion: PLAYWRIGHT_VERSION });
     return {

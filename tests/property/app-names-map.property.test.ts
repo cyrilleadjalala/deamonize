@@ -40,5 +40,5 @@ describe('Property 13: Name_Map uniqueness and stability', () => {
       }),
       { numRuns: 100 },
     );
-  });
+  }, 120_000); // up to 8 temp-file renames per run: under full-suite load 100 runs can pass 30 s
 });

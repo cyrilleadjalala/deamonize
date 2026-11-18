@@ -27,6 +27,7 @@ import { buildSandboxImage } from '../../src/cli/commands/sandbox.js';
 import type { WorkflowSet } from '../../src/types.js';
 import { closeClient, removeDir } from '../helpers/cleanup.js';
 import { scanForValues } from '../helpers/scan-artifacts.js';
+import { ISOLATED_VAULT_ENV } from '../helpers/isolated-vault.js';
 
 const dockerEnabled = process.env.DAEMONIZE_DOCKER_TESTS === '1';
 const workspaceRoot = resolve(import.meta.dirname, '../..');
@@ -96,7 +97,7 @@ describe('sqlite3 example through MCP', () => {
       command: process.execPath,
       args: [join(outDir, 'mcp-server.js')],
       cwd,
-      env: { ...(process.env as Record<string, string>), DAEMONIZE_SECRET_CANARY: CANARY, DAEMONIZE_COOKIE: CANARY, ...env },
+      env: { ...(process.env as Record<string, string>), ...ISOLATED_VAULT_ENV, DAEMONIZE_SECRET_CANARY: CANARY, DAEMONIZE_COOKIE: CANARY, ...env },
     });
     await client.connect(transport);
     open.push({ client, transport });

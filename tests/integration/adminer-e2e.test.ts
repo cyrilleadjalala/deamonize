@@ -25,7 +25,8 @@ import type { WorkflowSet } from '../../src/types.js';
 import { deserializeWorkflowSet } from '../../src/workflow/workflow-set.js';
 import { adminerSkipReason, startAdminerStack, type AdminerStack } from '../helpers/adminer-stack.js';
 import { closeClient, removeDir } from '../helpers/cleanup.js';
-import { scanForValues } from '../helpers/scan-artifacts.js';
+import { scanForValues } from '../helpers/scan-artifacts.js';
+import { ISOLATED_VAULT_ENV } from '../helpers/isolated-vault.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 const skip = adminerSkipReason();
@@ -86,6 +87,7 @@ describe.skipIf(skip !== null)('Adminer + PostgreSQL: record, compile and call o
     const client = new Client({ name: 'adminer-test', version: '1.0.0' });
     const clean: Record<string, string> = {};
     for (const [key, value] of Object.entries({
+      ...ISOLATED_VAULT_ENV,
       DAEMONIZE_STEP_TIMEOUT_MS: '10000',
       ...(process.env.DAEMONIZE_CHROMIUM_PATH ? { DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH } : {}),
       ...env,

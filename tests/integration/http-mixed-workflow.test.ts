@@ -20,6 +20,7 @@ import { compile } from '../../src/cli/commands/compile.js';
 import { serializeWorkflowSet } from '../../src/workflow/workflow-set.js';
 import type { HttpRecipe, Workflow, WorkflowSet } from '../../src/types.js';
 import { closeClient, removeDir } from '../helpers/cleanup.js';
+import { ISOLATED_VAULT_ENV } from '../helpers/isolated-vault.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 
@@ -167,7 +168,7 @@ describe('--http on a mixed UI + HTTP workflow', () => {
       command: process.execPath,
       args: [join(outputDir, 'mcp-server.js')],
       cwd: workspaceRoot,
-      env: { DAEMONIZE_STEP_TIMEOUT_MS: '8000', DAEMONIZE_SECRET_CODE: '123456', DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH ?? '' },
+      env: { ...ISOLATED_VAULT_ENV, DAEMONIZE_STEP_TIMEOUT_MS: '8000', DAEMONIZE_SECRET_CODE: '123456', DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH ?? '' },
     });
     await client.connect(transport);
     tool = (await client.listTools()).tools.map((t) => t.name).find((name) => name.startsWith('sign_in')) ?? 'sign_in_with_code';

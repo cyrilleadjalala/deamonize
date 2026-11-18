@@ -20,6 +20,7 @@ import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import { closeClient, removeDir } from '../helpers/cleanup.js';
 import { encodedForms, scanForValues } from '../helpers/scan-artifacts.js';
 import type { Workflow, WorkflowSet, WorkflowStep } from '../../src/types.js';
+import { ISOLATED_VAULT_ENV } from '../helpers/isolated-vault.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 const chromiumEnv: Record<string, string> = process.env.DAEMONIZE_CHROMIUM_PATH
@@ -163,7 +164,7 @@ async function connect(dir: string, env: Record<string, string>): Promise<Connec
     command: process.execPath,
     args: [join(dir, 'mcp-server.js')],
     cwd: workspaceRoot,
-    env: { ...chromiumEnv, DAEMONIZE_STEP_TIMEOUT_MS: '1000', ...env },
+    env: { ...ISOLATED_VAULT_ENV, ...chromiumEnv, DAEMONIZE_STEP_TIMEOUT_MS: '1000', ...env },
     stderr: 'pipe',
   });
   const stderr: string[] = [];

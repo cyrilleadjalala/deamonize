@@ -20,6 +20,7 @@ import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import { deserializeWorkflowSet } from '../../src/workflow/workflow-set.js';
 import { closeClient, removeDir } from '../helpers/cleanup.js';
 import { scanForValues } from '../helpers/scan-artifacts.js';
+import { ISOLATED_VAULT_ENV } from '../helpers/isolated-vault.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 
@@ -120,6 +121,7 @@ describe('secrets: TOTP, resolution at run time and no leak', () => {
       args: [join(outputDir, 'mcp-server.js')],
       cwd: workspaceRoot,
       env: {
+        ...ISOLATED_VAULT_ENV,
         DAEMONIZE_STEP_TIMEOUT_MS: '3000',
         ...(process.env.DAEMONIZE_CHROMIUM_PATH ? { DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH } : {}),
         ...env,

@@ -18,6 +18,7 @@ import { MENU_KEY } from '../../src/recorder/key-tokenizer.js';
 import { deserializeWorkflowSet } from '../../src/workflow/workflow-set.js';
 import type { Workflow, WorkflowSet } from '../../src/types.js';
 import { closeClient, removeDir } from '../helpers/cleanup.js';
+import { ISOLATED_VAULT_ENV } from '../helpers/isolated-vault.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 const reportProgram = join(workspaceRoot, 'tests', 'fixtures', 'report.mjs');
@@ -166,6 +167,7 @@ describe('Result_Zone on a web page: record → compile → call over MCP', () =
       args: [join(outputDir, 'mcp-server.js')],
       cwd: workspaceRoot,
       env: {
+        ...ISOLATED_VAULT_ENV,
         DAEMONIZE_STEP_TIMEOUT_MS: '1500',
         DAEMONIZE_SECRET_TOKEN: 's3cr3t-value',
         ...(process.env.DAEMONIZE_CHROMIUM_PATH ? { DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH } : {}),
@@ -302,7 +304,7 @@ describe('Result_Zone on a web page: record → compile → call over MCP', () =
         command: process.execPath,
         args: [join(plainDir, 'mcp-server.js')],
         cwd: workspaceRoot,
-        env: process.env.DAEMONIZE_CHROMIUM_PATH ? { DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH } : undefined,
+        env: { ...ISOLATED_VAULT_ENV, ...(process.env.DAEMONIZE_CHROMIUM_PATH ? { DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH } : {}) },
       });
       await plainClient.connect(plainTransport);
       try {
@@ -400,7 +402,7 @@ describe('Result_Zone on a terminal program: record → compile → call over MC
     toolOf = new Map(set.workflows.map((w) => [w.label, compiled.toolNames.get(w.id) as string]));
 
     client = new Client({ name: 'zone-tui-e2e', version: '1.0.0' });
-    transport = new StdioClientTransport({ command: process.execPath, args: [join(outputDir, 'mcp-server.js')], cwd: workspaceRoot });
+    transport = new StdioClientTransport({ command: process.execPath, args: [join(outputDir, 'mcp-server.js')], cwd: workspaceRoot, env: { ...ISOLATED_VAULT_ENV } });
     await client.connect(transport);
   }, 180000);
 

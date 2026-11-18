@@ -26,6 +26,7 @@ import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
 import { deserializeWorkflowSet } from '../../src/workflow/workflow-set.js';
 import type { WorkflowSet } from '../../src/types.js';
 import { closeClient, removeDir } from '../helpers/cleanup.js';
+import { ISOLATED_VAULT_ENV } from '../helpers/isolated-vault.js';
 
 const FIXTURES = new URL('../fixtures/web/', import.meta.url);
 const workspaceRoot = resolve(import.meta.dirname, '../..');
@@ -147,6 +148,7 @@ describe('the generated web replay does not depend on the front-end stack', () =
         args: [join(dir, 'mcp-server.js')],
         cwd: workspaceRoot,
         env: {
+          ...ISOLATED_VAULT_ENV,
           DAEMONIZE_STEP_TIMEOUT_MS: '3000',
           ...(process.env.DAEMONIZE_CHROMIUM_PATH ? { DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH } : {}),
           ...env,

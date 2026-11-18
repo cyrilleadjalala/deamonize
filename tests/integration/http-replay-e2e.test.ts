@@ -19,6 +19,7 @@ import type { WorkflowSet } from '../../src/types.js';
 import { closeClient, removeDir } from '../helpers/cleanup.js';
 import { scanForValues } from '../helpers/scan-artifacts.js';
 import { BEARER, COOKIE_VALUE, recordCustomerWorkflows, sessionStorageState, startCustomersApp, type CustomersApp } from '../helpers/customers-app.js';
+import { ISOLATED_VAULT_ENV } from '../helpers/isolated-vault.js';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 
@@ -82,6 +83,7 @@ describe('Level 1: direct HTTP replay (record, compile --http, call over MCP)', 
       args: [join(outputDir, 'mcp-server.js')],
       cwd: workspaceRoot,
       env: {
+        ...ISOLATED_VAULT_ENV,
         DAEMONIZE_STEP_TIMEOUT_MS: '5000',
         DAEMONIZE_CHROMIUM_PATH: options.browser ? process.env.DAEMONIZE_CHROMIUM_PATH ?? '' : join(work, 'no-such-chromium.exe'),
         ...(options.storageState === false ? {} : { DAEMONIZE_STORAGE_STATE: storageStatePath }),
@@ -257,7 +259,7 @@ describe('Level 1: direct HTTP replay (record, compile --http, call over MCP)', 
       command: process.execPath,
       args: [join(patchedDir, 'mcp-server.js')],
       cwd: workspaceRoot,
-      env: { DAEMONIZE_STEP_TIMEOUT_MS: '5000', DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH ?? '', DAEMONIZE_STORAGE_STATE: storageStatePath, ...auth },
+      env: { ...ISOLATED_VAULT_ENV, DAEMONIZE_STEP_TIMEOUT_MS: '5000', DAEMONIZE_CHROMIUM_PATH: process.env.DAEMONIZE_CHROMIUM_PATH ?? '', DAEMONIZE_STORAGE_STATE: storageStatePath, ...auth },
     });
     await client.connect(transport);
     open.push({ client, transport });
@@ -311,7 +313,7 @@ describe('Level 1: direct HTTP replay (record, compile --http, call over MCP)', 
         command: process.execPath,
         args: [join(patchedDir, 'mcp-server.js')],
         cwd: workspaceRoot,
-        env: { DAEMONIZE_STEP_TIMEOUT_MS: '2000', DAEMONIZE_CHROMIUM_PATH: join(work, 'no-such-chromium.exe'), DAEMONIZE_STORAGE_STATE: storageStatePath, ...env },
+        env: { ...ISOLATED_VAULT_ENV, DAEMONIZE_STEP_TIMEOUT_MS: '2000', DAEMONIZE_CHROMIUM_PATH: join(work, 'no-such-chromium.exe'), DAEMONIZE_STORAGE_STATE: storageStatePath, ...env },
       });
       await client.connect(transport);
       open.push({ client, transport });

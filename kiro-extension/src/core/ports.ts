@@ -3,7 +3,9 @@ import type {
   RecordingStatus, SecretRow, WorkflowRow,
 } from './types';
 
-export type StudioRoute = 'playground' | 'credentials' | 'overview';
+export type StudioRoute = 'playground' | 'credentials' | 'overview' | 'workflows';
+/** Where the Studio opens inside a route: a tool in the Playground, or one workflow. */
+export type StudioTarget = { kind: 'tool'; name: string } | { kind: 'workflow'; id: string };
 
 export interface Redactor { (text: string): string }
 
@@ -18,6 +20,7 @@ export interface StudioApi {
   secrets(): Promise<ApiResult<SecretRow[]>>;
   setSecret(name: string, value: string): Promise<ApiResult<{ name: string; configured: boolean }>>;
   forgetSecret(name: string): Promise<ApiResult<{ name: string; configured: boolean }>>;
+  deleteWorkflow(id: string): Promise<ApiResult<{ ok: boolean; remaining: number; recompile?: string }>>;
   recordStart(i: { name: string; url: string; reuseSession: boolean }): Promise<ApiResult<{ state: string }>>;
   recordStatus(): Promise<ApiResult<RecordingStatus>>;
   recordStop(): Promise<ApiResult<{ state: string }>>;
@@ -33,7 +36,7 @@ export interface StudioSessionLike {
   readonly pid: number;
   readonly client: StudioClient;
   /** The only way the token leaves the session, besides the client. */
-  browserUrl(route?: StudioRoute): string;
+  browserUrl(route?: StudioRoute, target?: StudioTarget): string;
   /** For the redactor. */
   sensitiveValues(): string[];
 }

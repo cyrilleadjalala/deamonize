@@ -5,6 +5,7 @@ import type { ChildLike, SpawnOptions } from './core/process-manager';
 import { createStudioApi } from './core/studio-api';
 import { createStudioClient } from './core/studio-client';
 import { registerCredentialCommands } from './ui/commands/credentials';
+import { registerDeleteCommands } from './ui/commands/delete';
 import { registerKiroCommands } from './ui/commands/kiro';
 import { registerLifecycleCommands } from './ui/commands/lifecycle';
 import { registerRecordCommands } from './ui/commands/record';
@@ -78,6 +79,7 @@ export function activateWith(context: vscode.ExtensionContext, deps: ExtensionDe
     ...registerStatusBar(controller),
     ...registerLifecycleCommands(controller),
     ...registerStudioCommands(controller),
+    ...registerDeleteCommands(controller),
     ...registerRecordCommands(controller),
     ...registerCredentialCommands(controller),
     ...registerKiroCommands(controller),

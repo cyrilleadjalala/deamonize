@@ -24,6 +24,7 @@
     "onCommand:daemonize.restart",
     "onCommand:daemonize.openStudio",
     "onCommand:daemonize.testInStudio",
+    "onCommand:daemonize.deleteAction",
     "onCommand:daemonize.newAction",
     "onCommand:daemonize.finishRecording",
     "onCommand:daemonize.refresh",
@@ -56,6 +57,7 @@
       { "command": "daemonize.restart", "title": "%command.restart%", "category": "Daemonize", "icon": "$(debug-restart)" },
       { "command": "daemonize.openStudio", "title": "%command.openStudio%", "category": "Daemonize", "icon": "$(link-external)" },
       { "command": "daemonize.testInStudio", "title": "%command.testInStudio%", "category": "Daemonize", "icon": "$(play)" },
+      { "command": "daemonize.deleteAction", "title": "%command.deleteAction%", "category": "Daemonize", "icon": "$(trash)" },
       { "command": "daemonize.newAction", "title": "%command.newAction%", "category": "Daemonize", "icon": "$(add)" },
       { "command": "daemonize.finishRecording", "title": "%command.finishRecording%", "category": "Daemonize", "icon": "$(check)" },
       { "command": "daemonize.refresh", "title": "%command.refresh%", "category": "Daemonize", "icon": "$(refresh)" },
@@ -78,11 +80,13 @@
       "view/item/context": [
         { "command": "daemonize.testInStudio", "when": "view == daemonize.actions && viewItem == action", "group": "inline@1" },
         { "command": "daemonize.connectToKiro", "when": "view == daemonize.actions && viewItem == action", "group": "inline@2" },
+        { "command": "daemonize.deleteAction", "when": "view == daemonize.actions && viewItem == action", "group": "inline@3" },
         { "command": "daemonize.setCredential", "when": "view == daemonize.credentials && viewItem =~ /^secret/", "group": "inline@1" },
         { "command": "daemonize.forgetCredential", "when": "view == daemonize.credentials && viewItem == secret.configured", "group": "inline@2" },
         { "command": "daemonize.removeFromKiro", "when": "view == daemonize.kiro && viewItem == install", "group": "inline@1" }
       ],
       "commandPalette": [
+        { "command": "daemonize.deleteAction", "when": "false" },
         { "command": "daemonize.finishRecording", "when": "daemonize.recording" }
       ]
     },

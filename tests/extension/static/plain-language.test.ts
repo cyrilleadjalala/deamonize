@@ -22,6 +22,18 @@ describe('Plain_Language lint', () => {
     expect(bannedTermsIn('Use the sign-in you saved')).toEqual([]);
   });
 
+  it('the delete texts and the title contain no path and no Studio token', () => {
+    const texts = [
+      S.confirmDelete, S.deleteConfirm('Sample name'), S.deleteDetail, S.actionDeleted('Sample name'), S.actionDeletedUpdating('Sample name'),
+      S.actionGone, S.deleteBusy, S.deleteFailed, S.deleteNoAnswer, CONTRIBUTION_STRINGS['command.deleteAction'],
+    ];
+    expect(S.deleteDetail).toBe('This action cannot be recovered from the Studio.');
+    for (const text of texts) {
+      expect(bannedTermsIn(text), text).toEqual([]);
+      expect(text, text).not.toMatch(/[A-Za-z]:\\|\/[A-Za-z]|token/i);
+    }
+  });
+
   it('every user-facing string passes', () => {
     const offenders = allTexts().filter(([, text]) => bannedTermsIn(text).length > 0).map(([key]) => key);
     expect(offenders).toEqual([]);

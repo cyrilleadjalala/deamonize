@@ -54,16 +54,18 @@ All are guarded like the playground routes (token or cookie, `x-studio-request`,
 | Route | Method | Body | Answer |
 | --- | --- | --- | --- |
 | `/api/overview` | GET | | The existing fields plus `workflowFileExists`, `outputCompiled`, `recordingActive` |
-| `/api/record/start` | POST | `{ name, url, reuseSession? }` | 202 `{ state }`, 400 with `field`, 409 when busy |
-| `/api/record/status` | GET | | `{ state, steps, labels, error?, recoveryFile?, sessionNote? }`; step labels only, never typed values |
+| `/api/record/start` | POST | `{ name, url, reuseSession? }` | 202 `{ state }`, 400 with `field`, 409 when busy, when the workflow file is unreadable, in sample mode, or when `url` has another origin than the actions already in the file (`field: "url"`, see "One application per file") |
+| `/api/record/status` | GET | | `{ state, steps, labels, error?, recoveryFile?, sessionNote?, intent?, kiro? }`; step labels only, never typed values. After "Save and add to Kiro", `kiro` is `{ added, message, scope?, missingSecrets?, requiredSecrets? }`: `scope` (`global` or `project`) only when the tool was added, and the two lists hold credential names (never values) |
 | `/api/record/stop` | POST | `{}` | 202, or 409 when nothing is recording |
 | `/api/sessions` | GET | `?key=<origin>` optional | `{ applicationKey, available }` or a list; no cookie, path or content |
 | `/api/sessions/forget` | POST | `{ applicationKey }` | `{ applicationKey, available: false }` |
 | `/api/secrets` | GET | | `{ secrets: [{ name, kind, configured }] }` |
 | `/api/secrets` | POST | `{ name, value }` | `{ name, configured: true }`; 400 invalid, 503 when secure storage is unavailable |
 | `/api/secrets/forget` | POST | `{ name }` | `{ name, configured }` |
-| `/api/compile` | POST | `{}` | 202, or 409 while one runs |
+| `/api/compile` | POST | `{}` or `{ http?, healSupport? }` | 202, or 409 while one runs. `http` is `"off"` (default) or `"auto"`, `healSupport` a boolean (default `false`); another value or field answers 400 with `field`. The options are kept in memory until the Studio stops and are used by the next compiles, including the one after a recording or an edit. They are never written to the workflow file |
 | `/api/compile/status` | GET | | `{ state, phase, error? }` |
+| `/api/workflows/update` | POST | `{ id, label?, description?, variables? }` | 200 `{ workflow, recompile }`. `variables` is a list of `{ name, newName?, type?, optional?, whenOmitted?, description? }`: it renames a Variable, changes its type or optional setting, and sets `whenOmitted`. Nothing else in the file changes. 400 (with `field`, and `index` for a Variable) when a value is refused, 404 when the action does not exist, 409 while a recording or a compile runs, when the file is unreadable, and in sample mode, 500 when the file cannot be written (nothing changes). A field other than `id`, `label`, `description` and `variables` answers 400 `UNEXPECTED_FIELD` |
+| `/api/workflows/delete` | POST | `{ id }` | 200 `{ ok, remaining, recompile, cleanup? }`; 400 for a field other than `id`, 404 when the action does not exist, 409 while a recording or a compile runs, when the file is unreadable, and in sample mode, 500 when the file cannot be written. `recompile` is `started` or `not-needed` (always `not-needed` when no action remains). `cleanup: "partial"` means some screenshots could not be removed |
 | `/api/power/info` | GET | | `{ available, defaultWorkspace, outputPath, serverName? }` |
 | `/api/power/snippet` | GET | | `{ snippet }`: placeholders only |
 | `/api/power/preview` | POST | `{ workspacePath }` | The plan: exact `.kiro` path, files with `create`, `merge` or `replace`, whether an entry is replaced |
@@ -71,7 +73,21 @@ All are guarded like the playground routes (token or cookie, `x-studio-request`,
 
 ### Recording
 
-One recording at a time. States: `idle`, `recording`, `saving`, `compiling`, `done`, `error`. The status screen polls every 1.5 seconds, shows the state and the last 3 step labels, and stops polling on `done` or `error`. Closing the browser window keeps the recovery file when at least one step exists. Before any step, nothing is written. A finished recording is compiled at once, with the options `daemonize compile` uses with no flag.
+One recording at a time. States: `idle`, `recording`, `saving`, `compiling`, `done`, `error`. The status screen polls every 1.5 seconds, shows the state and the last 3 step labels, and stops polling on `done` or `error`. In the recording panel, a checkbox or switch is recorded as one `check` step (a true or false Variable), a group of radio buttons can become one choice Variable that lists the names of the options, and choosing a file in a file field shows a notice that file upload is not supported yet and that the field is not recorded as an input. A Variable can be marked optional, with what a call that leaves it out does (`whenOmitted`, see `docs/replay-model.md`). Closing the browser window keeps the recovery file when at least one step exists. Before any step, nothing is written. A finished recording is compiled at once, with the options `daemonize compile` uses with no flag.
+
+`recompile` in the two workflow answers is `started` (a compile began because tools were already built), `not-needed` (nothing was built yet) or `busy`. The file is written in one atomic step; if it cannot be written, nothing changes.
+
+### Editing an action
+In the Workflows view each action has three buttons: **Rename and describe**, **Edit inputs** and **Delete this action**. They are hidden in sample mode and in the static demo. The forms are prefilled and send only what changed; errors appear beside the control (ole=alert`) and keep what was typed. In **Edit inputs**, an input has a **Type** (Text, Number, True or false), an **Optional** box and, when optional, **If left empty** (Skip this field, Use the recorded value). **Delete this action** opens a dialog that starts on **Cancel**, traps focus and closes with Escape; **Delete** is sent once. When tools were already built, a successful change starts a rebuild and the screen says so. A start page line shows the path only when it differs from the file's start page.
+
+### One application per file
+A workflow file holds actions for one application (one origin: scheme, host and port). Starting a recording for another origin than the one already in the file is refused with 409 and a plain message ("This folder already holds actions for <origin>. Another application needs another folder."), and nothing is written. Re-recording the only action of a file on another origin is refused too. A recording of a new file is not affected.
+
+### Advanced options (compile)
+The recompile screen has an **Advanced options** group, for web actions only:
+- **Run recorded requests directly (faster, no page)** sends `http: "auto"`: steps that have a recorded request run over HTTP when possible (see `docs/replay-model.md`). Requests that change data are sent as recorded and are never retried on the page.
+- **Repair steps with a vision model when a page changes** sends `healSupport: true`, which builds the tool so it can heal when started with heal mode. The tool still needs a model set up at run time, or it stops with `heal_unavailable`.
+Both are off by default, and the choice stays for the next compiles until the Studio stops.
 
 ### Credentials and saved sessions
 
@@ -82,6 +98,10 @@ One recording at a time. States: `idle`, `recording`, `saving`, `compiling`, `do
 ### Connect to Kiro
 
 **Connect to Kiro** asks for your project folder (prefilled with the Studio's working directory), then shows a confirmation dialog with the exact `.kiro` path and each file with its outcome. Only after **Confirm and connect** are two files written, both inside `.kiro/`: one server entry merged into `settings/mcp.json` (other entries stay as they are; an invalid file is refused and left unchanged) and `skills/<name>/SKILL.md`. The entry holds `${DAEMONIZE_SECRET_<NAME>}` placeholders and `DAEMONIZE_MODE=strict`, never a value. Each placeholder must be set where Kiro runs, and Kiro may ask you to approve it. A folder inside `node_modules`, the output folder or the data folder is refused.
+
+**Choose where Kiro keeps the tool.** On the last screen of the recording panel, when the Kiro folder of your user exists, **Save and add to Kiro** comes with two options: **All my projects** (the default) and **Only this project**. Without that folder, the tool is added to the project. The scope used is reported in `kiro.scope` of the record status.
+
+**Missing credentials.** When the tool needs credentials that are not saved yet, the status screen shows an alert "Credentials are still missing" that lists their names and an **Add your credentials** link, instead of saying only that the tool was added.
 
 ### Plain language and keyboard use
 

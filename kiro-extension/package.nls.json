@@ -12,6 +12,7 @@
   "command.restart": "Restart Daemonize",
   "command.openStudio": "Open the Studio",
   "command.testInStudio": "Test in the Studio",
+  "command.deleteAction": "Delete this action",
   "command.newAction": "New action",
   "command.finishRecording": "Finish the action",
   "command.refresh": "Refresh",

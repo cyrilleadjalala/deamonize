@@ -3,6 +3,7 @@ import { __commands, __reset, __setFolders } from '../fake-vscode';
 import { activateWith, type ExtensionHandle } from '../../../kiro-extension/src/extension';
 import type { ExtensionDeps } from '../../../kiro-extension/src/ui/controller';
 import type { ProcessManager, StudioApi, StudioSessionLike } from '../../../kiro-extension/src/core/ports';
+import { buildBrowserUrl } from '../../../kiro-extension/src/core/studio-url';
 import type { ProcessState } from '../../../kiro-extension/src/core/types';
 
 export const TEST_TOKEN = 'T0KEN-for-glue-tests-0123456789abcdef';
@@ -31,7 +32,7 @@ function fakeSession(): StudioSessionLike {
       get: async () => { throw new Error('the glue must go through the api'); },
       post: async () => { throw new Error('the glue must go through the api'); },
     },
-    browserUrl: (route) => `${ORIGIN}/?token=${TEST_TOKEN}${route === 'playground' ? '#/playground' : route === 'credentials' ? '#/credentials' : ''}`,
+    browserUrl: (route, target) => buildBrowserUrl({ origin: ORIGIN, token: TEST_TOKEN }, route, target),
     sensitiveValues: () => [TEST_TOKEN],
   };
 }

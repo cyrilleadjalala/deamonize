@@ -66,6 +66,29 @@ describe('extension manifest', () => {
     for (const key of keys) expect(nls, key).toHaveProperty(key);
   });
 
+  it('contributes daemonize.deleteAction: inline on action rows only, hidden from the palette, titled in package.nls.json', () => {
+    const command = pkg.contributes.commands.find((c: { command: string }) => c.command === 'daemonize.deleteAction');
+    expect(command?.title).toBe('%command.deleteAction%');
+    expect(nls['command.deleteAction']).toBe('Delete this action');
+    const items = (pkg.contributes.menus['view/item/context'] as Array<{ command: string; when: string; group: string }>).filter((m) => m.command === 'daemonize.deleteAction');
+    expect(items).toHaveLength(1);
+    expect(items[0].when).toBe('view == daemonize.actions && viewItem == action');
+    expect(items[0].group).toMatch(/^inline/);
+    for (const [menu, list] of Object.entries(pkg.contributes.menus as Record<string, Array<{ command: string; when?: string }>>)) {
+      if (menu === 'view/item/context') continue;
+      const entry = list.find((m) => m.command === 'daemonize.deleteAction');
+      if (menu === 'commandPalette') expect(entry?.when).toBe('false');
+      else expect(entry).toBeUndefined();
+    }
+    expect(pkg.activationEvents).toContain('onCommand:daemonize.deleteAction');
+  });
+
+  it('offers no rename or variable editing on the action row', () => {
+    const forAction = (pkg.contributes.menus['view/item/context'] as Array<{ command: string; when: string }>)
+      .filter((m) => m.when.includes('viewItem == action')).map((m) => m.command);
+    expect(forAction.sort()).toEqual(['daemonize.connectToKiro', 'daemonize.deleteAction', 'daemonize.testInStudio']);
+  });
+
   it('shares the credentials sentence with the Studio', () => {
     expect(S.credentialsFromVault).toBe(COPY.credentialsFromVault);
     expect(S.noCredentials).toBe(COPY.noPlaceholders);

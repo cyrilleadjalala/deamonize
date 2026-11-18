@@ -108,6 +108,17 @@ export const S = Object.freeze({
   previewMissing: (names: string): string => `Credentials with no value yet: ${names}`,
   previewBackup: 'A backup of the existing file is kept.',
 
+  // Delete an action
+  confirmDelete: 'Delete',
+  deleteConfirm: (name: string): string => `Delete "${name}"?`,
+  deleteDetail: 'This action cannot be recovered from the Studio.',
+  actionDeleted: (name: string): string => `"${name}" was deleted.`,
+  actionDeletedUpdating: (name: string): string => `"${name}" was deleted. Its tools are being updated.`,
+  actionGone: 'This action no longer exists.',
+  deleteBusy: 'Daemonize is busy right now. Try again in a moment.',
+  deleteFailed: 'The action could not be deleted. Try again.',
+  deleteNoAnswer: 'Daemonize did not answer in time. Check the Actions list, then try again.',
+
   // Log
   logChannel: 'Daemonize',
 });
@@ -129,6 +140,7 @@ export const CONTRIBUTION_STRINGS: Readonly<Record<string, string>> = Object.fre
   'command.restart': 'Restart Daemonize',
   'command.openStudio': 'Open the Studio',
   'command.testInStudio': 'Test in the Studio',
+  'command.deleteAction': 'Delete this action',
   'command.newAction': 'New action',
   'command.finishRecording': 'Finish the action',
   'command.refresh': 'Refresh',

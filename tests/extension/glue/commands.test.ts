@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { __calls, __callsTo, __objects, __script, __setFolders } from '../fake-vscode';
 import { StartError } from '../../../kiro-extension/src/core/process-manager';
 import { StudioClientError } from '../../../kiro-extension/src/core/studio-client';
@@ -186,5 +186,195 @@ describe('views', () => {
     view.__setVisible(true);
     await new Promise((r) => setTimeout(r, 10));
     expect(h.manager.starts).toBe(1);
+  });
+});
+
+afterEach(() => { vi.useRealTimers(); });
+
+const row = (id: string, label = 'Create invoice') => ({ id: `action:${id}`, label, icon: 'play' as const, contextValue: 'action' });
+const wf = (id: string, toolName?: string) => ({ id, label: `Label of ${id}`, risk: 'read', ...(toolName === undefined ? {} : { toolName }) });
+const opened = (): string[] => __callsTo('env.openExternal').map((a) => String(a[0]));
+const noTokenOutside = (): boolean => !containsText(__calls.filter((c) => c.api !== 'env.openExternal'), TEST_TOKEN);
+
+describe('daemonize.testInStudio on a row', () => {
+  it('opens the tool in the Playground when the workflow has a tool name', async () => {
+    const h = createHarness({ workflows: async () => ({ ok: true, status: 200, data: [wf('a1', 'other_tool'), wf('b2', 'create_invoice')] }) });
+    await new Promise((r) => setTimeout(r, 20));
+    const before = h.apiCalls.filter((c) => c.method === 'workflows').length;
+    await h.run('daemonize.testInStudio', row('b2'));
+    expect(opened()).toHaveLength(1);
+    expect(opened()[0]).toContain('#/playground?tool=create_invoice');
+    expect(h.apiCalls.filter((c) => c.method === 'workflows')).toHaveLength(before + 1);
+    expect(noTokenOutside()).toBe(true);
+  });
+
+  it('opens the workflow page when the workflow has no tool name', async () => {
+    const h = createHarness({ workflows: async () => ({ ok: true, status: 200, data: [wf('b2')] }) });
+    await h.run('daemonize.testInStudio', row('b2'));
+    expect(opened()[0]).toContain('#/workflows/b2');
+  });
+
+  it('matches the id exactly and never the label', async () => {
+    const h = createHarness({ workflows: async () => ({ ok: true, status: 200, data: [{ ...wf('zzz', 'wrong_tool'), label: 'Create invoice' }] }) });
+    await h.run('daemonize.testInStudio', row('b2', 'Create invoice'));
+    expect(opened()[0]).toMatch(/#\/playground$/);
+  });
+
+  it('opens the plain Playground for an unknown id', async () => {
+    const h = createHarness({ workflows: async () => ({ ok: true, status: 200, data: [wf('a1', 'x')] }) });
+    await h.run('daemonize.testInStudio', row('b2'));
+    expect(opened()[0]).toMatch(/#\/playground$/);
+  });
+
+  it('opens the plain Playground, with no message, when the list fails', async () => {
+    for (const workflows of [
+      async () => { throw new StudioClientError('network', 'down'); },
+      async () => ({ ok: false, status: 500, error: 'boom' }),
+      async () => ({ ok: false, status: 200, error: 'malformed' }),
+    ]) {
+      const h = createHarness({ workflows });
+      await h.run('daemonize.testInStudio', row('b2'));
+      expect(opened()[0]).toMatch(/#\/playground$/);
+      expect(__callsTo('window.showErrorMessage')).toHaveLength(0);
+      expect(__callsTo('window.showInformationMessage')).toHaveLength(0);
+    }
+  });
+
+  it('opens the plain Playground, with no message, when the list does not answer in 5 seconds', async () => {
+    vi.useFakeTimers();
+    const h = createHarness({ workflows: () => new Promise(() => { /* never answers */ }) });
+    const done = h.run('daemonize.testInStudio', row('b2'));
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(opened()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2);
+    await done;
+    expect(opened()[0]).toMatch(/#\/playground$/);
+    expect(__callsTo('window.showErrorMessage')).toHaveLength(0);
+  });
+
+  it('opens the plain Playground without calling the Studio for another row or no row', async () => {
+    for (const node of [undefined, { id: 'credentials:x', label: 'x', icon: 'key' as const }, { id: 'actions', label: 'x', icon: 'info' as const }]) {
+      const h = createHarness();
+      await new Promise((r) => setTimeout(r, 20));
+      const before = h.apiCalls.filter((c) => c.method === 'workflows').length;
+      await h.run('daemonize.testInStudio', node);
+      expect(opened()[0]).toMatch(/#\/playground$/);
+      expect(h.apiCalls.filter((c) => c.method === 'workflows')).toHaveLength(before);
+    }
+  });
+});
+
+describe('daemonize.deleteAction', () => {
+  const ok = (data: Record<string, unknown> = { ok: true, remaining: 1 }) => async () => ({ ok: true, status: 200, data });
+  const fail = (status: number, error: string) => async () => ({ ok: false, status, error });
+  const deletes = (h: ReturnType<typeof createHarness>) => h.apiCalls.filter((c) => c.method === 'deleteWorkflow');
+  const confirm = (): void => __script({ 'window.showWarningMessage': [S.confirmDelete] });
+
+  it('asks in a modal that names the action and sends nothing when cancelled', async () => {
+    const h = createHarness({ deleteWorkflow: ok() });
+    __script({ 'window.showWarningMessage': [undefined] });
+    await h.run('daemonize.deleteAction', row('b2'));
+    const [message, options, button] = __callsTo('window.showWarningMessage')[0] as [string, { modal: boolean; detail: string }, string];
+    expect(message).toContain('Create invoice');
+    expect(options).toEqual({ modal: true, detail: S.deleteDetail });
+    expect(button).toBe('Delete');
+    expect(deletes(h)).toHaveLength(0);
+  });
+
+  it('deletes by id after the confirmation and refreshes (200 without recompile)', async () => {
+    const h = createHarness({ deleteWorkflow: ok() });
+    confirm();
+    await h.run('daemonize.deleteAction', row('b2'));
+    expect(deletes(h).map((c) => c.args)).toEqual([['b2']]);
+    expect(messages('window.showInformationMessage')).toEqual([S.actionDeleted('Create invoice')]);
+  });
+
+  it('says the tools are being updated when the recompile started', async () => {
+    const h = createHarness({ deleteWorkflow: ok({ ok: true, remaining: 1, recompile: 'started' }) });
+    confirm();
+    await h.run('daemonize.deleteAction', row('b2'));
+    expect(messages('window.showInformationMessage')).toEqual([S.actionDeletedUpdating('Create invoice')]);
+  });
+
+  it('404: says the action no longer exists', async () => {
+    const h = createHarness({ deleteWorkflow: fail(404, 'WORKFLOW_NOT_FOUND') });
+    confirm();
+    await h.run('daemonize.deleteAction', row('b2'));
+    expect(messages('window.showInformationMessage')).toEqual([S.actionGone]);
+  });
+
+  it('409: shows the redacted message of the answer', async () => {
+    const h = createHarness({ deleteWorkflow: fail(409, `An action is being created. ${TEST_TOKEN}`) });
+    confirm();
+    await h.run('daemonize.deleteAction', row('b2'));
+    const shown = messages('window.showWarningMessage')[1];
+    expect(shown).toContain('An action is being created.');
+    expect(shown).not.toContain(TEST_TOKEN);
+  });
+
+  it('409 with only a code: shows a plain sentence', async () => {
+    const h = createHarness({ deleteWorkflow: fail(409, 'SAMPLE_MODE') });
+    confirm();
+    await h.run('daemonize.deleteAction', row('b2'));
+    expect(messages('window.showWarningMessage')[1]).toBe(S.deleteBusy);
+  });
+
+  it('another status or an unreachable Studio: a plain error', async () => {
+    for (const deleteWorkflow of [fail(500, 'WRITE_FAILED'), async () => { throw new StudioClientError('network', 'down'); }]) {
+      const h = createHarness({ deleteWorkflow });
+      confirm();
+      await h.run('daemonize.deleteAction', row('b2'));
+      expect(messages('window.showErrorMessage')).toEqual([S.deleteFailed]);
+    }
+  });
+
+  it('no answer within 10 seconds: a plain error', async () => {
+    vi.useFakeTimers();
+    const h = createHarness({ deleteWorkflow: () => new Promise(() => { /* never answers */ }) });
+    confirm();
+    const done = h.run('daemonize.deleteAction', row('b2'));
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(messages('window.showErrorMessage')).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2);
+    await done;
+    expect(messages('window.showErrorMessage')).toEqual([S.deleteNoAnswer]);
+  });
+
+  it('ignores a second call for the same id while the first is pending, not for another id', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    const h = createHarness({ deleteWorkflow: () => new Promise((r) => { release = r; }) });
+    __script({ 'window.showWarningMessage': [S.confirmDelete, S.confirmDelete] });
+    const first = h.run('daemonize.deleteAction', row('b2'));
+    await new Promise((r) => setTimeout(r, 10));
+    await h.run('daemonize.deleteAction', row('b2'));
+    expect(__callsTo('window.showWarningMessage')).toHaveLength(1);
+    expect(deletes(h)).toHaveLength(1);
+    release({ ok: true, status: 200, data: { ok: true, remaining: 0 } });
+    await first;
+    // After the first call ended, the same id can be deleted again.
+    __script({ 'window.showWarningMessage': [undefined] });
+    await h.run('daemonize.deleteAction', row('b2'));
+    expect(__callsTo('window.showWarningMessage')).toHaveLength(2);
+  });
+
+  it('does nothing without a row, with a bad row id or when the Studio is not running', async () => {
+    const h = createHarness({ deleteWorkflow: ok() });
+    await h.run('daemonize.deleteAction');
+    await h.run('daemonize.deleteAction', { id: 'secret:X', label: 'X', icon: 'key' });
+    await h.run('daemonize.deleteAction', { id: 'action:', label: 'X', icon: 'play' });
+    h.manager.setState('stopped');
+    await h.run('daemonize.deleteAction', row('b2'));
+    expect(__callsTo('window.showWarningMessage')).toHaveLength(0);
+    expect(deletes(h)).toHaveLength(0);
+    expect(h.manager.starts).toBe(0);
+  });
+
+  it('never puts the token or a path in a message', async () => {
+    for (const deleteWorkflow of [ok(), ok({ ok: true, remaining: 1, recompile: 'started' }), fail(404, 'x'), fail(409, `busy ${TEST_TOKEN}`), fail(500, 'x')]) {
+      const h = createHarness({ deleteWorkflow });
+      confirm();
+      await h.run('daemonize.deleteAction', row('b2'));
+      expect(containsText(__calls, TEST_TOKEN)).toBe(false);
+    }
   });
 });

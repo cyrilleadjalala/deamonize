@@ -2,7 +2,7 @@ import { parseHandshakeLine } from './handshake';
 import type { LocatorResult } from './cli-locator';
 import type { ProcessManager, StudioClient, StudioSessionLike } from './ports';
 import { buildBrowserUrl } from './studio-url';
-import type { StudioRoute } from './studio-url';
+import type { StudioRoute, StudioTarget } from './studio-url';
 import type { Handshake, ProcessState } from './types';
 
 export type { ProcessManager };
@@ -55,8 +55,8 @@ export class StudioSession implements StudioSessionLike {
     this.#token = h.token;
   }
 
-  browserUrl(route?: StudioRoute): string {
-    return buildBrowserUrl({ origin: this.origin, token: this.#token }, route);
+  browserUrl(route?: StudioRoute, target?: StudioTarget): string {
+    return buildBrowserUrl({ origin: this.origin, token: this.#token }, route, target);
   }
 
   sensitiveValues(): string[] {

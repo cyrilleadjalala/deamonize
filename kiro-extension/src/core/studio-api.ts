@@ -119,6 +119,11 @@ export function createStudioApi(client: StudioClient): StudioApi {
   return {
     health: async () => result(await client.get('/api/health'), (b) => (isObj(b) ? { ok: b.ok === true } : undefined)),
     workflows: async () => result(await client.get('/api/workflows'), parseWorkflows),
+    deleteWorkflow: async (id) =>
+      result(await client.post('/api/workflows/delete', { id }), (b) =>
+        isObj(b) && b.ok === true
+          ? { ok: true, remaining: typeof b.remaining === 'number' ? b.remaining : 0, ...(typeof b.recompile === 'string' ? { recompile: b.recompile } : {}) }
+          : undefined),
     secrets: async () => result(await client.get('/api/secrets'), parseSecrets),
     setSecret: async (name, value) => result(await client.post('/api/secrets', { name, value }), flag),
     forgetSecret: async (name) => result(await client.post('/api/secrets/forget', { name }), flag),

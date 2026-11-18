@@ -4,6 +4,7 @@ import { api, ApiError } from '../api.js';
 import { announce, pill } from '../components.js';
 import { announceOnChange } from '../announcer.js';
 import { COPY, announceText, statusText, stepCountText } from '../copy.js';
+import { COPY_RECORD } from '../copy-record.js';
 import { href } from '../router.js';
 import { connectCard } from './connect.js';
 import { demoScreen } from './demo.js';
@@ -28,6 +29,38 @@ async function newestToolName() {
   }
 }
 
+/**
+ * The names still missing after the tool was added to Kiro. An absent or malformed list is empty, and a failed install has none.
+ * @param {any} s
+ * @returns {string[]}
+ */
+export function missingSecretsOf(s) {
+  if (s?.kiro?.added !== true) return [];
+  const list = s.kiro.missingSecrets;
+  return Array.isArray(list) ? list.filter((n) => typeof n === 'string' && n !== '') : [];
+}
+/**
+ * The alert that lists the credentials still missing, with one link to the Credentials view.
+ * @param {string[]} names
+ */
+function credentialsBlock(names) {
+  return h('div', { class: 'record-credentials', id: 'kiro-missing-secrets', role: 'alert' },
+    h('p', { class: 'state-title', text: COPY_RECORD.credentialsMissingTitle }),
+    h('p', { text: COPY_RECORD.credentialsMissingLead }),
+    h('ul', { class: 'plain-list' }, ...names.map((n) => h('li', null, h('code', { class: 'path', text: n })))),
+    h('p', null, h('a', { class: 'btn', id: 'kiro-add-credentials', href: href('credentials'), text: COPY_RECORD.credentialsMissingLink })));
+}
+/**
+ * After "Save and add to Kiro": scroll once, to the top of the result (when its message is shown) or of the Connect block.
+ * lock: 'start' with the scroll margin of record.css keeps the header off the first line. No call when the target is missing.
+ * @param {HTMLElement} outcome
+ */
+export function scrollToKiroResult(outcome) {
+  const target = outcome.querySelector('#kiro-result') !== null ? outcome : outcome.querySelector('#connect-card');
+  if (target === null) return;
+  const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  target.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+}
 /** @returns {Promise<HTMLElement>} */
 export async function renderRecordStatus() {
   const demo = await demoScreen(COPY.recordTitle);
@@ -44,7 +77,7 @@ export async function renderRecordStatus() {
   const buildHost = h('p', { class: 'muted', id: 'record-build', role: 'status' });
   const noteHost = h('p', { class: 'muted', id: 'record-note' });
   const actions = h('div', { class: 'run-bar' });
-  const outcome = h('div', { class: 'record-outcome' });
+  const outcome = h('div', { class: 'record-outcome', id: 'record-outcome' });
   const stopError = h('div', { class: 'run-error', role: 'alert' });
   const channel = `recording-${Math.random().toString(36).slice(2)}`;
   const compileChannel = `compile-${channel}`;
@@ -125,6 +158,7 @@ export async function renderRecordStatus() {
         finalShown = true;
       } else if (state === 'done') {
         finalShown = true;
+        const missing = missingSecretsOf(s);
         const tool = await newestToolName();
         outcome.replaceChildren(
           h('p', { text: COPY.doneLead }),
@@ -132,6 +166,7 @@ export async function renderRecordStatus() {
             h('a', { class: 'btn btn-primary', id: 'test-it', href: tool ? href('playground', undefined, { tool }) : href('playground'), text: COPY.testIt }),
             ' ',
             h('a', { class: 'btn', href: href('credentials'), text: COPY.addCredentials })),
+          ...(missing.length > 0 ? [credentialsBlock(missing)] : []),
           connectCard()
         );
         // The end sheet of the panel in the page asked for a next step: take it, the user does not click twice
@@ -142,7 +177,7 @@ export async function renderRecordStatus() {
           if (typeof s?.kiro?.message === 'string') {
             outcome.prepend(h('p', { id: 'kiro-result', class: s.kiro.added ? 'muted' : 'error-text', role: s.kiro.added ? 'status' : 'alert', text: s.kiro.message }));
           }
-          outcome.querySelector('#connect-card')?.scrollIntoView({ block: 'center' });
+          scrollToKiroResult(outcome);
         }
       } else {
         finalShown = true;

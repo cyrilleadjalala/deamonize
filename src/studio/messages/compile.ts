@@ -7,6 +7,8 @@ export const COMPILE_INSTALL_STOPPED = 'Installing the tool\u2019s packages was 
 export const APP_NAME_NOT_SAVED = 'The name of this application could not be saved, so nothing was built. Nothing was changed.';
 export const COMPILE_BUSY = 'A build is already running.';
 export const COMPILE_BODY_MUST_BE_EMPTY = 'This request takes no fields.';
+export const COMPILE_HTTP_INVALID = 'The option for direct requests must be off or auto.';
+export const COMPILE_HEAL_INVALID = 'The option to repair steps must be true or false.';
 
 export const POWER_NOT_COMPILED = 'Build your tool first: there is nothing to connect yet.';
 export const POWER_SETTINGS_UNREADABLE = 'The file settings/mcp.json cannot be read as settings';

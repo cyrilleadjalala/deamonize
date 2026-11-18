@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { compile as realCompile, type CompilePhase } from '../cli/commands/compile.js';
-import type { CompileOutcome, CompilePhaseView, CompileRunner, CompileStatus } from './contracts.js';
+import type { CompileOptionsInput, CompileOutcome, CompilePhaseView, CompileRunner, CompileStatus } from './contracts.js';
 import { AppNamesError } from './app-names.js';
 import {
   APP_NAME_NOT_SAVED,
@@ -101,10 +101,16 @@ export class StudioCompileRunner implements CompileRunner {
     return { ...this.current };
   }
 
-  tryStart(): boolean {
+  /** In memory only: replaced when a compile with options starts, used by every later compile without options. */
+  private stored: CompileOptionsInput = { http: 'off', healSupport: false };
+  tryStart(options?: CompileOptionsInput): boolean {
     if (this.running !== undefined) return false;
+    if (options !== undefined) this.stored = { http: options.http, healSupport: options.healSupport };
     this.start();
     return true;
+  }
+  options(): CompileOptionsInput {
+    return { ...this.stored };
   }
 
   async runExclusive(): Promise<CompileOutcome> {
@@ -141,8 +147,8 @@ export class StudioCompileRunner implements CompileRunner {
       // powerName is read by the compiler (CompileOptions.powerName); the options are typed loosely until the CLI command forwards it
       const options = {
         powerName: target.slug,
-        http: 'off' as const,
-        healSupport: false,
+        http: this.stored.http,
+        healSupport: this.stored.healSupport,
         ...(hasModules ? {} : { install: true }),
         installer: this.deps.installer ?? ((dir) => this.quietInstaller(dir)),
         onPhase: (phase: CompilePhase) => {

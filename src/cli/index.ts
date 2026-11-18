@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url';
+import { isEntryPoint } from './entry.js';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { record, type RecordSummary } from './commands/record.js';
@@ -375,6 +375,7 @@ async function main(): Promise<void> {
 }
 
 // Run only when executed directly, not when imported (tests)
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Both sides are real paths, so a launch through an `npm link` symlink or junction also runs (case-insensitive on Windows and macOS)
+if (isEntryPoint(import.meta.url, process.argv[1])) {
   void main();
 }

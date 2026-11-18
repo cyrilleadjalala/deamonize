@@ -1,0 +1,1114 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Write the fixtures, the snapshot helper and the regression test": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018144631
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018159259
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018503645
+      }
+    ],
+    "1.2 Capture the snapshot at the current HEAD": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018144693
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018503820
+      }
+    ],
+    "2. Checkpoint - P0 done": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018144764
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018504259
+      }
+    ],
+    "3.1 Add the shared types and the workflow-set schema": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018144863
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018514018
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019660075
+      }
+    ],
+    "3.2 Add the pure modules": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018144913
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019660652
+      }
+    ],
+    "3.3 Add the protocol and the Studio contracts seam": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018144956
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019661052
+      }
+    ],
+    "3.4 Add the UI seam (copy modules, css stubs, api helpers)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018144997
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019661891
+      }
+    ],
+    "3.5 Add the shared property arbitraries": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145039
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019662686
+      }
+    ],
+    "3.6 Widen the copy and contrast tests": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145108
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019663430
+      }
+    ],
+    "3.7 Write the old-file compatibility test for the schema": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145149
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019664516
+      }
+    ],
+    "4. Checkpoint - seam done": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145191
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019675248
+      }
+    ],
+    "5.1 Implement skipped Variables in HTTP replay and the row fallback": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145230
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019692454
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021459434
+      }
+    ],
+    "5.2 Implement the check action, radio by value and heal exclusion": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145272
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021459584
+      }
+    ],
+    "5.3 Write the compatibility test for the runtime (required)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145341
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021459789
+      }
+    ],
+    "6.1 Generate the call block, Skip_List, per-workflow start page and login": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145391
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019692887
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021467127
+      }
+    ],
+    "6.2 Use the user description in the tool text and keep it over suggestions": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145439
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021468715
+      }
+    ],
+    "6.3 Write the compatibility test for generated code (required)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145480
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021468852
+      }
+    ],
+    "7.1 Add the validators and the recorder edits": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145523
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019693235
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021488996
+      }
+    ],
+    "7.2 Add the bindings, fields answer, scope and file count to the Live_Recorder": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145563
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021490719
+      }
+    ],
+    "7.3 Build the panel in the capture script": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145605
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021492425
+      }
+    ],
+    "7.4 Write the compatibility test for the recorder (required)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145677
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021492539
+      }
+    ],
+    "8.1 Keep the base target when a base workflow survives": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145720
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019693738
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021503641
+      }
+    ],
+    "8.2 Check the origin and stamp the new workflow on save": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145764
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021504771
+      }
+    ],
+    "8.3 Refuse a second origin before `daemonize record` opens a browser": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145806
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021505868
+      }
+    ],
+    "8.7 Write the compatibility test for merge and save (required)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145844
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021510384
+      }
+    ],
+    "9.1 Refuse a second origin in the record route and add the scope helpers": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145885
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019694131
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021522953
+      }
+    ],
+    "9.2 Update the new-action page and the record status view": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145926
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021524202
+      }
+    ],
+    "9.3 Add the scope choice and the credentials fields to the Recording_Manager": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018145979
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021525469
+      }
+    ],
+    "9.4 Write the compatibility test for the record route and status (required)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146055
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021526719
+      }
+    ],
+    "10.1 Ask optional, type and omitted behavior after the name": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146099
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021540780
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023157310
+      }
+    ],
+    "10.2 Write the compatibility test for the terminal recorder (required)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146140
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023157732
+      }
+    ],
+    "11.1 Implement the editor, the two routes and the workflow view": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146181
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021540959
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023158815
+      }
+    ],
+    "11.2 Add the editor controls to the Workflows view": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146220
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023159411
+      }
+    ],
+    "11.3 Write the compatibility test for the editor (required)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146260
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023162173
+      }
+    ],
+    "12.1 Validate the compile body and pass the options to the runner": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146304
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021541080
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023167736
+      }
+    ],
+    "12.2 Add the Advanced options group": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146374
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023168185
+      }
+    ],
+    "12.3 Write the compatibility test for compile requests (required)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146416
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023169236
+      }
+    ],
+    "13.1 Replace the logo": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146459
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021541292
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023174412
+      }
+    ],
+    "13.2 Update the documentation": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146500
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023174717
+      }
+    ],
+    "13.3 Amend `requirements.md` so the spec matches the implementation": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146539
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023175304
+      }
+    ],
+    "14.1 Add the core pieces": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146581
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021541433
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023176447
+      }
+    ],
+    "14.2 Add the commands and the manifest entries": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146624
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023177219
+      }
+    ],
+    "14.3 Write the compatibility test for the extension URL (required)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146665
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023178242
+      }
+    ],
+    "15.1 Run the verification suite and report exact results": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146705
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023195719
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795024747666
+      }
+    ],
+    "15.2 Build the nine feature commits": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018146745
+      },
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795024758977
+      }
+    ],
+    "1. P0 regression fixture and snapshot (serial, first, no change under `src/`)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795018503908
+      }
+    ],
+    "3. G0 seam (serial, after the P0 checkpoint)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019664697
+      }
+    ],
+    "3.8 Write unit tests for the schema rules of Requirement 1": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019665503
+      }
+    ],
+    "3.9 Write property test for Variable field round trip": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019666277
+      }
+    ],
+    "3.10 Write property test for whenOmitted validity": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019667081
+      }
+    ],
+    "3.11 Write property test for the description limits (loader part)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019668071
+      }
+    ],
+    "3.12 Write property test for check step values": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019669128
+      }
+    ],
+    "3.13 Write property test for start page and login fields": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019670087
+      }
+    ],
+    "3.14 Write property test for skip planning": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019670544
+      }
+    ],
+    "3.15 Write property test for the origin guard": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019671489
+      }
+    ],
+    "3.16 Write property test for the rename": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019672466
+      }
+    ],
+    "3.17 Write property test for payload coercion": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019673547
+      }
+    ],
+    "3.18 Write unit tests for the scope helpers": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795019674090
+      }
+    ],
+    "5. G-A replay runtime": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021459854
+      }
+    ],
+    "5.4 Write property test for HTTP requests with skipped Variables": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021460635
+      }
+    ],
+    "5.5 Write property test for a skipped Variable in a path (runtime part)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021461690
+      }
+    ],
+    "5.6 Write property test for row selection": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021462722
+      }
+    ],
+    "5.7 Write property test for check idempotence": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021463746
+      }
+    ],
+    "5.8 Write property test for check steps in the plan": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021464273
+      }
+    ],
+    "5.9 Write unit tests for HTTP skipping": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021465613
+      }
+    ],
+    "5.10 Write the browser test for check and radio replay": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021466965
+      }
+    ],
+    "6. G-B generator and compiler": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021468941
+      }
+    ],
+    "6.4 Write property test for the embedded Skip_List": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021469746
+      }
+    ],
+    "6.5 Write property test for per-workflow start page and login": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021471250
+      }
+    ],
+    "6.6 Write property test for a skipped Variable in a path (compile part)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021471584
+      }
+    ],
+    "6.7 Write property test for schema independence": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021472344
+      }
+    ],
+    "6.8 Write property test for the radio input schema (schema part)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021473158
+      }
+    ],
+    "6.9 Write unit tests for the tool description lead": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021474889
+      }
+    ],
+    "6.10 Write unit tests for the generated call block": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021475791
+      }
+    ],
+    "6.11 Write the replay test for optional Variables through generated code": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021476490
+      }
+    ],
+    "7. G-C page recorder": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021492604
+      }
+    ],
+    "7.5 Write property test for variable requests": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021492755
+      }
+    ],
+    "7.6 Write property test for the offer model": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021493386
+      }
+    ],
+    "7.7 Write property test for the fields answer": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021495228
+      }
+    ],
+    "7.8 Write property test for radio group validity": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021495353
+      }
+    ],
+    "7.9 Write property test for the file counter": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021496203
+      }
+    ],
+    "7.10 Write property test for the finish scope (recorder part)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021498265
+      }
+    ],
+    "7.11 Write unit tests for the Live_Recorder requests and edits": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021499303
+      }
+    ],
+    "7.12 Write unit tests for the panel logic": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021500322
+      }
+    ],
+    "7.13 Write the browser test for recorder variables": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021501313
+      }
+    ],
+    "7.14 Write the browser test for check, radio and file capture": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021502485
+      }
+    ],
+    "8.4 Write property test for the merge invariant": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021506968
+      }
+    ],
+    "8.5 Write property test for save stamping": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021508162
+      }
+    ],
+    "8.6 Write unit tests for the record origin preflight": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021509310
+      }
+    ],
+    "8. G-D merge, save and record preflight": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021510451
+      }
+    ],
+    "9. G-E Studio recording": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021526792
+      }
+    ],
+    "9.5 Write property test for install scope resolution (manager part)": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021528136
+      }
+    ],
+    "9.6 Write property test for the missing secrets fields": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021529371
+      }
+    ],
+    "9.7 Write unit tests for the record route origin refusal": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021530666
+      }
+    ],
+    "9.8 Write unit tests for the scope and credentials fields": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021531905
+      }
+    ],
+    "9.9 Write unit tests for the new-action origin message": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021533168
+      }
+    ],
+    "9.10 Write unit tests for the record status view": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795021534360
+      }
+    ],
+    "10. G-F terminal recorder": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023157983
+      }
+    ],
+    "10.3 Write unit tests for the terminal questions": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023158398
+      }
+    ],
+    "11. G-H Studio workflow editor": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023162437
+      }
+    ],
+    "11.4 Write property test for invalid updates": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023162625
+      }
+    ],
+    "11.5 Write property test for valid updates": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023163063
+      }
+    ],
+    "11.6 Write property test for update then inverse update": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023163358
+      }
+    ],
+    "11.7 Write property test for delete": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023163845
+      }
+    ],
+    "11.8 Write property test for the workflow view of Variables": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023164400
+      }
+    ],
+    "11.9 Write unit tests for the two routes": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023166926
+      }
+    ],
+    "11.10 Write unit tests for the Workflows view controls": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023167444
+      }
+    ],
+    "12. G-I compile options": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023169406
+      }
+    ],
+    "12.4 Write property test for the compile body": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023170044
+      }
+    ],
+    "12.5 Write unit tests for the compile runner options": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023170781
+      }
+    ],
+    "12.6 Write unit tests for the Advanced options UI": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023174059
+      }
+    ],
+    "13. G-J logo, tokens, documentation, requirements amendment": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023175388
+      }
+    ],
+    "13.4 Write unit tests for the logo": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023175820
+      }
+    ],
+    "14. G-K Kiro extension": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023178448
+      }
+    ],
+    "14.4 Write property test for the browser URL and its route": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023178849
+      }
+    ],
+    "14.5 Write unit tests for the commands": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023180043
+      }
+    ],
+    "14.6 Write static tests for the manifest and the texts": [
+      {
+        "executionId": "dfe852a6-bb29-4adb-9cce-dc378c07f4b9",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795023180656
+      }
+    ]
+  }
+}

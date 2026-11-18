@@ -81,6 +81,8 @@ async function open(page: Page, base: string): Promise<void> {
 async function audit(page: Page, label: string): Promise<void> {
   const names = (await page.evaluate(NAME_AUDIT)) as { unnamed: string[]; noAlt: string[]; badLabels: string[]; duplicateIds: string[] };
   expect(names, `${label} names`).toEqual({ unnamed: [], noAlt: [], badLabels: [], duplicateIds: [] });
+  // Buttons fade between states (0.15 s): measure the settled colours, not a frame of the fade
+  await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a instanceof CSSTransition).map((a) => a.finished.catch(() => undefined))));
   const contrast = (await page.evaluate(CONTRAST_AUDIT)) as { checked: number; failures: ContrastFailure[] };
   expect(contrast.checked, `${label} checked`).toBeGreaterThan(10);
   expect(contrast.failures, `${label} contrast`).toEqual([]);

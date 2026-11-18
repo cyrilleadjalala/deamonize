@@ -124,3 +124,7 @@ Nothing is deployed until you do that and the workflow has run.
 
 `STUDIO_SCREENSHOTS=1 npx vitest run tests/integration/studio-ui.test.ts` writes 1280x720 PNGs to
 `tests/__screenshots__/` (git-ignored): `overview`, `workflows`, `workflow-detail`, `graph`, `schemas`, `tests`, `playground`.
+
+## Look
+
+The colours, radii and components follow kiro.dev. See [design-tokens.md](design-tokens.md) for the values, how they were measured and what was left out.

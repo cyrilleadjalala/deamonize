@@ -1,0 +1,677 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Make the dialog ignore empty children": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132095
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942141037
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942558991
+      }
+    ],
+    "1.2 Add the credentials notice and fix the success screen": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132149
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942559187
+      }
+    ],
+    "1.3 Return `requiredSecrets` from the Power_Installer": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132240
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942559639
+      }
+    ],
+    "1.4 Write DOM and unit tests for the dialog": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132309
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942560359
+      }
+    ],
+    "1.5 Write DOM tests for the success screen": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132353
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942561335
+      }
+    ],
+    "1.6 Write unit tests for `requiredSecrets` in the installer and routes": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132387
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942562143
+      }
+    ],
+    "1.7 Extend the copy lint test": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132424
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942562966
+      }
+    ],
+    "1.8 Write property test for dialog content filtering": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132463
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942564218
+      }
+    ],
+    "1.9 Write property test for the success screen text": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132531
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942564937
+      }
+    ],
+    "1.10 Write property test for the credentials decision table": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132602
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942565744
+      }
+    ],
+    "1.11 Write property test for `requiredSecrets`": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132646
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942566539
+      }
+    ],
+    "2. Checkpoint - Part A done": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132685
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942567297
+      }
+    ],
+    "3.1 Add `--machine` to `daemonize studio`": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132721
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942576922
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942940032
+      }
+    ],
+    "3.2 Create shared types, strings and ports": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132762
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942941006
+      }
+    ],
+    "3.3 Add the `extension` vitest project": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132800
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942946217
+      }
+    ],
+    "3.4 Scope the ignore file and the secret scan": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132838
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942946399
+      }
+    ],
+    "4. Checkpoint - Contracts and CLI seam": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132876
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942947081
+      }
+    ],
+    "5.1 Implement handshake, origin and browser URL": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132916
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942957202
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943849538
+      }
+    ],
+    "5.2 Implement the CLI locator": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942132952
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943849820
+      }
+    ],
+    "5.3 Implement the redactor": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133005
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943850908
+      }
+    ],
+    "5.4 Implement the Studio client and API": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133101
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943851193
+      }
+    ],
+    "5.5 Implement the process manager": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133138
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943852126
+      }
+    ],
+    "5.6 Implement the poller and the validators": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133187
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943853052
+      }
+    ],
+    "5.7 Implement tree models, formatters and the language lint helper": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133232
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943854172
+      }
+    ],
+    "6.1 Create the manifest, build files and icon": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133268
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942958021
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943868004
+      }
+    ],
+    "6.2 Create the fake `vscode` module": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133304
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943869877
+      }
+    ],
+    "6.3 Implement the composition root and shared glue": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133342
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943870142
+      }
+    ],
+    "6.4 Implement the three tree views": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133381
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943872103
+      }
+    ],
+    "6.5 Implement lifecycle and Studio commands": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133417
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943872252
+      }
+    ],
+    "6.6 Implement record, credentials and Kiro commands": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133454
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943872831
+      }
+    ],
+    "7.1 Create the replay launcher runtime file": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133489
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942959104
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943877442
+      }
+    ],
+    "7.2 Wire the launcher into the generator and compiler": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133524
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943878020
+      }
+    ],
+    "8.1 Write the extension README": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133565
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942960032
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943881212
+      }
+    ],
+    "8.2 Add a short section to the root README": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133602
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943881624
+      }
+    ],
+    "9. Checkpoint C - Final checks (serial, after G1 to G4)": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942133654
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943901110
+      },
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794947239055
+      }
+    ],
+    "1. P0 Part A: dialog and credentials message (serial, runs first)": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942566633
+      }
+    ],
+    "3. G0 CLI option, shared extension contracts, test project (serial, after the P0 checkpoint)": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942946479
+      }
+    ],
+    "3.5 Write unit tests for machine mode": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942946653
+      }
+    ],
+    "3.6 Write property test for the handshake line": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794942946857
+      }
+    ],
+    "5. G1 Extension core, pure modules (parallel)": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943854236
+      }
+    ],
+    "5.8 Write property test for handshake and origin validation": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943855371
+      }
+    ],
+    "5.9 Write property test for the browser URL": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943855627
+      }
+    ],
+    "5.10 Write property test and unit tests for the CLI locator": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943856908
+      }
+    ],
+    "5.11 Write property test for the redactor": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943857412
+      }
+    ],
+    "5.12 Write property test for the Studio client": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943858945
+      }
+    ],
+    "5.13 Write property test for the failed-request log line": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943859195
+      }
+    ],
+    "5.14 Write property test for the first stdout line": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943860712
+      }
+    ],
+    "5.15 Write model-based property test for the process manager": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943860844
+      }
+    ],
+    "5.16 Write property test for validator parity": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943862391
+      }
+    ],
+    "5.17 Write property test for the recording poller": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943862787
+      }
+    ],
+    "5.18 Write property test for the actions tree": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943864409
+      }
+    ],
+    "5.19 Write property test for the credentials tree": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943864549
+      }
+    ],
+    "5.20 Write property test for the confirmation text": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943866306
+      }
+    ],
+    "5.21 Write property test for credentials sentence parity": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943866524
+      }
+    ],
+    "5.22 Write the Plain_Language lint test": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943867327
+      }
+    ],
+    "6. G2 Extension glue, manifest, bundling, packaging (parallel)": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943872935
+      }
+    ],
+    "6.7 Write property test for secret value confinement": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943873620
+      }
+    ],
+    "6.8 Write glue example tests for the commands": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943874399
+      }
+    ],
+    "6.9 Write static manifest and import checks": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943875197
+      }
+    ],
+    "6.10 Write the packaging test": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943877243
+      }
+    ],
+    "7. G3 Generated browser fallback (parallel)": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943878076
+      }
+    ],
+    "7.3 Write property test for the launch attempt chain": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943878872
+      }
+    ],
+    "7.4 Write property test for parity with the recorder launcher": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943881086
+      }
+    ],
+    "8. G4 Documentation and real-process tests (parallel)": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943881686
+      }
+    ],
+    "8.3 Write real-process tests": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943882473
+      }
+    ],
+    "8.4 Write the README check": [
+      {
+        "executionId": "1b2aee7d-550a-4ad7-a4bc-d327b8df9004",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1794943883151
+      }
+    ]
+  }
+}

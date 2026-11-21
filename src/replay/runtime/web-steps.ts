@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Strict Level 2 execution of one web step with Playwright, shared by the generated
  * run-time (copied verbatim into the output directory) and the tests.
  *
@@ -16,7 +16,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BrowserContext, Frame, Locator, Page } from 'playwright';
-import { WEB_ZONE_FUNCTION, finishWebZone, notFoundMessage, zoneFailure, type RawWebZone, type ZoneLike, type ZoneOutcome } from './extract.js';
+import { WEB_ZONE_FUNCTION, candidateBudgets, finishWebZone, judgeCandidate, notFoundAfterCandidates, notFoundMessage, zoneCandidatesOf, zoneFailure, type RawWebZone, type ZoneLike, type ZoneOutcome } from './extract.js';
 import { resolveRowStep } from './row-resolver.js';
 import { waitForEffect, type SettlePage } from './settle.js';
 import {
@@ -510,6 +510,49 @@ async function typeInto(page: Page, locator: Locator, text: string, timeout: num
  * as an expression (Playwright does not call a function given as a string) and called with explicit arguments.
  */
 export async function extractWebZone(page: Page, zone: ZoneLike, timeoutMs: number): Promise<ZoneOutcome> {
+  const list = zoneCandidatesOf(zone);
+  if (list === undefined) return extractSingleWebZone(page, zone, timeoutMs);
+  const budgets = candidateBudgets(Math.max(1, timeoutMs), list.length);
+  let soft: { outcome: ZoneOutcome; index: number } | undefined;
+  try {
+    await page.evaluate(`window.__daemonizeZone = ${WEB_ZONE_FUNCTION}`);
+    for (let index = 0; index < list.length; index++) {
+      let verdict: { verdict: 'accepted' | 'soft' | 'rejected'; outcome: ZoneOutcome };
+      try {
+        const locator = page.locator(list[index]).first();
+        await locator.waitFor({ state: 'attached', timeout: budgets[index] });
+        const read = (await locator.evaluate(
+          (el: Element, extractor: unknown) => ({
+            tag: el.tagName.toLowerCase(),
+            raw: (window as unknown as { __daemonizeZone(el: Element, ex: unknown): unknown }).__daemonizeZone(el, extractor),
+          }),
+          zone.extractor ?? { kind: 'text' },
+          { timeout: budgets[index] }
+        )) as { tag: string; raw: RawWebZone };
+        verdict = judgeCandidate(read.raw, read.tag, zone);
+      } catch {
+        continue; // a candidate that cannot be waited for, queried or read is rejected on its own
+      }
+      if (verdict.verdict === 'rejected') continue;
+      if (verdict.verdict === 'soft') {
+        if (soft === undefined) soft = { outcome: verdict.outcome, index };
+        continue;
+      }
+      return withFallback(verdict.outcome, index, list.length);
+    }
+  } finally {
+    await page.evaluate('delete window.__daemonizeZone').catch(() => { });
+  }
+  if (soft !== undefined) return withFallback(soft.outcome, soft.index, list.length);
+  const failed = zoneFailure('result_zone_not_found', notFoundAfterCandidates(zone, list.length), zone);
+  return failed.ok ? failed : { ...failed, tried: list.length };
+}
+
+function withFallback(outcome: ZoneOutcome, index: number, of: number): ZoneOutcome {
+  return outcome.ok && index > 0 ? { ...outcome, fallback: { position: index + 1, of } } : outcome;
+}
+
+async function extractSingleWebZone(page: Page, zone: ZoneLike, timeoutMs: number): Promise<ZoneOutcome> {
   const locator = page.locator(zone.selector ?? 'body').first();
   try {
     await locator.waitFor({ state: 'attached', timeout: Math.max(1, timeoutMs) });

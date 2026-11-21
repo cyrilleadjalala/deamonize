@@ -25,8 +25,17 @@ export interface RectLike {
   cols: number;
 }
 
+export interface FingerprintLike {
+  tag: string;
+  kind: string;
+  count?: number;
+}
+
 export interface ZoneLike {
   selector?: string;
+  /** Alternative selectors tried after `selector`, in order. */
+  selectors?: string[];
+  fingerprint?: FingerprintLike;
   rect?: RectLike;
   extractor?: ExtractorLike;
   schema?: Record<string, unknown>;
@@ -38,8 +47,10 @@ export const MAX_RESULT_TEXT = 20000;
 export type ZoneFailureError = 'result_zone_not_found' | 'result_extraction_failed';
 
 export type ZoneOutcome =
-  | { ok: true; text: string; data: unknown }
-  | { ok: false; error: ZoneFailureError; message: string; zone: { selector?: string; rect?: RectLike } };
+  | { ok: true; text: string; data: unknown; fallback?: { position: number; of: number } }
+  | { ok: false; error: ZoneFailureError; message: string; zone: { selector?: string; rect?: RectLike }; tried?: number };
+
+export type Verdict = 'accepted' | 'soft' | 'rejected';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -229,10 +240,10 @@ export function zoneFailureResult(outcome: Extract<ZoneOutcome, { ok: false }>, 
   drifted: true;
   error: ZoneFailureError;
   message: string;
-  failure: { zone: { selector?: string; rect?: RectLike } };
+  failure: { zone: { selector?: string; rect?: RectLike }; candidatesTried?: number };
   elapsedMs: number;
 } {
-  return { success: false, drifted: true, error: outcome.error, message: outcome.message, failure: { zone: outcome.zone }, elapsedMs };
+  return { success: false, drifted: true, error: outcome.error, message: outcome.message, failure: outcome.tried === undefined ? { zone: outcome.zone } : { zone: outcome.zone, candidatesTried: outcome.tried }, elapsedMs };
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +290,55 @@ export interface RawWebZone {
   attr?: string | null;
 }
 
+/** undefined means: no candidates, use the old path. Otherwise dedupe([selector, ...selectors]), at most 6. */
+export function zoneCandidatesOf(zone: ZoneLike): string[] | undefined {
+  if (zone.selectors === undefined) return undefined;
+  const list: string[] = [];
+  for (const s of [...(zone.selector !== undefined ? [zone.selector] : []), ...zone.selectors]) {
+    if (typeof s === 'string' && s !== '' && !list.includes(s)) list.push(s);
+  }
+  return list.slice(0, 6);
+}
+
+/** Wait per candidate: [T] for one; first = ceil(T/2), the others floor((T - first) / (n - 1)); every entry at least 1. */
+export function candidateBudgets(timeoutMs: number, n: number): number[] {
+  if (n <= 0) return [];
+  if (n === 1) return [Math.max(1, timeoutMs)];
+  const first = Math.ceil(timeoutMs / 2);
+  const rest = Math.floor((timeoutMs - first) / (n - 1));
+  return [Math.max(1, first), ...Array.from({ length: n - 1 }, () => Math.max(1, rest))];
+}
+
+/** The count the zone has for its kind: table = non-empty rows of [header, ...rows]; list = non-empty items. */
+export function zoneCount(raw: RawWebZone, kind: string): number | undefined {
+  if (kind === 'table') {
+    const rows = [...(raw.header ? [raw.header] : []), ...(raw.rows ?? [])];
+    return rows.filter((row) => row.some((cell) => collapseInline(cell) !== '')).length;
+  }
+  if (kind === 'list') return (raw.items ?? []).filter((item) => collapseInline(item) !== '').length;
+  return undefined;
+}
+
+/**
+ * Judge the reading of one candidate. `rejected`: nothing matched, the extractor cannot read it, or the tag differs
+ * from the fingerprint. `soft`: it reads, but it is empty where the recording had rows. Otherwise `accepted`.
+ */
+export function judgeCandidate(raw: RawWebZone | undefined, tag: string | undefined, zone: ZoneLike): { verdict: Verdict; outcome: ZoneOutcome } {
+  const outcome = finishWebZone(raw, zone);
+  if (raw === undefined || !outcome.ok) return { verdict: 'rejected', outcome };
+  const fp = zone.fingerprint;
+  if (fp !== undefined && tag !== fp.tag) return { verdict: 'rejected', outcome };
+  const kind = zone.extractor?.kind ?? 'text';
+  if (fp !== undefined && fp.count !== undefined && fp.count >= 1 && fp.kind === kind && zoneCount(raw, kind) === 0) {
+    return { verdict: 'soft', outcome };
+  }
+  return { verdict: 'accepted', outcome };
+}
+
+/** The message for a zone that matched nothing after several candidates. It holds no page text. */
+export function notFoundAfterCandidates(_zone: ZoneLike, tried: number): string {
+  return `The result zone matched nothing after trying ${tried} ways to find it; ${ACTION_RAN}, only reading its result failed.`;
+}
 /** Turn the raw reading of the zone element into the result; `raw` is undefined when the element does not exist. */
 export function finishWebZone(raw: RawWebZone | undefined, zone: ZoneLike): ZoneOutcome {
   if (raw === undefined) return failure('result_zone_not_found', notFoundMessage(zone), zone);

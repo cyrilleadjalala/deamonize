@@ -15,6 +15,7 @@ import {
   tableToObjects,
   zoneFailureResult,
 } from '../../src/replay/runtime/extract.js';
+import { candidateBudgets, judgeCandidate, notFoundAfterCandidates, zoneCandidatesOf, zoneCount } from '../../src/replay/runtime/extract.js';
 import { dataSchemaFor } from '../../src/schema/data-schema.js';
 import { describeOutput } from '../../src/compiler/tool-description.js';
 import { SchemaInferencer } from '../../src/schema/schema-inferencer.js';
@@ -233,5 +234,43 @@ describe('schema of data', () => {
     expect(zoned.outputSchema?.['properties']).toHaveProperty('data.items.properties.Total');
     expect(describeOutput(zoned)).toContain('array of objects');
     expect(describeOutput(zoned)).toContain('ID, Total');
+  });
+});
+
+
+describe('zone candidates (pure)', () => {
+  it('zoneCandidatesOf is undefined without selectors, else deduped and capped at 6', () => {
+    expect(zoneCandidatesOf({ selector: '#a' })).toBeUndefined();
+    expect(zoneCandidatesOf({ selector: '#b', selectors: ['#a', '#b', '#a', '#c'] })).toEqual(['#b', '#a', '#c']);
+    expect(zoneCandidatesOf({ selector: 's0', selectors: ['s1', 's2', 's3', 's4', 's5', 's6', 's7'] })).toHaveLength(6);
+  });
+
+  it('candidateBudgets gives half to the first and shares the rest', () => {
+    expect(candidateBudgets(1000, 1)).toEqual([1000]);
+    expect(candidateBudgets(1001, 3)).toEqual([501, 250, 250]);
+    expect(candidateBudgets(2, 6).every((x) => x >= 1)).toBe(true);
+  });
+
+  it('zoneCount counts non-empty rows (header included) and items', () => {
+    expect(zoneCount({ text: '', header: ['a'], rows: [] }, 'table')).toBe(1);
+    expect(zoneCount({ text: '', header: null, rows: [['', ' ']] }, 'table')).toBe(0);
+    expect(zoneCount({ text: '', items: ['a', ' ', 'b'] }, 'list')).toBe(2);
+    expect(zoneCount({ text: '' }, 'text')).toBeUndefined();
+  });
+
+  it('judgeCandidate applies the four rules', () => {
+    const zone = { extractor: { kind: 'list' as const }, fingerprint: { tag: 'ul', kind: 'list', count: 2 } };
+    expect(judgeCandidate(undefined, undefined, zone).verdict).toBe('rejected');
+    expect(judgeCandidate({ text: 'a', problem: 'no list' }, 'ul', zone).verdict).toBe('rejected');
+    expect(judgeCandidate({ text: 'a', items: ['a'] }, 'ol', zone).verdict).toBe('rejected');
+    expect(judgeCandidate({ text: '', items: [] }, 'ul', zone).verdict).toBe('soft');
+    expect(judgeCandidate({ text: 'a', items: ['a'] }, 'ul', zone).verdict).toBe('accepted');
+  });
+
+  it('candidatesTried appears only when tried is set; the old message is unchanged', () => {
+    const base = { ok: false as const, error: 'result_zone_not_found' as const, message: 'm', zone: { selector: '#a' } };
+    expect(zoneFailureResult(base, 1).failure).toEqual({ zone: { selector: '#a' } });
+    expect(zoneFailureResult({ ...base, tried: 3 }, 1).failure).toEqual({ zone: { selector: '#a' }, candidatesTried: 3 });
+    expect(notFoundAfterCandidates({ selector: '#a' }, 3)).not.toContain('#a');
   });
 });

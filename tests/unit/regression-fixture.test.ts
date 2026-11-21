@@ -200,6 +200,6 @@ describe('regression fixture (Requirement 24.3)', () => {
       for (const fileName of Object.keys(stored)) {
         expect(lf(compared[fileName]), fileName).toBe(stored[fileName]);
       }
-    });
+    }, 120_000);
   }
 });

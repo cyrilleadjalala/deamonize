@@ -193,6 +193,14 @@ export class KiroPowerGenerator {
       '',
       'A result with `drifted: true` means the final screen differs from the one recorded (only the recorded zone is compared when the workflow has one), so the application probably changed. Double-check the result before relying on it. `driftChecked: false` means no final screen was recorded: `drifted` is then always `false` and says nothing.',
       '',
+      '## Ask before changes',
+      '',
+      'When "Ask before changes" is on, a tool that changes data waits for the user to approve the call in the Daemonize sidebar in Kiro. A call that is not approved runs nothing and returns `success: false` with `error` set to `approval_denied` (the user said no), `approval_timeout` (nobody answered in time) or `approval_unavailable` (Daemonize could not ask). Tell the user what happened in plain words and do not call the tool again in a loop. Ask the user before you try once more.',
+      '',
+      '## Activity',
+      '',
+      'Every call of a tool is recorded in the Activity view of the Daemonize Studio and in the Daemonize sidebar in Kiro: the tool, the decision, the outcome and how long it took. Typed secrets are never recorded. When a call fails, point the user to the Activity view to see which step stopped.',
+      '',
     ].join('\n');
 
     const powerMd = [

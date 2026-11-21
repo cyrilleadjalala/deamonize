@@ -95,6 +95,9 @@ const RUNTIME_TOTP = join(
 
 // Which steps a call leaves out for an omitted optional Variable: standalone, imports nothing
 const RUNTIME_OMISSION = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'replay', 'runtime', 'omission.ts');
+// The firewall: approval queue, audit log, trace and the wrapper of the tools (host); trace.js also runs in the container.
+const RUNTIME_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'replay', 'runtime');
+const FIREWALL_RUNTIME_MODULES = ['approval-queue', 'audit-log', 'firewall', 'trace'] as const;
 
 const RUNTIME_VAULT_FORMAT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'replay', 'runtime', 'vault-format.ts');
 
@@ -225,6 +228,7 @@ export class Compiler {
     const vaultFormatSource = await readFile(RUNTIME_VAULT_FORMAT, 'utf-8');
     const vaultReaderSource = await readFile(RUNTIME_VAULT_READER, 'utf-8');
     const omissionSource = await readFile(RUNTIME_OMISSION, 'utf-8');
+    const firewallSources = await Promise.all(FIREWALL_RUNTIME_MODULES.map(async (name) => [name, await readFile(join(RUNTIME_DIR, name + '.ts'), 'utf-8')] as const));
     // Waiting for a pattern of the rendered screen: only a terminal target replays a pty
     const patternWaitSource = set.targetType === 'tui' ? await readFile(RUNTIME_PATTERN_WAIT, 'utf-8') : undefined;
     // Strict Level 2 execution with Playwright: only a web target replays a browser
@@ -286,6 +290,7 @@ export class Compiler {
       vaultReader: join(outputDir, 'vault-reader.js'),
       omissionSource: join(outputDir, 'omission.ts'),
       omission: join(outputDir, 'omission.js'),
+      ...Object.fromEntries(FIREWALL_RUNTIME_MODULES.flatMap((name) => [[name + 'Source', join(outputDir, name + '.ts')], [name, join(outputDir, name + '.js')]])),
       ...(patternWaitSource === undefined ? {} : { patternWaitSource: join(outputDir, 'pattern-wait.ts'), patternWait: join(outputDir, 'pattern-wait.js') }),
       ...(webStepsSource === undefined ? {} : { webStepsSource: join(outputDir, 'web-steps.ts'), webSteps: join(outputDir, 'web-steps.js') }),
       ...(browserLaunchSource === undefined ? {} : { browserLaunchSource: join(outputDir, 'browser-launch.ts'), browserLaunch: join(outputDir, 'browser-launch.js') }),
@@ -322,6 +327,10 @@ export class Compiler {
       writeFile(files.vaultReader, this.toJavaScript(vaultReaderSource)),
       writeFile(files.omissionSource, omissionSource),
       writeFile(files.omission, this.toJavaScript(omissionSource)),
+      ...firewallSources.flatMap(([name, source]) => [
+        writeFile(join(outputDir, name + '.ts'), source),
+        writeFile(join(outputDir, name + '.js'), this.toJavaScript(source)),
+      ]),
       ...(patternWaitSource === undefined ? [] : [
         writeFile(join(outputDir, 'pattern-wait.ts'), patternWaitSource),
         writeFile(join(outputDir, 'pattern-wait.js'), this.toJavaScript(patternWaitSource)),

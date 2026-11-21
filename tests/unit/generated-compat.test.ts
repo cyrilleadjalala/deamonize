@@ -41,7 +41,8 @@ describe('generated code of a set that uses none of the new features', () => {
         const out = await compile(set, options);
         try {
           for (const text of SNAPSHOT_TEXTS) {
-            const generated = await out.read(text);
+            // Only the lines of the firewall change (ending with //#fw) are added to an old set
+            const generated = (await out.read(text)).split('\n').filter((line) => !line.trimEnd().endsWith('//#fw')).join('\n');
             const stored = lf(await readFile(join(FIXTURES, 'snapshot', `${name}.${optionName}.${text}.txt`), 'utf-8'));
             expect(generated, text).toBe(stored);
             expect(generated).not.toMatch(/WorkflowCall|omission|skippedSet|skippedSteps/);
@@ -51,7 +52,7 @@ describe('generated code of a set that uses none of the new features', () => {
             options: Record<string, { sandboxImage: { copy: string[] } }>;
           };
           const before = snapshot.options[optionName].sandboxImage.copy;
-          expect(image.copy.filter((entry) => entry !== 'omission.js')).toEqual(before);
+          expect(image.copy.filter((entry) => entry !== 'omission.js' && entry !== 'trace.js')).toEqual(before);
           expect(image.copy).toContain('omission.js');
           expect((await out.read('omission.ts')).length).toBeGreaterThan(0);
         } finally {

@@ -69,6 +69,7 @@ describe('Dockerfile generation', () => {
         'COPY settle.js ./settle.js',
         'COPY extract.js ./extract.js',
         'COPY omission.js ./omission.js',
+        'COPY trace.js ./trace.js',
         'COPY pattern-wait.js ./pattern-wait.js',
         'USER node',
         'ENTRYPOINT ["node", "/sandbox/replay.js", "--container"]',

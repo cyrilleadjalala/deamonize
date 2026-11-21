@@ -56,7 +56,7 @@ describe('generated reader files do not import from src/', () => {
     await removeDir(dir);
   });
 
-  it.each(['vault-reader.ts', 'vault-reader.js', 'vault-format.ts', 'vault-format.js'])('%s imports only node:* modules and its sibling files', async (name) => {
+  it.each(['vault-reader.ts', 'vault-reader.js', 'vault-format.ts', 'vault-format.js', 'approval-queue.ts', 'approval-queue.js', 'audit-log.ts', 'audit-log.js', 'firewall.ts', 'firewall.js', 'trace.ts', 'trace.js'])('%s imports only node:* modules and its sibling files', async (name) => {
     const specs = specifiers(name, await readFile(join(dir, name), 'utf-8'));
     expect(specs.length).toBeGreaterThan(0);
     for (const spec of specs) {

@@ -5,6 +5,9 @@ import { propertyToZodSource } from './zod-translator.js';
 import { pickResultZone } from '../replay/runtime/extract.js';
 import { skipListOf, usesWorkflowCall } from '../workflow/workflow-scope.js';
 import type { ResultZone, Workflow, WorkflowSet } from '../types.js';
+import { marked, type FirewallMeta } from './firewall-markers.js';
+import { isSecretStep, toolRiskOf, writeStepsOf } from '../studio/model.js';
+import { secretEnvNames } from './tool-description.js';
 
 // The sandbox image of a web target starts from the Playwright image of this exact version,
 // whose browsers match the playwright package installed on top of it.
@@ -312,6 +315,7 @@ const WEB_RUNTIME = [
   `      await waitForEffect(page as unknown as SettlePage, { timeoutMs: boundStepTimeoutMs(STEP_TIMEOUT_MS, deadline - Date.now()) });`,
   `      // Strict mode: the first step that no locator can perform stops the replay, no later step runs`,
   `      const outcome = await runStepsStrict(steps, async (step, index) => {`,
+  marked(`        traceStep(index);`),
   `        // A step never waits longer than what is left of the whole replay`,
   `        const timeoutMs = boundStepTimeoutMs(resolveStepTimeoutMs({ step: step.timeoutMs, env: process.env.DAEMONIZE_STEP_TIMEOUT_MS }), deadline - Date.now());`,
   `        await runStep(webRun, step, index, args, timeoutMs, track, final, env);`,
@@ -403,6 +407,7 @@ const WEB_RUNTIME_HTTP = [
   `      };`,
   ``,
   `      for (let index = 0; index < steps.length; index++) {`,
+  marked(`        traceStep(index);`),
   `        const step = steps[index];`,
   `        if (plan[index] === "prep") {`,
   `          deferred.push(index);`,
@@ -566,6 +571,7 @@ const TERMINAL_RUNTIME = [
   `          : patternTimeoutResult({ stepIndex: index, wait, elapsedMs: outcome.elapsedMs, screenExcerpt: outcome.screenExcerpt }, Date.now() - startedAt);`,
   `      };`,
   `      for (let index = 0; index < steps.length; index++) {`,
+  marked(`        traceStep(index);`),
   `        const step = steps[index];`,
   `        const value = resolveValue(step, args);`,
   `        const wait = step.waitFor === undefined ? undefined : compileStepWait(step.waitFor);`,
@@ -688,6 +694,19 @@ const CONTAINER_ENTRY = [
   `  process.exit(0);`,
   `}`,
 ];
+
+/**
+ * The container entry with its two marked lines: the trace scope before the replay, and the trace of the call in the
+ * result line (the host cannot see the steps of a replay that ran in the container).
+ */
+function withContainerTrace(entry: string[], targetType: 'web' | 'tui'): string[] {
+  const at = entry.findIndex((line) => line.startsWith(`  const result = await replay(`));
+  if (at === -1) throw new Error('mcp-generator: container entry replay call not found');
+  const out = [...entry];
+  out.splice(at + 1, 0, marked(`  Object.assign(result, { trace: buildTrace({ steps: request.steps, marks: takeMarks(), result: result as any, targetType: ${JSON.stringify(targetType === 'web' ? 'web' : 'tui')} }).steps });`));
+  out.splice(at, 0, marked(`  enterTraceScope();`));
+  return out;
+}
 
 // docker-replay.ts: replays one call inside a throw-away container, so the target application
 // never runs on the host. Needs only the docker command; settings come from the environment.
@@ -944,7 +963,8 @@ const WEB_RUNTIME_CALL = patchLines(WEB_RUNTIME, [
     at: `      await page.goto(overrides.url ?? START_URL, { timeout: TIMEOUT_MS });`,
     replace: [`      await page.goto(overrides.url ?? call.startUrl ?? START_URL, { timeout: TIMEOUT_MS });`],
   },
-  { at: `      const outcome = await runStepsStrict(steps, async (step, index) => {`, after: SKIP_STEP_RETURN },
+  // The step is marked first and skipped after, so the trace reads it from skippedSteps
+  { at: marked(`        traceStep(index);`), after: SKIP_STEP_RETURN },
 ]);
 
 const WEB_RUNTIME_HTTP_CALL = patchLines(WEB_RUNTIME_HTTP, [
@@ -1039,6 +1059,33 @@ const DOCKER_RUNTIME_CALL = patchLines(DOCKER_RUNTIME, [
   },
 ]);
 
+/**
+ * The table embedded in the generated `mcp-server.ts` (`FIREWALL`): for each tool its risk and write steps (one
+ * definition, `src/studio/model.ts`), the names that hold a typed secret and the labels of its steps.
+ * Tools are sorted by name, so the bytes do not depend on the order of the workflows.
+ */
+export function buildFirewallMeta(set: WorkflowSet, toolNames: Map<string, string>, http = false): FirewallMeta {
+  const entries = set.workflows.map((workflow) => {
+    const name = toolNames.get(workflow.id) ?? workflow.id;
+    const steps = workflow.steps ?? [];
+    const sensitiveArgs = [...new Set(steps.flatMap((step) => (isSecretStep(step) && step.variable !== undefined ? [step.variable] : [])))].sort();
+    const meta = {
+      risk: toolRiskOf(workflow),
+      writeSteps: writeStepsOf(workflow).writeSteps.map((w) => ({ index: w.index, label: w.label, risk: w.risk })),
+      sensitiveArgs,
+      secretVariables: secretEnvNames(workflow, { http }),
+      steps: steps.map((step) => ({
+        ...(step.label !== undefined && step.label.trim() !== '' ? { label: step.label.slice(0, 120) } : {}),
+        actionType: step.actionType,
+        ...(step.risk !== undefined ? { risk: step.risk } : {}),
+      })),
+    };
+    return [name, meta] as const;
+  });
+  entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return { application: set.targetName, targetType: set.targetType, tools: Object.fromEntries(entries) };
+}
+
 /** The `call` argument of one tool: names of Variables, a URL, a path or null. Never a value. Empty text when nothing is set. */
 function callLiteralOf(workflow: Workflow): string {
   const skip = skipListOf(workflow);
@@ -1095,6 +1142,7 @@ export class McpGenerator {
       `import { z } from "zod";`,
       `import { replay } from "./replay.js";`,
       `import { replayInDocker } from "./docker-replay.js";`,
+      marked(`import { createFirewall } from "./firewall.js";`),
       ...(withCall ? [`import type { Step, Final, Limits, WorkflowCall } from "./replay.js";`] : []),
       ``,
       `const INPUT_SCHEMAS: Record<string, object> = ${JSON.stringify(this.collectInputSchemas(set, toolNames))};`,
@@ -1115,10 +1163,15 @@ export class McpGenerator {
       `  return { mode: MODE, ...(MODE === "heal" ? { healed: false, healedSteps: [] } : {}), ...result };`,
       `}`,
       ``,
+      marked(`const FIREWALL = ${JSON.stringify(buildFirewallMeta(set, toolNames, httpEnabled(set, options)))};`),
+      marked(`const firewall = createFirewall(FIREWALL as any, withMode);`),
+      marked(`async function approvalGate(...a: Parameters<typeof firewall.wrap>) { return firewall.wrap(...a); }`),
       `const server = new McpServer({`,
       `  name: ${JSON.stringify(set.targetName)},`,
       `  version: "1.0.0"`,
       `});`,
+      marked(`const registerTool = (server as any).tool.bind(server);`),
+      marked(`(server as any).tool = (...a: any[]) => registerTool(...a.slice(0, -1), async (args: any, extra: any) => (await approvalGate(a[0], a[a.length - 1], (payload: any) => validatePayload(a[0], payload !== null && typeof payload === "object" ? Object.fromEntries(Object.entries(payload).filter(([key]) => key !== "_timeoutMs")) : payload)))(args, extra));`),
       ``,
       toolBlocks,
       ``,
@@ -1167,6 +1220,7 @@ export class McpGenerator {
           `import { boundText, extractTerminalZone, zoneFailureResult, type ExtractorLike } from "./extract.js";`,
         ]),
       ...(withCall ? [`import { ${set.targetType === 'web' && http ? 'planSkips, omittedSkips' : 'planSkips'} } from "./omission.js";`] : []),
+      marked(`import { traceStep, enterTraceScope, buildTrace, takeMarks } from "./trace.js";`),
       ``,
       ...(set.targetType === 'web'
         ? [
@@ -1189,7 +1243,7 @@ export class McpGenerator {
         : withCall
           ? [...TERMINAL_RUNTIME_CALL, ...TERMINAL_REPLAY_ENTRY_CALL]
           : [...TERMINAL_RUNTIME, ...TERMINAL_REPLAY_ENTRY]),
-      ...(withCall ? CONTAINER_ENTRY_CALL : CONTAINER_ENTRY),
+      ...withContainerTrace(withCall ? CONTAINER_ENTRY_CALL : CONTAINER_ENTRY, set.targetType),
     ];
     return lines.join('\n') + '\n';
   }
@@ -1272,7 +1326,7 @@ export class McpGenerator {
       : { playwright: PLAYWRIGHT_VERSION };
 
     const copy = [
-      'replay.js', 'screen-hash.js', 'settle.js', 'extract.js', 'omission.js',
+      'replay.js', 'screen-hash.js', 'settle.js', 'extract.js', 'omission.js', 'trace.js',
       ...(terminal
         ? ['pattern-wait.js']
         : ['row-resolver.js', 'step-plan.js', 'totp.js', 'vault-format.js', 'vault-reader.js', 'web-steps.js', 'browser-launch.js', ...(http ? ['http-replay.js'] : []), ...(healEnabled(set, options) ? ['heal'] : [])]),

@@ -321,6 +321,9 @@ const ALLOWED_WRITERS: Array<{ file: RegExp; call: RegExp; definedAs: RegExp }> 
   { file: /^heal\/cache\.(js|ts)$/, call: /^rename\(tmp, this\.path\)/, definedAs: /const tmp = `\$\{this\.path\}\./ },
   { file: /^heal\/cache\.(js|ts)$/, call: /^rm\(tmp,/, definedAs: /const tmp = `\$\{this\.path\}\./ },
   { file: /^(web-steps|docker-replay)\.(js|ts)$/, call: /^writeFileSync\(path,/, definedAs: /tmpdir\(\), ["']daemonize-failures["']/ },
+  // Runtime writers of the approval flow and the audit log: files under `<data dir>/approvals`, never the workflow file.
+  { file: /^approval-queue\.(js|ts)$/, call: /^(writeFile\((keyPath|tmp|path),|rename\(tmp, heartbeatPath\(store\)\)|link\(tmp, path\)|unlink\()/, definedAs: /join\(dataDir, 'approvals'\)/ },
+  { file: /^audit-log\.(js|ts)$/, call: /^(appendFile\(file,|writeFile\(tmp,|rename\(tmp, file\))/, definedAs: /const tmp = `\$\{file\}\.tmp-/ },
 ];
 const WRITE_CALL = /(?<![\w$])(writeFile|writeFileSync|appendFile|appendFileSync|rename|renameSync|createWriteStream|unlink|unlinkSync|rm|rmSync|copyFile|copyFileSync|truncate|truncateSync|cp|cpSync|symlink|link|open|openSync)\s*\(/g;
 

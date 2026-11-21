@@ -126,6 +126,14 @@ describe('CLI: record → compile → merge', () => {
     await quiet(() => buildProgram().parseAsync(['node', 'daemonize', 'compile', file, '--out', out]));
 
     expect((await readdir(out)).filter((name) => name !== '.dockerignore').sort()).toEqual([
+      'approval-queue.js',
+      'approval-queue.ts',
+      'audit-log.js',
+      'audit-log.ts',
+      'firewall.js',
+      'firewall.ts',
+      'trace.js',
+      'trace.ts',
       'docker-replay.js',
       'docker-replay.ts',
       'extract.js',

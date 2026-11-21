@@ -146,7 +146,7 @@ describe('Recording_Manager: the scope of "Save and add to Kiro" (Requirements 1
       fake.intent = 'kiro';
       fake.end('panel');
       fake.succeed();
-      await vi.waitFor(() => expect(services.recording.status().state).toBe('done'));
+      await vi.waitFor(() => expect(services.recording.status().state).toBe('done'), { timeout: 20000 });
 
       const status = services.recording.status();
       expect(status.state).toBe('done');

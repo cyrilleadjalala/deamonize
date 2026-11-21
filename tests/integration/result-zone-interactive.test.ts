@@ -124,7 +124,8 @@ describe('interactive result zone picking, live preview, resizing and clear', ()
     await page.locator('#wiki-results li').first().click();
 
     await page.locator('[data-daemonize-action=result-preview]').waitFor();
-    expect(live.resultZone).toEqual({ selector: '#wiki-results', extractor: { kind: 'list' } });
+    expect(live.resultZone).toMatchObject({ selector: '#wiki-results', extractor: { kind: 'list' } });
+    expect(live.resultZone?.selectors?.[0]).toBe(live.resultZone?.selector);
     expect(await page.locator('[data-daemonize-action=result-preview]').innerText()).toContain('4 items');
     expect(await page.locator('[data-daemonize-action=result-preview]').innerText()).toContain('Ada Lovelace');
 

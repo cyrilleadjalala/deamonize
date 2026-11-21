@@ -45,6 +45,8 @@ export class Controller {
   readonly manager: ProcessManager;
   recording: RecordingStatus | undefined;
   lastActionName: string | undefined;
+  /** `<globalStorage>/cli`, set by the composition root; the locator looks there second. */
+  extensionFolder: string | undefined;
 
   private readonly refreshListeners = new Set<() => void>();
   private readonly seenSensitive = new Set<string>();
@@ -60,7 +62,9 @@ export class Controller {
     this.manager = deps.createProcessManager({
       locate: async () => {
         const folder = currentFolder();
-        return locateCli(buildLocatorInput(folder.kind === 'local' ? folder.path : '', deps.env));
+        return locateCli(buildLocatorInput(
+          folder.kind === 'local' ? folder.path : '', deps.env, undefined, undefined, this.extensionFolder,
+        ));
       },
       workspaceFolder: () => {
         const folder = currentFolder();

@@ -13,6 +13,8 @@ export interface LocatorInput {
   /** Setting daemonize.nodePath ('' = unset). */
   nodePath: string;
   workspaceFolder: string;
+  /** The folder the extension installs into (<globalStorage>/cli); '' or missing = none. */
+  extensionFolder?: string;
   /** PATH split, in order. */
   pathEntries: string[];
   platform: NodeJS.Platform;
@@ -84,10 +86,15 @@ export async function locateCli(input: LocatorInput): Promise<LocatorResult> {
     return resolveFile(input.cliPath);
   }
 
-  const candidates: string[] = [
+  const candidates: string[] = [];
+  const own = input.extensionFolder ?? '';
+  if (own !== '') {
+    candidates.push(P.join(own, 'node_modules', '.bin', win ? 'daemonize.cmd' : 'daemonize'), P.join(own, 'node_modules', 'daemonize', 'dist', 'cli', 'index.js'));
+  }
+  candidates.push(
     P.join(input.workspaceFolder, 'node_modules', '.bin', win ? 'daemonize.cmd' : 'daemonize'),
     P.join(input.workspaceFolder, 'node_modules', 'daemonize', 'dist', 'cli', 'index.js'),
-  ];
+  );
   const names = win ? ['daemonize.cmd', 'daemonize.exe'] : ['daemonize'];
   for (const dir of input.pathEntries) {
     if (dir === '') continue;

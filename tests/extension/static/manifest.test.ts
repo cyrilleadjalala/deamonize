@@ -5,6 +5,8 @@ import { __commands } from '../fake-vscode';
 import { CONTRIBUTION_STRINGS, S } from '../../../kiro-extension/src/core/strings';
 import { COPY } from '../../../src/studio/ui/js/copy.js';
 import { createHarness } from '../glue/harness';
+import { whenHolds } from '../when-clause';
+import { welcomeFor } from '../../../kiro-extension/src/core/welcome-model';
 
 const EXT = path.resolve(__dirname, '../../../kiro-extension');
 const pkg = JSON.parse(fs.readFileSync(path.join(EXT, 'package.json'), 'utf8'));
@@ -92,5 +94,49 @@ describe('extension manifest', () => {
   it('shares the credentials sentence with the Studio', () => {
     expect(S.credentialsFromVault).toBe(COPY.credentialsFromVault);
     expect(S.noCredentials).toBe(COPY.noPlaceholders);
+  });
+});
+
+describe('walkthrough daemonize.getStarted and the welcome entries', () => {
+  const walkthrough = pkg.contributes.walkthroughs.find((w: { id: string }) => w.id === 'daemonize.getStarted');
+  const steps: Array<{ id: string; title: string; description: string; completionEvents: string[]; media: { markdown: string } }> = walkthrough.steps;
+  const declared = new Set<string>(pkg.contributes.commands.map((c: { command: string }) => c.command));
+  const KNOWN_KEYS = new Set(['daemonize.cliFound', 'daemonize.browserMissing', 'daemonize.actionCount', 'daemonize.installCount']);
+  it('has the title and six steps in order, with unique ids', () => {
+    expect(nls[walkthrough.title.replace(/%/g, '')]).toBe('Get started with Daemonize');
+    expect(steps.map((s) => nls[s.title.replace(/%/g, '')])).toEqual([
+      'Install Daemonize', 'Open the Studio', 'Create your first action', 'Test it', 'Add it to Kiro', 'Try the Daemonize agent',
+    ]);
+    expect(new Set(steps.map((s) => s.id)).size).toBe(steps.length);
+  });
+  it('links a declared command, has a completion event on a declared command or a known key, and an existing media file', () => {
+    const linked = steps.map((s) => /command:([\w.]+)/.exec(nls[s.description.replace(/%/g, '')])?.[1]);
+    expect(linked).toEqual(['daemonize.installCli', 'daemonize.openStudio', 'daemonize.newAction', 'daemonize.testInStudio', 'daemonize.connectToKiro', 'daemonize.buildWithAgent']);
+    for (const s of steps) {
+      expect(nls[s.description.replace(/%/g, '')].length, s.id).toBeLessThanOrEqual(200);
+      expect(s.completionEvents.length, s.id).toBeGreaterThan(0);
+      for (const event of s.completionEvents) {
+        const [kind, name] = event.split(':');
+        if (kind === 'onCommand') expect(declared.has(name), event).toBe(true);
+        else expect(kind === 'onContext' && KNOWN_KEYS.has(name), event).toBe(true);
+      }
+      expect(fs.existsSync(path.join(EXT, s.media.markdown)), s.media.markdown).toBe(true);
+    }
+    for (const id of linked) expect(declared.has(id!), id).toBe(true);
+    expect(steps[0].completionEvents).toEqual(['onCommand:daemonize.installCli', 'onContext:daemonize.cliFound']);
+  });
+  it('has one heading in each media page, no hex colour', () => {
+    for (const s of steps) {
+      const text = fs.readFileSync(path.join(EXT, s.media.markdown), 'utf8');
+      expect(text.match(/^# /gm), s.media.markdown).toHaveLength(1);
+      expect(text).not.toMatch(/#[0-9a-fA-F]{6}\b/);
+    }
+  });
+  it('matches exactly one Actions welcome entry per state (none when welcomeFor says none)', () => {
+    const entries = (pkg.contributes.viewsWelcome as Array<{ view: string; contents: string; when: string }>).filter((e) => e.view === 'daemonize.actions' && e.contents !== '%welcome.noFolder%');
+    for (const cliFound of [false, true]) for (const browserMissing of [false, true]) for (const actionCount of [0, 1]) {
+      const holding = entries.filter((e) => whenHolds(e.when, { 'daemonize.cliFound': cliFound, 'daemonize.browserMissing': browserMissing, 'daemonize.actionCount': actionCount, 'daemonize.installCount': 0 }));
+      expect(holding.length, JSON.stringify({ cliFound, browserMissing, actionCount })).toBe(welcomeFor({ cliFound, browserMissing, actionCount, installCount: 0 }) === 'none' ? 0 : 1);
+    }
   });
 });

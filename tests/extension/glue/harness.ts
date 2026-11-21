@@ -1,5 +1,5 @@
 import type * as vscode from 'vscode';
-import { __commands, __reset, __setFolders } from '../fake-vscode';
+import { __commands, __createContext, __reset, __setFolders } from '../fake-vscode';
 import { activateWith, type ExtensionHandle } from '../../../kiro-extension/src/extension';
 import type { ExtensionDeps } from '../../../kiro-extension/src/ui/controller';
 import type { ProcessManager, StudioApi, StudioSessionLike } from '../../../kiro-extension/src/core/ports';
@@ -93,7 +93,10 @@ export function createHarness(apiOverrides: Record<string, (...args: any[]) => u
     createProcessManager: () => manager,
     createApi: () => api,
   };
-  const context = { subscriptions: [] } as unknown as vscode.ExtensionContext;
+  // The walkthrough was shown and the browser was checked for this version: the older glue tests see no onboarding side effect.
+  const context = __createContext({
+    globalState: { 'daemonize.walkthroughShown': true, 'daemonize.browserCheck': { version: '0.1.0', available: true } },
+  }) as unknown as vscode.ExtensionContext;
   const handle = activateWith(context, deps);
   return {
     handle,

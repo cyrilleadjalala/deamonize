@@ -45,9 +45,11 @@ export function buildLocatorInput(
   env: NodeJS.ProcessEnv,
   settings: DaemonizeSettings = readSettings(),
   fsPort: FsPort = createNodeFsPort(),
+  extensionFolder?: string,
 ): LocatorInput {
   const rawPath = env.PATH ?? env.Path ?? env.path ?? '';
   return {
+    ...(extensionFolder ? { extensionFolder } : {}),
     cliPath: settings.cliPath,
     nodePath: settings.nodePath,
     workspaceFolder,

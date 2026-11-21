@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { spawn as nodeSpawn } from 'node:child_process';
+import * as path from 'node:path';
 import { createProcessManager } from './core/process-manager';
 import type { ChildLike, SpawnOptions } from './core/process-manager';
 import { createStudioApi } from './core/studio-api';
@@ -72,6 +73,7 @@ let active: ExtensionHandle | undefined;
 
 export function activateWith(context: vscode.ExtensionContext, deps: ExtensionDeps): ExtensionHandle {
   const controller = new Controller(deps);
+  if (context.globalStorageUri) controller.extensionFolder = path.join(context.globalStorageUri.fsPath, 'cli');
 
   const actions = registerActionsView(controller);
   const credentials = registerCredentialsView(controller);
@@ -84,7 +86,7 @@ export function activateWith(context: vscode.ExtensionContext, deps: ExtensionDe
     ...credentials.disposables,
     ...kiro.disposables,
     ...activity.disposables,
-    ...registerContextKeys(controller),
+    ...registerContextKeys(controller, context),
     ...registerStatusBar(controller),
     ...registerLifecycleCommands(controller),
     ...registerStudioCommands(controller),
@@ -94,7 +96,7 @@ export function activateWith(context: vscode.ExtensionContext, deps: ExtensionDe
     ...registerKiroCommands(controller),
     ...registerAgentCommands(controller),
     ...registerApprovalCommands(controller),
-    ...registerOnboardingCommands(controller),
+    ...registerOnboardingCommands(controller, context),
     ...registerPowerCommands(controller),
     controller.onDidRefresh(() => {
       void actions.provider.reload();

@@ -15,6 +15,8 @@ Each step is replayed by the most stable means available:
 
 Server-rendered applications such as Adminer have no fetch/XHR to record: every step stays at Level 2. That is a normal result.
 
+Search fields often switch between the roles `searchbox` and `combobox` while the page loads, and keep the same accessible name. A step recorded on one of these two roles therefore also tries the other one, with the same name and the same context (`planLocators` in `src/replay/runtime/step-plan.ts`). A `select` step does not.
+
 ## Mixed workflows (--http)
 
 Node `fetch()` runs outside the browser: it moves neither the page to the next screen nor the cookies of the browser. So the plan (`planSteps` in `src/replay/runtime/http-replay.ts`) follows one rule:
@@ -52,7 +54,7 @@ How `skip` is carried out:
 
 A checkbox, an element with `role=checkbox` or an element with `role=switch` is recorded as one `check` step instead of a click. Its `value` is `"true"` or `"false"`, the state seen after the click. If the step has a boolean Variable, the call gives the target state (`true`/`"true"` or `false`/`"false"`); otherwise the recorded value is the target. The runtime (`checkControl` in `src/replay/runtime/web-steps.ts`) reads the control, clicks at most once if it is not in the target state (`needsClick`), then waits until the page shows that state, so running the step twice leaves the control in the target state. A control that is disabled, cannot be found, or does not reach the state fails the step: there is no repair, in STRICT and in HEAL mode. With `--http auto` a `check` step is a preparatory step, like `type` and `select`.
 
-A group of radio buttons can be recorded as one `string` Variable whose `enum` lists the accessible names of the options. The call gives the name, and the runtime clicks the radio with that role and name. Choosing the option that is already selected succeeds.
+A group of radio buttons can be recorded as one `string` Variable whose `enum` lists the accessible names of the options. The call gives the name, and the runtime clicks the radio with that role and name. Choosing the option that is already selected succeeds. A group inside a `fieldset` or a `role=radiogroup` that has a name (its legend or label) is used as the context of the step, like a section, so a radio with the same name in another group is not chosen.
 
 ## One start page and one login per workflow
 

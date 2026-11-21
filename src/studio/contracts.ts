@@ -3,6 +3,8 @@
  * Change this file only through the foundation owner.
  */
 
+import type { AuditEntry } from '../replay/runtime/audit-log.js';
+
 // ---- app data -------------------------------------------------------------
 export type AppDataProblem = 'unresolved' | 'inside-working-dir' | 'inside-git-repo' | 'inside-output-dir' | 'not-writable';
 export type AppDataCheck = { ok: true; dir: string } | { ok: false; problem: AppDataProblem };
@@ -145,6 +147,8 @@ export interface InstallSummary {
   scope: InstallScope;
   slug: string;
   kiroPath: string;
+  /** "Ask before changes" of this install (a record written before this setting reads as false). */
+  askBeforeChanges?: boolean;
 }
 export interface PowerInfo {
   available: boolean;
@@ -176,6 +180,10 @@ export interface PowerPreview {
   /** True when settings/mcp.json exists and will be copied. */
   backup: boolean;
   otherScopeInstalled?: InstallScope;
+  /** "Ask before changes" as it will be written to the entry. Optional only until group G-S fills it. */
+  askBeforeChanges?: boolean;
+  /** Compiled names of the tools that change data (the ones the setting holds back). Optional until group G-S. */
+  askBeforeChangesTools?: string[];
 }
 export interface AutoAddOutcome {
   status: 'disabled' | 'added' | 'unchanged' | 'failed';
@@ -212,6 +220,11 @@ export interface PowerInstaller {
   disableAutoAdd(): Promise<AutoAddState>;
   /** Called by the server after a successful Playground call. Never throws. */
   runAutoAdd(): Promise<AutoAddOutcome>;
+  /**
+   * Rewrites "Ask before changes" of the install in `scope` (entry and record, one transaction). Throws PowerError.
+   * Optional only so that the seam compiles before group G-S; G-S implements it.
+   */
+  setApproval?(request: { scope: unknown; askBeforeChanges: unknown }): Promise<{ scope: InstallScope; askBeforeChanges: boolean }>;
 }
 
 // ---- application location ---------------------------------------------------
@@ -230,6 +243,67 @@ export interface ApplicationLocator {
   /** Called by the compile runner before writing: creates the Name_Map entry and returns the target. Throws AppNamesError. */
   prepareCompile(): Promise<ActiveApplication>;
 }
+
+// ---- approvals --------------------------------------------------------------
+export interface ApprovalView {
+  id: string;
+  tool: string;
+  application: string;
+  risk: 'write' | 'delete';
+  riskText: 'Changes data' | 'Deletes data';
+  source: 'kiro' | 'studio-mcp';
+  kind: 'tool-call' | 'install' | 'delete-action' | 'test-action';
+  summary?: string;
+  arguments: unknown;
+  writeSteps: Array<{ index: number; label: string; risk: 'write' | 'delete' }>;
+  createdAt: string;
+  expiresAt: string;
+  secondsLeft: number;
+}
+export type DecideOutcome = { ok: true; decision: 'approved' | 'denied' } | { ok: false; reason: 'ended' | 'invalid' };
+export interface ApprovalsService {
+  /** Creates the folder and the key, writes the heartbeat, starts the 2 s timer (unref), starts the sweep. No-op when the data folder is unusable. */
+  start(): Promise<void>;
+  list(): Promise<ApprovalView[]>;
+  decide(id: string, decision: 'approved' | 'denied'): Promise<DecideOutcome>;
+  /** Stops the timers and removes the heartbeat. */
+  close(): Promise<void>;
+}
+
+// ---- activity ---------------------------------------------------------------
+export interface ActivityQuery {
+  limit: number;
+  tool?: string;
+  decision?: 'auto' | 'approved' | 'denied' | 'timeout' | 'unavailable';
+}
+export interface ActivityService {
+  list(query: ActivityQuery): Promise<{ entries: AuditEntry[]; tools: string[]; total: number }>;
+}
+
+// ---- browser check ----------------------------------------------------------
+export interface BrowserCheck {
+  check(): Promise<{ available: boolean; browser?: 'chromium' | 'chrome' | 'edge' | 'custom' }>;
+}
+
+// ---- the Daemonize Power (the Studio_MCP, the agent and the skill) ------------
+export type DaemonizePowerParts = 'power' | 'agent';
+export interface DaemonizePowerPlan {
+  confirmationId: string;
+  scope: InstallScope;
+  parts: DaemonizePowerParts;
+  kiroPath: string;
+  files: PowerFilePlan[];
+  conflicts: string[];
+  alreadyInstalled: boolean;
+  replacesEntry: boolean;
+}
+export interface DaemonizePowerInstaller {
+  info(): Promise<{ installs: Array<{ scope: InstallScope; parts: DaemonizePowerParts }>; agentPresent: { project: boolean; global: boolean } }>;
+  preview(request: { scope: unknown; parts?: unknown; workspacePath?: unknown }): Promise<DaemonizePowerPlan>;
+  install(request: { confirmationId: unknown; kiroPath: unknown; scope: unknown; replace?: unknown }): Promise<{ written: string[]; skipped: string[]; alreadyInstalled: boolean }>;
+  remove(request: { scope: unknown; parts?: unknown }): Promise<{ removed: string[] }>;
+}
+
 export interface StudioServices {
   appData: AppData;
   vault: SecretVault;
@@ -238,4 +312,8 @@ export interface StudioServices {
   compiler: CompileRunner;
   power: PowerInstaller;
   locator: ApplicationLocator;
+  approvals: ApprovalsService;
+  activity: ActivityService;
+  browser: BrowserCheck;
+  daemonizePower: DaemonizePowerInstaller;
 }

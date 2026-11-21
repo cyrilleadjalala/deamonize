@@ -172,12 +172,12 @@ function stepView(step: WorkflowStep, index: number, targetType: 'web' | 'tui'):
     ...(anchor === undefined
       ? {}
       : {
-          target: {
-            role: clipText(anchor.role, 40),
-            ...(text(anchor.name) === undefined ? {} : { name: text(anchor.name) }),
-            ...(anchor.parent === undefined ? {} : { parentKind: anchor.parent.kind, parentName: clipText(anchor.parent.name, 100) }),
-          },
-        }),
+        target: {
+          role: clipText(anchor.role, 40),
+          ...(text(anchor.name) === undefined ? {} : { name: text(anchor.name) }),
+          ...(anchor.parent === undefined ? {} : { parentKind: anchor.parent.kind, parentName: clipText(anchor.parent.name, 100) }),
+        },
+      }),
     risk: step.risk ?? 'read',
     allowHeal: step.allowHeal === true,
     levels,
@@ -188,24 +188,24 @@ function stepView(step: WorkflowStep, index: number, targetType: 'web' | 'tui'):
     ...(row === undefined
       ? {}
       : {
-          rowBinding: {
-            ...(row.container?.kind === undefined ? {} : { kind: row.container.kind }),
-            ...(row.container?.role === undefined ? {} : { role: row.container.role }),
-            ...(row.variable === undefined ? {} : { variable: row.variable }),
-            ...(row.key?.column === undefined ? {} : { keyColumn: clipText(row.key.column, 60) }),
-          },
-        }),
+        rowBinding: {
+          ...(row.container?.kind === undefined ? {} : { kind: row.container.kind }),
+          ...(row.container?.role === undefined ? {} : { role: row.container.role }),
+          ...(row.variable === undefined ? {} : { variable: row.variable }),
+          ...(row.key?.column === undefined ? {} : { keyColumn: clipText(row.key.column, 60) }),
+        },
+      }),
     ...(wait === undefined || expression === undefined
       ? {}
       : {
-          waitFor: {
-            kind: wait.pattern !== undefined ? ('pattern' as const) : ('text' as const),
-            expression: clipText(expression, 120),
-            mode: wait.mode ?? 'appear',
-            ...(wait.when === undefined ? {} : { when: wait.when }),
-            timeoutMs: wait.timeoutMs,
-          },
-        }),
+        waitFor: {
+          kind: wait.pattern !== undefined ? ('pattern' as const) : ('text' as const),
+          expression: clipText(expression, 120),
+          mode: wait.mode ?? 'appear',
+          ...(wait.when === undefined ? {} : { when: wait.when }),
+          timeoutMs: wait.timeoutMs,
+        },
+      }),
     ...(step.timeoutMs === undefined ? {} : { timeoutMs: step.timeoutMs }),
     // A picture of a secret field is never offered, whatever the file holds
     ...(thumbName !== undefined && !secret && ASSET_NAME.test(thumbName) ? { thumbnailUrl: `/api/assets/${thumbName}` } : {}),
@@ -344,10 +344,24 @@ export interface WorkflowView {
   timeoutMs?: number;
 }
 
-export function buildWorkflowView(set: WorkflowSet, workflow: Workflow, outputs: StudioOutputs, status?: SecretStatusSource): WorkflowView {
-  const steps = (workflow.steps ?? []).slice(0, MAX_STEPS_PER_WORKFLOW);
+/** The number of steps of each risk, and the highest one. The one definition of the risk of a tool. */
+function riskCounts(workflow: Workflow): { read: number; write: number; delete: number; highest: 'read' | 'write' | 'delete' } {
   const risk = { read: 0, write: 0, delete: 0 };
   for (const step of workflow.steps ?? []) risk[step.risk ?? 'read'] += 1;
+  return { ...risk, highest: risk.delete > 0 ? 'delete' : risk.write > 0 ? 'write' : 'read' };
+}
+
+/**
+ * The risk of a tool: `delete` when any step deletes, else `write` when any step writes (a login counts), else `read`.
+ * Used by the Studio views, the Power_Installer and the compiler (the firewall table), so one function defines it.
+ */
+export function toolRiskOf(workflow: Workflow): 'read' | 'write' | 'delete' {
+  return riskCounts(workflow).highest;
+}
+
+export function buildWorkflowView(set: WorkflowSet, workflow: Workflow, outputs: StudioOutputs, status?: SecretStatusSource): WorkflowView {
+  const steps = (workflow.steps ?? []).slice(0, MAX_STEPS_PER_WORKFLOW);
+  const risk = riskCounts(workflow);
   const toolName = outputs.nameMap?.[workflow.id];
   const http = outputs.flags.compiled && outputs.flags.http;
   const { required, unused } = workflowSecrets(workflow, { http }, status);
@@ -357,7 +371,7 @@ export function buildWorkflowView(set: WorkflowSet, workflow: Workflow, outputs:
     ...(toolName === undefined ? {} : { toolName: clipText(toolName, 80) }),
     ...(text(workflow.description, 400) === undefined ? {} : { description: text(workflow.description, 400) }),
     target: { name: clipText(set.targetName ?? '', 100), type: set.targetType },
-    risk: { ...risk, highest: risk.delete > 0 ? 'delete' : risk.write > 0 ? 'write' : 'read' },
+    risk: { read: risk.read, write: risk.write, delete: risk.delete, highest: toolRiskOf(workflow) },
     variables: (workflow.variables ?? []).map((v) => ({
       name: clipText(v.name, 60),
       type: v.type ?? 'string',

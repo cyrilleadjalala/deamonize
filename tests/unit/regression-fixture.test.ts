@@ -11,6 +11,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSnapshot, splitSnapshot, type Snapshot } from '../helpers/regression-snapshot.js';
+import { FW_LINE_PATTERNS, FW_MARK } from '../../src/compiler/firewall-markers.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'regression');
 const SNAPSHOT_DIR = join(FIXTURES, 'snapshot');
@@ -26,7 +27,32 @@ const CASES = [
  * `omission.js` is one more entry of the `copy` list of `sandbox/image.json`. Each entry removes its
  * difference from the freshly built snapshot, so everything else must still be equal.
  */
-export const ALLOWED_DIFFERENCES: ReadonlyArray<{ description: string; remove: (snapshot: Snapshot) => void }> = [
+export interface AllowedDifference {
+  description: string;
+  /** Removes a difference from the parsed JSON part of the snapshot. */
+  remove?: (snapshot: Snapshot) => void;
+  /** Removes a difference from the generated texts (`<name>.<option>.<file>.txt`). Only lines that end with FW_MARK may go. */
+  removeFromTexts?: (files: Record<string, string>) => void;
+}
+
+/** Removes the marked lines that match `pattern` from every text whose name ends with `suffix`. Any other line stays. */
+function removeMarkedLines(files: Record<string, string>, suffix: string, pattern: RegExp): void {
+  for (const name of Object.keys(files)) {
+    if (!name.endsWith(suffix)) continue;
+    const eol = files[name].includes('\r\n') ? '\r\n' : '\n';
+    files[name] = files[name]
+      .split(eol)
+      .filter((line) => !(line.trimEnd().endsWith(FW_MARK) && pattern.test(line.trimStart())))
+      .join(eol);
+  }
+}
+
+const FIREWALL_RUNTIME_FILES = ['approval-queue', 'audit-log', 'firewall', 'trace'].flatMap((name) => [`${name}.ts`, `${name}.js`]);
+const MCP_SERVER_TEXTS = '.mcp-server.ts.txt';
+/** `docker-replay.ts.txt` does not end with this: its dot is a dash. */
+const REPLAY_TEXTS = '.replay.ts.txt';
+
+export const ALLOWED_DIFFERENCES: ReadonlyArray<AllowedDifference> = [
   {
     description: 'omission.ts and omission.js in the list of files of the output folder',
     remove: (snapshot) => {
@@ -64,6 +90,63 @@ export const ALLOWED_DIFFERENCES: ReadonlyArray<{ description: string; remove: (
       }
     },
   },
+  // ---- kiro-native-agent-and-firewall: every generated line that the change adds ends with FW_MARK ----
+  {
+    description: 'approval-queue, audit-log, firewall and trace (.ts and .js) in the list of files of the output folder',
+    remove: (snapshot) => {
+      for (const option of Object.values(snapshot.options)) {
+        option.files = option.files.filter((file) => !FIREWALL_RUNTIME_FILES.includes(file));
+      }
+    },
+  },
+  {
+    description: 'trace.js in the copy list of the sandbox image',
+    remove: (snapshot) => {
+      for (const option of Object.values(snapshot.options)) {
+        option.sandboxImage.copy = option.sandboxImage.copy.filter((file) => file !== 'trace.js');
+      }
+    },
+  },
+  {
+    description: 'mcp-server.ts: the import of firewall.js (marked line)',
+    removeFromTexts: (files) => removeMarkedLines(files, MCP_SERVER_TEXTS, FW_LINE_PATTERNS.firewallImport),
+  },
+  {
+    description: 'mcp-server.ts: the FIREWALL table (marked line)',
+    removeFromTexts: (files) => removeMarkedLines(files, MCP_SERVER_TEXTS, FW_LINE_PATTERNS.firewallTable),
+  },
+  {
+    description: 'mcp-server.ts: the firewall object (marked line)',
+    removeFromTexts: (files) => removeMarkedLines(files, MCP_SERVER_TEXTS, FW_LINE_PATTERNS.firewallObject),
+  },
+  {
+    description: 'mcp-server.ts: the function approvalGate (marked line)',
+    removeFromTexts: (files) => removeMarkedLines(files, MCP_SERVER_TEXTS, FW_LINE_PATTERNS.approvalGate),
+  },
+  {
+    description: 'mcp-server.ts: the saved server.tool, registerTool (marked line)',
+    removeFromTexts: (files) => removeMarkedLines(files, MCP_SERVER_TEXTS, FW_LINE_PATTERNS.registerTool),
+  },
+  {
+    description: 'mcp-server.ts: the wrapper of server.tool (marked line)',
+    removeFromTexts: (files) => removeMarkedLines(files, MCP_SERVER_TEXTS, FW_LINE_PATTERNS.toolWrapper),
+  },
+  {
+    description: 'replay.ts: the import of trace.js (marked line)',
+    removeFromTexts: (files) => removeMarkedLines(files, REPLAY_TEXTS, FW_LINE_PATTERNS.traceImport),
+  },
+  {
+    description: 'replay.ts: traceStep(index); in the step loops (marked lines)',
+    removeFromTexts: (files) => removeMarkedLines(files, REPLAY_TEXTS, FW_LINE_PATTERNS.traceStep),
+  },
+  {
+    description: 'replay.ts: enterTraceScope(); in the container entry (marked line)',
+    removeFromTexts: (files) => removeMarkedLines(files, REPLAY_TEXTS, FW_LINE_PATTERNS.enterTraceScope),
+  },
+  {
+    description: 'replay.ts: the trace in the result of the container entry (marked line)',
+    removeFromTexts: (files) => removeMarkedLines(files, REPLAY_TEXTS, FW_LINE_PATTERNS.traceResult),
+  },
 ];
 
 const lf = (text: string): string => text.replace(/\r\n/g, '\n');
@@ -71,8 +154,17 @@ const lf = (text: string): string => text.replace(/\r\n/g, '\n');
 function withoutAllowedDifferences(name: string, files: Record<string, string>): Record<string, string> {
   const json = `${name}.json`;
   const snapshot = JSON.parse(files[json]) as Snapshot;
-  for (const allowed of ALLOWED_DIFFERENCES) allowed.remove(snapshot);
-  return { ...files, [json]: JSON.stringify(snapshot, null, 2) + '\n' };
+  for (const allowed of ALLOWED_DIFFERENCES) allowed.remove?.(snapshot);
+  const result: Record<string, string> = { ...files, [json]: JSON.stringify(snapshot, null, 2) + '\n' };
+  for (const allowed of ALLOWED_DIFFERENCES) allowed.removeFromTexts?.(result);
+  return result;
+}
+
+/** The lines that end with FW_MARK in the texts: after every named entry ran, none may be left. */
+function leftoverMarkedLines(files: Record<string, string>): string[] {
+  return Object.entries(files).flatMap(([file, text]) =>
+    text.split(/\r?\n/).flatMap((line, index) => (line.trimEnd().endsWith(FW_MARK) ? [`${file}:${index + 1}: ${line.trim().slice(0, 100)}`] : []))
+  );
 }
 
 describe('regression fixture (Requirement 24.3)', () => {
@@ -102,6 +194,8 @@ describe('regression fixture (Requirement 24.3)', () => {
       else if (stored[live] === undefined) delete actual[live];
 
       const compared = withoutAllowedDifferences(name, actual);
+      // A marked line that no named entry accounts for is an unexplained difference
+      expect(leftoverMarkedLines(compared), 'lines ending with //#fw that no entry of ALLOWED_DIFFERENCES removes').toEqual([]);
       expect(Object.keys(compared).sort()).toEqual(Object.keys(stored).sort());
       for (const fileName of Object.keys(stored)) {
         expect(lf(compared[fileName]), fileName).toBe(stored[fileName]);

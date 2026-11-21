@@ -93,9 +93,10 @@ describe('Studio UI modules of the first flow', () => {
 
   it('lists the two feature routes and their views in the seam', () => {
     const source = readFileSync(join(ui, 'js/features.js'), 'utf8');
-    expect(source).toMatch(/FEATURE_ROUTES = \['record', 'credentials'\]/);
+    expect(source).toMatch(/FEATURE_ROUTES = \['record', 'credentials', 'activity'\]/);
     expect(source).toMatch(/record: \{/);
     expect(source).toMatch(/credentials: \{/);
+    expect(source).toMatch(/activity: \{/);
   });
 
   it('exports the pure helpers', async () => {

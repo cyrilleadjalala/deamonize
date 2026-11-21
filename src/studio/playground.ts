@@ -21,6 +21,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { Validator } from '../validator/validator.js';
 import { isUnexpandedPlaceholder, pickSecret } from '../replay/runtime/vault-format.js';
+import type { TraceStep } from '../replay/runtime/trace.js';
 import { VaultUnreadableError, type SecretVault } from './contracts.js';
 import { clipText } from './pbt-result.js';
 import { collectEnvSecretValues, makeScrubber, redactForStudio, REDACTED } from './redact.js';
@@ -83,6 +84,12 @@ export interface ChildEnvOptions {
   mode: ReplayModeName;
   /** Ask the server for a picture of the final screen. */
   preview?: boolean;
+  /** `studio` sets `DAEMONIZE_CALL_SOURCE=studio` (group G-D). */
+  callSource?: 'studio';
+  /** Sets `DAEMONIZE_TRACE=1` (group G-D). */
+  trace?: boolean;
+  /** Sets `DAEMONIZE_DATA_DIR` (group G-D). */
+  dataDir?: string;
 }
 
 /** The environment of the MCP server process: allow-listed names only, with the mode and the preview chosen by the Studio. */
@@ -429,6 +436,11 @@ export interface PlaygroundResult {
   terminalSize?: unknown;
   screenshotUrl?: string;
   screenshotSkipped?: string;
+  /** Whole numbers, at most 200: steps the call skipped (group G-D fills it). */
+  skippedSteps?: number[];
+  /** The replay trace, only when the server returned one (group G-D fills it). */
+  trace?: TraceStep[];
+  traceTruncated?: true;
 }
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
@@ -556,6 +568,12 @@ export interface PlaygroundOptions {
   requiredSecretNames?: () => Promise<readonly string[]>;
   /** The real environment (default process.env), for the system variables of the child. */
   processEnv?: Record<string, string | undefined>;
+  /** The App_Data_Dir when it is usable: the child writes its audit entries there (group G-D uses it). */
+  dataDir?: () => string | undefined;
+  /** `studio`: the child skips the approval question (the Playground has its own confirmation dialog). */
+  callSource?: 'studio';
+  /** Ask the child for the replay trace (`DAEMONIZE_TRACE=1`, never written to an install entry). */
+  traceEnabled?: boolean;
 }
 
 export interface CallRequest {

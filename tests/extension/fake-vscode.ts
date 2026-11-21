@@ -39,6 +39,7 @@ export function __reset(): void {
   __calls.length = 0;
   __objects.length = 0;
   __commands.clear();
+  __hostCommands.clear();
   for (const key of Object.keys(__config)) delete __config[key];
   scripts = {};
   workspace.workspaceFolders = undefined;
@@ -62,11 +63,11 @@ export class EventEmitter<T> {
 }
 
 export class ThemeColor {
-  constructor(readonly id: string) {}
+  constructor(readonly id: string) { }
 }
 
 export class ThemeIcon {
-  constructor(readonly id: string, readonly color?: ThemeColor) {}
+  constructor(readonly id: string, readonly color?: ThemeColor) { }
 }
 
 export enum TreeItemCollapsibleState { None = 0, Collapsed = 1, Expanded = 2 }
@@ -81,7 +82,7 @@ export class TreeItem {
   contextValue?: string;
   command?: { command: string; title: string; arguments?: unknown[] };
   id?: string;
-  constructor(public label: string, public collapsibleState: TreeItemCollapsibleState = TreeItemCollapsibleState.None) {}
+  constructor(public label: string, public collapsibleState: TreeItemCollapsibleState = TreeItemCollapsibleState.None) { }
 }
 
 export class Uri {
@@ -92,7 +93,7 @@ export class Uri {
     readonly query: string,
     readonly fragment: string,
     private readonly text: string,
-  ) {}
+  ) { }
   static parse(value: string, _strict?: boolean): Uri {
     const url = new URL(value);
     return new Uri(url.protocol.replace(/:$/, ''), url.host, url.pathname, url.search.replace(/^\?/, ''), url.hash.replace(/^#/, ''), value);
@@ -154,6 +155,10 @@ function treeView(id: string, options: { treeDataProvider: unknown }) {
 export const window = {
   showInputBox: async (options?: unknown) => { record('window.showInputBox', [options]); return answer<string | undefined>('window.showInputBox', [options], undefined); },
   showQuickPick: async (items: unknown, options?: unknown) => { record('window.showQuickPick', [items, options]); return answer<unknown>('window.showQuickPick', [items, options], undefined); },
+  /**
+   * `message` and then the buttons (strings) or `{ modal }` options. Script the button the user presses by its title:
+   * `__script({ 'window.showInformationMessage': ['Approve'] })`; no script means the notification was dismissed.
+   */
   showInformationMessage: async (message: string, ...rest: unknown[]) => { record('window.showInformationMessage', [message, ...rest]); return answer<unknown>('window.showInformationMessage', [message, ...rest], undefined); },
   showWarningMessage: async (message: string, ...rest: unknown[]) => { record('window.showWarningMessage', [message, ...rest]); return answer<unknown>('window.showWarningMessage', [message, ...rest], undefined); },
   showErrorMessage: async (message: string, ...rest: unknown[]) => { record('window.showErrorMessage', [message, ...rest]); return answer<unknown>('window.showErrorMessage', [message, ...rest], undefined); },
@@ -161,13 +166,21 @@ export const window = {
   createOutputChannel: (name: string) => { record('window.createOutputChannel', [name]); return outputChannel(name); },
   createStatusBarItem: (alignment?: StatusBarAlignment, priority?: number) => { record('window.createStatusBarItem', [alignment, priority]); return statusBarItem(alignment, priority); },
   createTreeView: (id: string, options: { treeDataProvider: unknown }) => { record('window.createTreeView', [id]); return treeView(id, options); },
-  withProgress: async <T>(options: unknown, task: (progress: { report(v: unknown): void }) => Promise<T> | T): Promise<T> => {
+  /** Runs the task with a progress that records every `report` as `progress.report`, and a token that never cancels. */
+  withProgress: async <T>(
+    options: unknown,
+    task: (progress: { report(v: unknown): void }, token: { isCancellationRequested: boolean; onCancellationRequested: EventEmitter<unknown>['event'] }) => Promise<T> | T,
+  ): Promise<T> => {
     record('window.withProgress', [options]);
-    return task({ report: () => undefined });
+    const cancelled = new EventEmitter<unknown>();
+    return task({ report: (v: unknown) => { record('progress.report', [v]); } }, { isCancellationRequested: false, onCancellationRequested: cancelled.event });
   },
 };
 
 // ---------- commands ----------
+
+/** Command ids the host itself provides (for example a chat-opening command): `commands.getCommands` lists them with ours. */
+export const __hostCommands = new Set<string>();
 
 export const commands = {
   registerCommand(id: string, handler: (...args: any[]) => unknown) {
@@ -180,7 +193,44 @@ export const commands = {
     const handler = __commands.get(id);
     return handler ? handler(...args) : undefined;
   },
+  /** The ids of the registered commands and of `__hostCommands`. Calls are recorded; the answer is never scripted. */
+  async getCommands(filterInternal?: boolean): Promise<string[]> {
+    record('commands.getCommands', [filterInternal]);
+    return [...new Set([...__commands.keys(), ...__hostCommands])];
+  },
 };
+
+// ---------- memento (globalState) ----------
+
+export interface FakeMemento {
+  get<T>(key: string, fallback?: T): T | undefined;
+  update(key: string, value: unknown): Promise<void>;
+  keys(): readonly string[];
+}
+
+/** A `vscode.Memento`: values live in a Map; every `update` is recorded as `memento.update`. */
+export function __createMemento(initial: Record<string, unknown> = {}): FakeMemento {
+  const store = new Map<string, unknown>(Object.entries(initial));
+  return {
+    get<T>(key: string, fallback?: T): T | undefined { return (store.has(key) ? store.get(key) : fallback) as T | undefined; },
+    async update(key: string, value: unknown) {
+      record('memento.update', [key, value]);
+      if (value === undefined) store.delete(key); else store.set(key, value);
+    },
+    keys() { return [...store.keys()]; },
+  };
+}
+
+/** A fake `vscode.ExtensionContext` with a `globalState`, a `globalStorageUri` and the extension version. */
+export function __createContext(options: { globalState?: Record<string, unknown>; globalStoragePath?: string; version?: string } = {}) {
+  return {
+    subscriptions: [] as Array<{ dispose(): unknown }>,
+    globalState: __createMemento(options.globalState),
+    globalStorageUri: Uri.file(options.globalStoragePath ?? '/global-storage/daemonize'),
+    extensionPath: '/extension',
+    extension: { packageJSON: { version: options.version ?? '0.1.0' } },
+  };
+}
 
 // ---------- workspace ----------
 

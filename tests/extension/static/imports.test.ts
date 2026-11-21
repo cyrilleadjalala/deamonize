@@ -58,7 +58,9 @@ describe('extension source imports', () => {
 
   it('writes no file', () => {
     for (const f of files) {
-      expect(f.text, f.rel).not.toMatch(/\b(writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|mkdir|mkdirSync|rmSync|unlinkSync|rename|renameSync|copyFile)\b/);
+      // core/cli-installer.ts only declares the injected `rename` port of the installer; the real one is wired elsewhere
+      const text = f.rel === 'core/cli-installer.ts' ? f.text.replace(/\brename\(from: string, to: string\)/g, '') : f.text;
+      expect(text, f.rel).not.toMatch(/\b(writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|mkdir|mkdirSync|rmSync|unlinkSync|rename|renameSync|copyFile)\b/);
     }
   });
 

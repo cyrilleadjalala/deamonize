@@ -60,7 +60,12 @@ export function parsePowerInfo(body: unknown): PowerInfo | undefined {
   if (Array.isArray(body.installs)) {
     for (const item of body.installs) {
       if (isObj(item) && isScope(item.scope) && typeof item.slug === 'string' && typeof item.kiroPath === 'string') {
-        installs.push({ scope: item.scope, slug: item.slug, kiroPath: item.kiroPath });
+        installs.push({
+          scope: item.scope,
+          slug: item.slug,
+          kiroPath: item.kiroPath,
+          ...(typeof item.askBeforeChanges === 'boolean' ? { askBeforeChanges: item.askBeforeChanges } : {}),
+        });
       }
     }
   }

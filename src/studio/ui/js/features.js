@@ -12,15 +12,18 @@
  */
 import { renderRecordStatus } from './views/record-status.js';
 import { renderCredentials } from './views/credentials.js';
+import { renderActivity } from './views/activity.js';
 import { COPY } from './copy.js';
+import { COPY_ACTIVITY } from './copy-activity.js';
 
 /** @type {string[]} */
-export const FEATURE_ROUTES = ['record', 'credentials'];
+export const FEATURE_ROUTES = ['record', 'credentials', 'activity'];
 
 /** @type {Record<string, { title: string, render: (route: import('./router.js').Route) => HTMLElement | Promise<HTMLElement> }>} */
 export const FEATURE_VIEWS = {
   record: { title: COPY.recordTitle, render: renderRecordStatus },
   credentials: { title: COPY.credentialsTitle, render: renderCredentials },
+  activity: { title: COPY_ACTIVITY.title, render: renderActivity },
 };
 /** The scope choice, auto-add and removal of the connect screen are hidden in the static demo and in sample mode. @param {any} overview */
 export const connectFeaturesVisible = (overview) => overview?.sample !== true && globalThis.document?.querySelector('meta[name="daemonize-mode"]')?.getAttribute('content') !== 'static';

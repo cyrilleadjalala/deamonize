@@ -6,12 +6,23 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cwd } from 'node:process';
+import type { AuditEntry } from '../replay/runtime/audit-log.js';
+import { sampleApprovals, sampleAuditEntries } from './sample-activity.js';
 import {
   PowerError,
   SessionSaveError,
   VaultUnavailableError,
   type ActiveApplication,
+  type ActivityQuery,
+  type ActivityService,
   type ApplicationLocator,
+  type ApprovalsService,
+  type ApprovalView,
+  type BrowserCheck,
+  type DaemonizePowerInstaller,
+  type DaemonizePowerParts,
+  type DecideOutcome,
+  type InstallScope,
   type AutoAddOutcome,
   type AutoAddState,
   type CompileOptionsInput,
@@ -154,6 +165,55 @@ export class InertPowerInstaller implements PowerInstaller {
   }
   async runAutoAdd(): Promise<AutoAddOutcome> {
     return { status: 'disabled' };
+  }
+}
+
+/** Sample mode: the fictitious pending question of `sample-activity.ts`; a decision is never written. */
+export class InertApprovalsService implements ApprovalsService {
+  constructor(private readonly sample: boolean = false) { }
+  async start(): Promise<void> {
+    // No heartbeat: nobody listens
+  }
+  async list(): Promise<ApprovalView[]> {
+    return this.sample ? sampleApprovals() : [];
+  }
+  async decide(): Promise<DecideOutcome> {
+    return { ok: false, reason: 'ended' };
+  }
+  async close(): Promise<void> {
+    // Nothing runs
+  }
+}
+
+/** Sample mode: the fictitious entries of `sample-activity.ts`, filtered like the real service. */
+export class InertActivityService implements ActivityService {
+  constructor(private readonly sample: boolean = false) { }
+  async list(query: ActivityQuery): Promise<{ entries: AuditEntry[]; tools: string[]; total: number }> {
+    const all = this.sample ? sampleAuditEntries() : [];
+    const tools = [...new Set(all.map((e) => e.tool))].sort();
+    const matching = all.filter((e) => (query.tool === undefined || e.tool === query.tool) && (query.decision === undefined || e.decision === query.decision));
+    return { entries: matching.slice(0, query.limit), tools, total: matching.length };
+  }
+}
+
+export class InertBrowserCheck implements BrowserCheck {
+  async check(): Promise<{ available: boolean }> {
+    return { available: false };
+  }
+}
+
+export class InertDaemonizePower implements DaemonizePowerInstaller {
+  async info(): Promise<{ installs: Array<{ scope: InstallScope; parts: DaemonizePowerParts }>; agentPresent: { project: boolean; global: boolean } }> {
+    return { installs: [], agentPresent: { project: false, global: false } };
+  }
+  async preview(): Promise<never> {
+    throw new PowerError(409, 'Adding the Daemonize assistant to Kiro is not available.');
+  }
+  async install(): Promise<never> {
+    throw new PowerError(409, 'Adding the Daemonize assistant to Kiro is not available.');
+  }
+  async remove(): Promise<never> {
+    throw new PowerError(409, 'Adding the Daemonize assistant to Kiro is not available.');
   }
 }
 

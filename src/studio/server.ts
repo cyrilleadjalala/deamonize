@@ -39,6 +39,7 @@ import { MAX_TIMEOUT_MS, PlaygroundSession, SHOT_ID, type CallRequest, type Tool
 import { sampleConnect, sampleLaunch } from './sample-playground.js';
 import type { ActiveApplication, AutoAddOutcome, CompileRunner, StudioServices } from './contracts.js';
 import { createServices } from './services.js';
+import { AGENT_REFUSED, agentMayCall } from './agent-access.js';
 import { requiredSecrets } from './required-secrets.js';
 import { DEFAULT_ROUTES } from './routes/index.js';
 import type { RouteContext, RouteDef, RouteFactory, RouteMethod } from './routes/types.js';
@@ -66,6 +67,8 @@ export interface StudioOptions {
   pbtTimeoutMs?: number;
   /** Fixed token, for tests; default a random one. */
   token?: string;
+  /** Fixed token of the agent principal (the Studio_MCP), for tests; default a random one. */
+  agentToken?: string;
   /** Serve the MCP playground (default true). Without it `/api/playground` answers 404. */
   playground?: boolean;
   /** Idle time after which the playground stops its server (default 5 min). */
@@ -86,6 +89,8 @@ export interface StudioHandle {
   /** The address without the token. */
   origin: string;
   token: string;
+  /** The token of the agent principal: it goes to the lease file, never to the address or the handshake line. */
+  agentToken: string;
   port: number;
   close(): Promise<void>;
 }
@@ -324,6 +329,8 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
   const port = options.port ?? 0;
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`Invalid port ${String(options.port)}`);
   const token = options.token ?? randomBytes(24).toString('base64url');
+  /** A second per-process secret for the Studio_MCP (written to the lease file); it maps to the `agent` principal. */
+  const agentToken = options.agentToken ?? randomBytes(24).toString('base64url');
   const env = options.env ?? process.env;
   const sample = options.sampleData === true;
   const workflowFile = options.workflowFile ?? DEFAULT_WORKFLOWS_FILE;
@@ -341,6 +348,8 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
   // The secret values found by the last load (a storage state): the playground scrubs them from its answers too
   let knownSecretValues: string[] = [];
   let playground: PlaygroundSession | undefined;
+  /** The App_Data_Dir when it is usable (known after the services exist); the Playground gives it to its server. */
+  let dataDir: string | undefined;
   const services = createServices(options.services, {
     workflowFile: resolve(workflowFile),
     outDir: resolve(outDir),
@@ -396,6 +405,14 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     close: () => baseCompiler.close(),
   };
   await refreshActive();
+  if (!sample) {
+    try {
+      const dataCheck = await services.appData.check();
+      dataDir = dataCheck.ok ? dataCheck.dir : undefined;
+    } catch {
+      dataDir = undefined;
+    }
+  }
   const loopbackListener = isLoopbackHost(host);
   /** Every value the Redactor must remove from a response, besides the environment ones. */
   const knownValues = (extra: readonly string[] = []): string[] => [...extra, ...knownSecretValues, ...services.vault.values(), ...services.sessions.knownValues()];
@@ -438,6 +455,9 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
         toolMeta,
         secretValues: () => knownValues(),
         vault: services.vault,
+        callSource: 'studio',
+        traceEnabled: true,
+        dataDir: () => dataDir,
         requiredSecretNames: async () => requiredSecrets((await loadSet()).set).map((s) => s.name),
         ...(sample ? { connect: sampleConnect, launch: sampleLaunch, healSupport: true } : {}),
       });
@@ -513,14 +533,19 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
     }
   };
 
-  const authorized = (req: IncomingMessage): boolean => {
+  /**
+   * Who is calling. The owner token (header, or the cookie of the first visit) is the `owner`; the agent token, which a
+   * lease file holds for the Studio_MCP, is the `agent` and counts only through the header, never through the cookie.
+   */
+  const principalOf = (req: IncomingMessage): 'owner' | 'agent' | undefined => {
     const header = firstHeader(req.headers['x-studio-token']);
-    if (sameToken(header, token)) return true;
+    if (sameToken(header, token)) return 'owner';
+    if (header !== undefined && sameToken(header, agentToken)) return 'agent';
     // The cookie of the first visit: GET freely, a POST only with the marker header and our own Origin (CSRF)
-    if (!sameToken(cookieValue(req.headers.cookie, COOKIE_NAME), token)) return false;
-    if (req.method !== 'POST') return true;
+    if (!sameToken(cookieValue(req.headers.cookie, COOKIE_NAME), token)) return undefined;
+    if (req.method !== 'POST') return 'owner';
     const origin = firstHeader(req.headers.origin);
-    return firstHeader(req.headers['x-studio-request']) !== undefined && origin !== undefined && originAllowed(origin);
+    return firstHeader(req.headers['x-studio-request']) !== undefined && origin !== undefined && originAllowed(origin) ? 'owner' : undefined;
   };
 
   async function serveAsset(res: ServerResponse, rawName: string, head: boolean): Promise<void> {
@@ -873,7 +898,10 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
       tooLarge: () => tooLarge,
     };
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
-      if (!authorized(req)) return sendError(res, 401, 'missing or invalid token', { 'WWW-Authenticate': 'Studio-Token' });
+      const principal = principalOf(req);
+      if (principal === undefined) return sendError(res, 401, 'missing or invalid token', { 'WWW-Authenticate': 'Studio-Token' });
+      // Default deny for the assistant: before any handler (and before the body is read)
+      if (principal === 'agent' && !agentMayCall(req.method ?? 'GET', url.pathname)) return sendError(res, 403, AGENT_REFUSED);
       if (routeDef !== undefined) return dispatchRoute(routeDef, req, res, url, body, declaredTooLarge);
       if (tooLarge) return;
       return handleApi(req, res, url.pathname, body);
@@ -903,17 +931,30 @@ export async function startStudio(options: StudioOptions = {}): Promise<StudioHa
   const shown = bare.includes(':') ? `[${bare}]` : bare;
   allowedHosts = new Set([`${shown}:${address.port}`.toLowerCase(), `localhost:${address.port}`, `127.0.0.1:${address.port}`, `[::1]:${address.port}`]);
   const origin = `http://${shown}:${address.port}`;
+  // The approval heartbeat starts once the listener is up (a no-op while the data folder is unusable)
+  try {
+    await services.approvals.start();
+  } catch {
+    // Without a heartbeat the generated servers answer "unavailable" (fail closed)
+  }
 
   return {
     url: `${origin}/?token=${token}`,
     origin,
     token,
+    agentToken,
     port: address.port,
     close: async () => {
       await new Promise<void>((done) => {
         server.close(() => done());
         server.closeAllConnections();
       });
+      // The approval service goes first: it removes its heartbeat, so a waiting server sees that nobody answers
+      try {
+        await services.approvals.close();
+      } catch {
+        // One failing step does not skip the next ones
+      }
       // Then a recording and a compile in progress, then the MCP server it started and the pictures it copied.
       // One failing step does not skip the next ones
       await services.recording.close().catch(() => undefined);

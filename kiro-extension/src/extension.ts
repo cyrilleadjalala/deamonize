@@ -4,15 +4,21 @@ import { createProcessManager } from './core/process-manager';
 import type { ChildLike, SpawnOptions } from './core/process-manager';
 import { createStudioApi } from './core/studio-api';
 import { createStudioClient } from './core/studio-client';
+import { registerAgentCommands } from './ui/commands/agent';
+import { registerApprovalCommands } from './ui/commands/approvals';
 import { registerCredentialCommands } from './ui/commands/credentials';
 import { registerDeleteCommands } from './ui/commands/delete';
 import { registerKiroCommands } from './ui/commands/kiro';
 import { registerLifecycleCommands } from './ui/commands/lifecycle';
+import { registerOnboardingCommands } from './ui/commands/onboarding';
+import { registerPowerCommands } from './ui/commands/power';
 import { registerRecordCommands } from './ui/commands/record';
 import { registerStudioCommands } from './ui/commands/studio';
 import { Controller, type ExtensionDeps, type ManagerHooks } from './ui/controller';
 import { registerStatusBar } from './ui/status-bar';
+import { registerContextKeys } from './ui/context-keys';
 import { registerActionsView } from './ui/views/actions-view';
+import { registerActivityView } from './ui/views/activity-view';
 import { registerCredentialsView } from './ui/views/credentials-view';
 import { registerKiroView } from './ui/views/kiro-view';
 
@@ -70,12 +76,15 @@ export function activateWith(context: vscode.ExtensionContext, deps: ExtensionDe
   const actions = registerActionsView(controller);
   const credentials = registerCredentialsView(controller);
   const kiro = registerKiroView(controller);
+  const activity = registerActivityView(controller);
 
   const disposables: Array<{ dispose(): unknown }> = [
     controller,
     ...actions.disposables,
     ...credentials.disposables,
     ...kiro.disposables,
+    ...activity.disposables,
+    ...registerContextKeys(controller),
     ...registerStatusBar(controller),
     ...registerLifecycleCommands(controller),
     ...registerStudioCommands(controller),
@@ -83,10 +92,15 @@ export function activateWith(context: vscode.ExtensionContext, deps: ExtensionDe
     ...registerRecordCommands(controller),
     ...registerCredentialCommands(controller),
     ...registerKiroCommands(controller),
+    ...registerAgentCommands(controller),
+    ...registerApprovalCommands(controller),
+    ...registerOnboardingCommands(controller),
+    ...registerPowerCommands(controller),
     controller.onDidRefresh(() => {
       void actions.provider.reload();
       void credentials.provider.reload();
       void kiro.provider.reload();
+      void activity.provider.reload();
     }),
   ];
   context.subscriptions.push(...disposables as vscode.Disposable[]);

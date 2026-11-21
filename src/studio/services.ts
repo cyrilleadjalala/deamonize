@@ -2,7 +2,9 @@
  * Builds the services of one Studio. Owned by the foundation group: the other groups fill their own modules
  * (the `create*` factories) and never edit this file.
  */
+import { readFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { collectEnvSecretValues, makeScrubber } from './redact.js';
 import { createAppData, unavailableAppData } from './app-data.js';
 import { createCompileRunner } from './compile-runner.js';
@@ -12,7 +14,23 @@ import { createAppNames } from './app-names.js';
 import { createAutoAddStore } from './auto-add-store.js';
 import type { StudioServices } from './contracts.js';
 import { createInstallRecords } from './install-records.js';
-import { InertApplicationLocator, InertCompileRunner, InertPowerInstaller, InertRecordingManager, InertSecretVault, InertSessionStore } from './inert-services.js';
+import {
+  InertActivityService,
+  InertApplicationLocator,
+  InertApprovalsService,
+  InertBrowserCheck,
+  InertCompileRunner,
+  InertDaemonizePower,
+  InertPowerInstaller,
+  InertRecordingManager,
+  InertSecretVault,
+  InertSessionStore,
+} from './inert-services.js';
+import { createActivityService } from './activity-service.js';
+import { createApprovalsService } from './approvals-service.js';
+import { createBrowserCheck } from './browser-check.js';
+import { createDaemonizePower } from './daemonize-power.js';
+import { toolRiskOf } from './model.js';
 import type { PlaygroundSession } from './playground.js';
 import { createPowerInstaller } from './power-installer.js';
 import { createRecordingManager } from './recording-manager.js';
@@ -56,6 +74,23 @@ export function createServices(overrides: Partial<StudioServices> | undefined, i
       }));
   const home = info.home ?? homedir();
   const locator = overrides?.locator ?? (info.sample ? new InertApplicationLocator(info.outDir) : createApplicationLocator({ baseOutDir: info.outDir, apps: createAppNames({ appData }), loadSet: info.loadSet }));
+  /** Compiled name and risk of each tool, for "Ask before changes" (the one risk function is `toolRiskOf`). Never throws. */
+  const toolRisks = async (): Promise<Array<{ toolName: string; risk: 'read' | 'write' | 'delete' }>> => {
+    try {
+      const { set } = await info.loadSet();
+      if (set === undefined) return [];
+      const current = await locator.current();
+      const nameMap = JSON.parse(await readFile(join(current.outDir, 'name-map.json'), 'utf-8')) as Record<string, unknown>;
+      return set.workflows.flatMap((workflow) => {
+        const toolName = nameMap[workflow.id];
+        return typeof toolName === 'string' ? [{ toolName, risk: toolRiskOf(workflow) }] : [];
+      });
+    } catch {
+      return [];
+    }
+  };
+  // Group G-S adds `toolRisks` to PowerInstallerDeps; passing it through a spread keeps this file stable for them
+  const approvalDeps = { toolRisks };
   const power =
     overrides?.power ??
     (info.sample
@@ -68,8 +103,14 @@ export function createServices(overrides: Partial<StudioServices> | undefined, i
         vault,
         records: createInstallRecords({ appData }),
         autoAdd: createAutoAddStore({ appData }),
+        ...approvalDeps,
       }));
   const recording =
     overrides?.recording ?? (info.sample ? new InertRecordingManager() : createRecordingManager({ workflowFile: info.workflowFile, workspacePath: info.cwd, sessions, compiler, scrub, power }));
-  return { appData, vault, sessions, recording, compiler, power, locator };
+  const approvals = overrides?.approvals ?? (info.sample ? new InertApprovalsService(true) : createApprovalsService({ appData }));
+  const activity = overrides?.activity ?? (info.sample ? new InertActivityService(true) : createActivityService({ appData }));
+  const browser = overrides?.browser ?? (info.sample ? new InertBrowserCheck() : createBrowserCheck({ env: info.env }));
+  const daemonizePower =
+    overrides?.daemonizePower ?? (info.sample ? new InertDaemonizePower() : createDaemonizePower({ cwd: info.cwd, home, appData, env: info.env }));
+  return { appData, vault, sessions, recording, compiler, power, locator, approvals, activity, browser, daemonizePower };
 }

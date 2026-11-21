@@ -3,7 +3,7 @@ import type { StudioRoute, StudioTarget } from './ports';
 
 export type { StudioRoute, StudioTarget };
 
-const HASH: Record<StudioRoute, string> = { playground: '#/playground', credentials: '#/credentials', overview: '', workflows: '#/workflows' };
+const HASH: Record<StudioRoute, string> = { playground: '#/playground', credentials: '#/credentials', overview: '', workflows: '#/workflows', activity: '#/activity' };
 /** A tool name the Studio accepts in ?tool=. */
 export const TARGET_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_ID = 200;

@@ -1,9 +1,9 @@
 import type {
-  ApiResult, Handshake, InstallAnswer, InstallScope, PowerInfo, PreviewAnswer, ProcessState,
-  RecordingStatus, SecretRow, WorkflowRow,
+  ActivityRow, ApiResult, ApprovalRow, DaemonizePowerPlanRow, Handshake, InstallAnswer, InstallScope, PowerInfo,
+  PreviewAnswer, ProcessState, RecordingStatus, SecretRow, WorkflowRow,
 } from './types';
 
-export type StudioRoute = 'playground' | 'credentials' | 'overview' | 'workflows';
+export type StudioRoute = 'playground' | 'credentials' | 'overview' | 'workflows' | 'activity';
 /** Where the Studio opens inside a route: a tool in the Playground, or one workflow. */
 export type StudioTarget = { kind: 'tool'; name: string } | { kind: 'workflow'; id: string };
 
@@ -28,6 +28,23 @@ export interface StudioApi {
   powerPreview(scope: InstallScope, workspacePath?: string): Promise<ApiResult<PreviewAnswer>>;
   powerInstall(p: { confirmationId: string; kiroPath: string; scope: InstallScope }): Promise<ApiResult<InstallAnswer>>;
   powerRemove(scope: InstallScope): Promise<ApiResult<{ removed: string[] }>>;
+}
+
+/** The approvals and the activity: `GET /api/approvals`, `POST /api/approvals/decide`, `GET /api/activity`, `POST /api/power/approval`. */
+export interface ActivityApi {
+  approvals(): Promise<ApiResult<ApprovalRow[]>>;
+  decide(id: string, decision: 'approved' | 'denied'): Promise<ApiResult<{ id: string; decision: string }>>;
+  activity(limit: number): Promise<ApiResult<ActivityRow[]>>;
+  setAskBeforeChanges(scope: InstallScope, value: boolean): Promise<ApiResult<{ scope: InstallScope; askBeforeChanges: boolean }>>;
+}
+
+/** The Daemonize Power and agent: `/api/power/daemonize/*`, and the browser check `GET /api/system/browser`. */
+export interface PowerApi {
+  info(): Promise<ApiResult<{ installs: Array<{ scope: InstallScope; parts: 'power' | 'agent' }>; agentPresent: { project: boolean; global: boolean } }>>;
+  preview(i: { scope: InstallScope; parts: 'power' | 'agent'; workspacePath?: string }): Promise<ApiResult<DaemonizePowerPlanRow>>;
+  install(i: { confirmationId: string; kiroPath: string; scope: InstallScope; replace?: string[] }): Promise<ApiResult<{ written: string[]; skipped: string[]; alreadyInstalled: boolean }>>;
+  remove(scope: InstallScope, parts: 'power' | 'agent'): Promise<ApiResult<{ removed: string[] }>>;
+  browser(): Promise<ApiResult<{ available: boolean }>>;
 }
 
 /** What the glue sees of a running Studio_Process. The class `StudioSession` in process-manager.ts implements it. */

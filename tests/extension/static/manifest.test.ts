@@ -30,10 +30,10 @@ describe('extension manifest', () => {
     }
   });
 
-  it('has the Activity Bar container and three views and no webview', () => {
+  it('has the Activity Bar container and four views (Actions, Credentials, Kiro, Activity) and no webview', () => {
     expect(pkg.contributes.viewsContainers.activitybar).toHaveLength(1);
     expect(pkg.contributes.viewsContainers.activitybar[0].id).toBe('daemonize');
-    expect(pkg.contributes.views.daemonize.map((v: { id: string }) => v.id)).toEqual(['daemonize.actions', 'daemonize.credentials', 'daemonize.kiro']);
+    expect(pkg.contributes.views.daemonize.map((v: { id: string }) => v.id)).toEqual(['daemonize.actions', 'daemonize.credentials', 'daemonize.kiro', 'daemonize.activity']);
     expect(JSON.stringify(pkg.contributes.views)).not.toContain('webview');
   });
 

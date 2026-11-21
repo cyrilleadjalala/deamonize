@@ -9,7 +9,11 @@ A small Kiro extension to create, list, test and connect Daemonize tools from th
 - **Actions**: your tools, each with a label (Reads only, Changes data, Deletes data). "New action" starts a recording, "Finish" saves it.
 - **Credentials**: the names of the passwords you saved, with "has a value" or "has no value yet". The extension never shows a value.
 - **Kiro**: connect your tools to Kiro or remove them again.
+- **Activity**: the calls made by Kiro and the agent, with "Open all activity" for the full list in the Studio.
+- **Build a tool with the Daemonize agent**: opens the chat with the `daemonize` agent (`.kiro/agents/daemonize.md`), which builds a tool with you through the Studio MCP (`daemonize mcp`). It can read and record, and it asks before it compiles, tests or installs.
+- **Install the Daemonize Power** and **Remove the Daemonize Power**: install or remove the Power in `power/` (the agent, the skill, the rules and the MCP entry). The `daemonize` command must be on your PATH for the Powers panel.
 - **Open the Studio** and **Test in the Studio** open the Studio in your default browser. There is no web view inside Kiro.
+- Approval questions appear in the Activity panel with the commands "Approve" and "Deny" (`daemonize.approve`, `daemonize.deny`). The Studio shows the same questions. The agent cannot answer them.
 
 ## Requirements
 

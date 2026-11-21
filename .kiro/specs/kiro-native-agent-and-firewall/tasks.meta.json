@@ -1,0 +1,1104 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Add the Studio contracts, principals and wiring": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092360
+      },
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218116713
+      },
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218267039
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218358347
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220660227
+      }
+    ],
+    "1.2 Add the runtime stubs and the firewall markers": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092416
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220660637
+      }
+    ],
+    "1.3 Add the Studio UI seam": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092475
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220661392
+      }
+    ],
+    "1.4 Add the extension seam": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092539
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220662141
+      }
+    ],
+    "1.5 Add the shared test arbitraries and secret-scan names": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092602
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220663396
+      }
+    ],
+    "1.6 Extend the regression test with the named `//#fw` differences (required)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092660
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220664219
+      }
+    ],
+    "1.7 Verify the seam and commit CG-0": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092704
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220664835
+      }
+    ],
+    "2. Checkpoint - G0 seam done and committed as CG-0": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092745
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220665581
+      }
+    ],
+    "3.1 Implement the approval queue and the approver simulator": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092792
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220737458
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258439992
+      }
+    ],
+    "3.2 Implement the audit log": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092834
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258440192
+      }
+    ],
+    "3.3 Implement the trace": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092893
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258441200
+      }
+    ],
+    "3.4 Implement the firewall wrapper": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218092976
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258442257
+      }
+    ],
+    "3.5 Write the fail-closed approval tests (required)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093027
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258443273
+      }
+    ],
+    "3.6 Write the no-secret test for the Audit_Log (required)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093077
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258444314
+      }
+    ],
+    "4.1 Add the marked lines to the generated code": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093126
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220738076
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258450300
+      }
+    ],
+    "4.2 Copy the runtime files and extend the generated SKILL.md": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093172
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258451442
+      }
+    ],
+    "4.3 Write the old-generated-server compatibility test (required)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093220
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258452611
+      }
+    ],
+    "4.4 Update the no-src-import guard (required)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093276
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258452818
+      }
+    ],
+    "4.6 Write the compiled-server fail-closed test (required, checkpoint-only)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093345
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258455474
+      }
+    ],
+    "5.1 Implement the approvals service and routes": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093394
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220738459
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258456749
+      }
+    ],
+    "5.2 Implement the activity service and route": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093440
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258456866
+      }
+    ],
+    "5.3 Update the Playground and the sample Playground": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093485
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258458178
+      }
+    ],
+    "5.4 Update the Playground tests for an old server (required)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093531
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258458669
+      }
+    ],
+    "6.1 Add the record fields and the entry env keys": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093609
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220739086
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258462149
+      }
+    ],
+    "6.2 Add the default, the toggle route and the answers": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093659
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258462679
+      }
+    ],
+    "6.3 Update the install tests and check old installs (required)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093709
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258464096
+      }
+    ],
+    "7.1 Add the API helpers, copy, banner and styles": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093757
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258483288
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259247167
+      }
+    ],
+    "7.2 Implement the Activity view": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093805
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259247329
+      }
+    ],
+    "7.3 Write the sample data for the static demo": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093861
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259247449
+      }
+    ],
+    "8.1 Implement the pure core": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093929
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258483923
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259249371
+      }
+    ],
+    "8.2 Implement the commands and views": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218093981
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259251105
+      }
+    ],
+    "9.1 Implement the timeline component and its copy": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094027
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258485654
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259253383
+      }
+    ],
+    "9.2 Hook the timeline into the Playground and the static simulation": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094077
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259253971
+      }
+    ],
+    "10.1 Implement the Studio_Lease": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094133
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220739377
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258466655
+      }
+    ],
+    "10.2 Implement connection, schemas and texts": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094199
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258468263
+      }
+    ],
+    "10.3 Implement the server and the thirteen tools": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094251
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258468454
+      }
+    ],
+    "10.4 Add the `mcp` command, `--version` and the lease in `studio`": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094301
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258470118
+      }
+    ],
+    "10.5 Add the fake Studio test double": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094350
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258470238
+      }
+    ],
+    "10.6 Write the no-secret and closed-schema tests for MCP results (required)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094405
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258471995
+      }
+    ],
+    "10.10 Write the real-Studio integration test with no-secret checks (required, checkpoint-only)": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094468
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259910941
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260018776
+      }
+    ],
+    "11.1 Implement the `/api/power/daemonize/*` routes": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094517
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258485963
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259258733
+      }
+    ],
+    "12.1 Write the Builder_Agent": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094561
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258486271
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259262680
+      }
+    ],
+    "12.2 Write the Builder_Skill": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094609
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259263901
+      }
+    ],
+    "13.1 Implement the agent command and the Power API client": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094678
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259275670
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259676576
+      }
+    ],
+    "13.2 Bundle the templates": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094726
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259676729
+      }
+    ],
+    "14.1 Implement `GET /api/system/browser`": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094773
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259276997
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259680261
+      }
+    ],
+    "15.1 Implement the locator, the constants and the installer": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094818
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259277171
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259680735
+      }
+    ],
+    "15.2 Implement the welcome function, the context keys and the walkthrough media": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094864
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259681768
+      }
+    ],
+    "15.3 Implement the onboarding commands": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094913
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259682698
+      }
+    ],
+    "16.1 Write the Power files": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218094962
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259693104
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259898185
+      }
+    ],
+    "16.2 Write the settings example, `.gitignore` and the dogfooding guide": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218095009
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259898433
+      }
+    ],
+    "17.1 Implement `daemonize.installPower` and `daemonize.removePower`": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218095071
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259693642
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259900864
+      }
+    ],
+    "18.1 Rewrite \"Built with Kiro\" and add the sections": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218095141
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260025172
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260312153
+      }
+    ],
+    "18.2 Amend requirements 20.2 and 21.1 to the RC-1 wording": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218095183
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260120832
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260312310
+      }
+    ],
+    "19. Final checkpoint - verification suite, then commits CG-1 to CG-7": [
+      {
+        "executionId": "7a9b8f40-0000-48ea-b25d-9cf1a65917b4",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795218095229
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260369910
+      }
+    ],
+    "1. G0 seams (serial, first, commit CG-0)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795220664891
+      }
+    ],
+    "3. G-B runtime: approval queue, audit log, trace, firewall (CG-1)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258444372
+      }
+    ],
+    "3.7 Write unit tests for the queue, the trace and the drift guard": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258445224
+      }
+    ],
+    "3.8 Write property tests for the approval queue": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258446226
+      }
+    ],
+    "3.9 Write property tests for the audit log": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258447256
+      }
+    ],
+    "3.10 Write property tests for the trace": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258448245
+      }
+    ],
+    "3.11 Write property tests for the firewall wrapper": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258449266
+      }
+    ],
+    "4.5 Write property test for the embedded risk table": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258454202
+      }
+    ],
+    "4. G-C generated code: marked lines in the generator (CG-1)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258455527
+      }
+    ],
+    "5. G-D Studio services, routes and Playground (CG-2)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258458727
+      }
+    ],
+    "5.5 Write unit tests for the services and routes": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258460173
+      }
+    ],
+    "5.6 Write property tests for the routes": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258460762
+      }
+    ],
+    "6. G-S Ask before changes in the install (CG-2)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258464152
+      }
+    ],
+    "6.4 Write property test for the setting": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258464672
+      }
+    ],
+    "6.5 Write the integration test for the install route": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258466233
+      }
+    ],
+    "10.7 Write unit tests for the lease, the CLI and the machine handshake": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258472156
+      }
+    ],
+    "10.8 Write property tests for the lease": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258473914
+      }
+    ],
+    "10.9 Write property tests for the Studio_MCP": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795258474046
+      }
+    ],
+    "7. G-U1 Activity view and approval banner (CG-2)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259247519
+      }
+    ],
+    "7.4 Write tests for the Activity view and its copy": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259249241
+      }
+    ],
+    "8. G-E2 Activity summary and approvals in the extension (CG-2)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259251163
+      }
+    ],
+    "8.3 Write unit and glue tests for approvals": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259251289
+      }
+    ],
+    "8.4 Write property test for the Activity summary": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259253261
+      }
+    ],
+    "9. G-U2 Replay_Timeline (CG-3)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259254046
+      }
+    ],
+    "9.3 Write property test for the timeline": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259254850
+      }
+    ],
+    "9.4 Write the integration test for the timeline": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259257341
+      }
+    ],
+    "11. G-P Daemonize Power install route (CG-4)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259258817
+      }
+    ],
+    "11.2 Write unit tests for the Power install": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259260013
+      }
+    ],
+    "11.3 Write property test for install and remove": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259261344
+      }
+    ],
+    "12. G-F1 Builder_Agent and Builder_Skill (CG-4)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259263968
+      }
+    ],
+    "12.3 Write tests for the agent and skill files": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259265211
+      }
+    ],
+    "13. G-E1 \"Build a tool with the Daemonize agent\" (CG-4)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259676799
+      }
+    ],
+    "13.3 Write unit and glue tests": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259677239
+      }
+    ],
+    "13.4 Write the packaging test": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259677753
+      }
+    ],
+    "14. G-O Browser check route (CG-5)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259680313
+      }
+    ],
+    "14.2 Write unit tests for the browser check": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259680427
+      }
+    ],
+    "15. G-E3 One-click install, walkthrough and welcome (CG-5)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259682749
+      }
+    ],
+    "15.4 Write unit tests and the manifest test": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259683703
+      }
+    ],
+    "15.5 Write property tests for the locator and the welcome state": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259684680
+      }
+    ],
+    "16. G-F2 Power folder and dogfooding guide (CG-6)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259898498
+      }
+    ],
+    "16.3 Write tests for the Power folder and the guide": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259900297
+      }
+    ],
+    "11.4 Write the integration test for the Power routes": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259900429
+      }
+    ],
+    "17. G-E4 Install and remove the Daemonize Power from the extension (CG-6)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259900922
+      }
+    ],
+    "17.2 Write the glue test": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795259903030
+      }
+    ],
+    "10. G-A Studio_MCP, lease and CLI (CG-4)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260018860
+      }
+    ],
+    "18. G-Z README and amended requirements (CG-7, last)": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260312381
+      }
+    ],
+    "18.3 Write the README table test": [
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260315986
+      },
+      {
+        "executionId": "d8d0da21-fd2e-4ddc-8205-618080695d1e",
+        "chatSessionId": "sess_330d6666-f568-4302-8484-e73baea7aeea",
+        "timestamp": 1795260369320
+      }
+    ]
+  }
+}

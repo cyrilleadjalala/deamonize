@@ -234,18 +234,62 @@ secret-leak and redaction properties 11 and 12 the other way round from the test
 
 ## Built with Kiro
 
-The [`.kiro/`](.kiro) folder is part of the repository.
+The [`.kiro/`](.kiro) folder is part of the repository. The table lists each Kiro feature the project used. Every number in the last column was counted in the repository on 21 November 2026 and can be checked with the command given under the table.
 
-- **Specs** (`.kiro/specs/daemonize/`): `requirements.md`, `design.md` and `tasks.md`, now 21 task groups, executed one task at a time. The second round (requirements 11 to 19: strict and heal, secrets, real-software proof) was added to the spec before it was built.
-- **Steering** (`.kiro/steering/`): `product.md` (principles such as strict by default and models never replacing the recording), `tech.md`, `structure.md`, `testing-pbt.md`.
-- **Hooks** (`.kiro/hooks/`): `typecheck-on-save`, `tests-on-core-change` (fast tests when a core module is saved), `keep-spec-in-sync` (check the spec when the data model changes), `secret-scan-on-save`.
-- **Kiro Power**: the compiler emits a Power that Kiro imports from a folder. `tests/integration/kiro-power-mcp.test.ts` starts the server from the generated `mcp.json`.
-- **Property-based testing found real defects**, fixed in the code and kept as tests:
-  - Graph merge was not commutative when one graph already held duplicate edges (first checkpoint).
-  - Run-time screen hashing and DOM normalization: the idempotence and equals-`ScreenHasher` properties (P9) guard it. Changing hidden CSRF token values (seen on Adminer) do not change the hash (`tests/unit/adminer-regressions.test.ts`).
-  - A pattern wait could be stalled by a regular expression that backtracks catastrophically. The matcher is now time-boxed and refuses such patterns (P16).
-  - The heal cache path could alias the workflow file through a junction or symlink. Aliasing paths are refused (P15).
-  - The recorder's own UI caused false drift on replay. It is excluded from the hash (commit `9aee1e9`).
+| Kiro feature | What we did | Why it mattered | Numbers |
+| --- | --- | --- | --- |
+| Spec: `daemonize` (`.kiro/specs/daemonize/`) | The first spec: record, schema, compile to an MCP server, OpenAPI and a Kiro Power, replay in a sandbox. A second round (strict and heal, secrets, real software) was added to the spec before it was built. | Everything else builds on it. Tasks ran one at a time against the requirements. | 19 requirements, 116 task lines (115 checked), 21 properties |
+| Spec: `studio-first-flow` | The Studio: record, mark variables, compile and test in one browser page. | Gave a person without a terminal a way to use the tool. | 14 requirements, 104 task lines (104 checked), 25 properties |
+| Spec: `studio-first-recording-fixes` (bugfix spec) | Bug conditions for the first-recording path of the Studio. | A bugfix spec states the defect before the fix. | 15 current-behaviour defects listed, 49 task lines (4 checked), 11 properties. Most tasks are not done. |
+| Spec: `nextjs-spa-replay-fixes` (bugfix spec) | Bug conditions for replaying Next.js single-page applications. | Same bugfix method, on replay. | 12 current-behaviour defects listed, 33 task lines (33 checked), 8 properties |
+| Spec: `kiro-global-connect-vault-bridge` | Connecting a tool to Kiro for all projects and sharing the secret vault with the generated server. | Credentials stay out of Kiro's settings files. | 10 requirements, 96 task lines (96 checked), 21 properties |
+| Spec: `kiro-thin-extension` | The small Kiro extension (`kiro-extension/`). | The Studio is reachable from the Kiro sidebar. | 17 requirements, 66 task lines (66 checked), 22 properties |
+| Spec: `user-journey-improvements` | Plain-language screens, first-action help, activity views. | Reduced the steps a new user needs. | 24 requirements, 118 task lines (118 checked), 33 properties |
+| Spec: `kiro-native-agent-and-firewall` | The Builder_Agent, the Builder_Skill, the Studio_MCP, the Daemonize_Power, and the firewall of generated servers (approvals, audit log, trace). This README section is its last task group (G-Z). | Lets Kiro build and run tools with a person approving each write. | 30 requirements, 102 task lines (97 checked when counted), 36 properties |
+| Steering (`.kiro/steering/`) | `product.md`, `tech.md`, `structure.md`, `testing-pbt.md`, always loaded. | Fixed the rules (strict by default, ES modules, how to write properties) so each task did not restate them. | 4 files |
+| Hooks (`.kiro/hooks/`) | `typecheck-on-save`, `tests-on-core-change`, `keep-spec-in-sync`, `secret-scan-on-save`. | Type errors, broken core tests, spec drift and committed secrets showed up at save time. | 4 files |
+| Property-based testing defects | Properties written from the specs found real defects (listed below). | They were not found by the example tests. | 5 defects listed below. 130 test files carry a `Feature:` tag, 127 use `fast-check`, 102 files sit in `tests/property/`. |
+| Parallel sub-agents (spec-task-execution) | The `kiro-native-agent-and-firewall` design splits the work into one serial seam group and fifteen groups that run in parallel, each owning disjoint files. A conductor dispatches one sub-agent per group, and G-Z runs last. | Disjoint file ownership let groups run at the same time without edit conflicts. | 1 plan, 16 groups (`design.md`, the work-split section). Each group's task lines are in `tasks.md`. |
+| Builder_Agent (`.kiro/agents/daemonize.md`) | A custom Kiro agent that builds a tool by calling the Studio_MCP. It cannot write files or run commands. Reads and recording are allowed. Compile, test and install ask first. | A person can say what they want and approve the risky steps. | 1 agent file, 7 tools allowed, 6 tools ask, shell and file writes denied |
+| Builder_Skill (`.kiro/skills/daemonize-builder/SKILL.md`) | A skill with the journey the agent follows and the secret rules. | The agent loads the guide only when the task needs it. | 1 file |
+| Studio_MCP (`daemonize mcp`, `src/studio/mcp/`) | An MCP server over the Studio: list, record, compile, test and install actions. It is Daemonize's own use of Kiro's MCP feature. | The agent drives the same Studio a person uses, so the approvals are the same. | 13 tools, 6 source files |
+| Daemonize_Power (`power/`) | A Kiro Power: `POWER.md`, `mcp.json`, the agent, the skill and a steering file. | One install gives Kiro the server, the agent and the rules. | 6 files |
+
+Commands used: spec folders `Get-ChildItem .kiro/specs -Directory`; requirements `Select-String -Pattern '^### Requirement \d+'` on `requirements.md`; task lines `Select-String -Pattern '^\s*- \[[ x~-]\]'` on `tasks.md` (sub-tasks included), checked lines `'^\s*- \[x\]'`; properties are the distinct `Property N` numbers in `design.md`; bugfix defects are the `1.N` items of "Current Behavior" in `bugfix.md`; test files `Get-ChildItem tests -Recurse -Filter *.test.ts` (347 files, of which 143 unit, 102 property, 66 integration and 36 extension); Studio_MCP tool names in `src/studio/mcp/tool-names.ts`; the repository has 108 commits (`git rev-list --count HEAD`), 14 of them start with `fix`. The task counts of `kiro-native-agent-and-firewall` change while it is being built.
+
+Defects found by property tests, fixed in the code and kept as tests:
+- Graph merge was not commutative when one graph already held duplicate edges (first checkpoint).
+- Run-time screen hashing and DOM normalization: the idempotence and equals-`ScreenHasher` properties (P9) guard it. Changing hidden CSRF token values (seen on Adminer) do not change the hash (`tests/unit/adminer-regressions.test.ts`).
+- A pattern wait could be stalled by a regular expression that backtracks catastrophically. The matcher is now time-boxed and refuses such patterns (P16).
+- The heal cache path could alias the workflow file through a junction or symlink. Aliasing paths are refused (P15).
+- The recorder's own UI caused false drift on replay. It is excluded from the hash (commit `9aee1e9`).
+
+## How MCP extended Kiro while we built this
+
+Daemonize gives Kiro an MCP server of its own, `daemonize mcp` (the Studio_MCP). The Daemonize agent (`.kiro/agents/daemonize.md`) uses it to record, compile and test a tool on a real application, Adminer in `examples/adminer`. The agent lists existing actions, starts a recording, reads its status, builds the tool and tests it. Compile, test and install each raise an approval request in the Studio (or in the Activity panel of the Kiro extension) that only a person can answer. The agent never receives a secret value.
+
+The steps are in [docs/dogfooding.md](docs/dogfooding.md). That page has a table of the calls made during development, and the table is still empty. The steps have been written and checked against the tool names in the code, but the maintainers have not yet run them with the agent and copied the Audit Log into the table. Until they do, this README makes no claim about what the agent built.
+
+## What Kiro did not do
+
+- The code of Daemonize, its tests and its documentation were written and fixed by hand, with Kiro's help in the editor and through spec tasks. The 14 commits that start with `fix` are repairs made after the first version of a feature.
+- The Adminer workflows in `examples/adminer/daemonize.workflows.json` come from `examples/adminer/record-workflows.mjs`, a script that drives the recorder. The Daemonize agent did not record them.
+- Docker for the Adminer stack, and every approval and every typed password, are done by a person.
+- Agent output was sometimes wrong and was corrected or discarded by hand. No log of these cases was kept, so there is no count and no list, and we do not claim one.
+- Kiro features not used: the Kiro Crew application (out of scope in the spec of `kiro-native-agent-and-firewall`), and a full visual unification of the Studio and the extension beyond what the specs needed.
+- Two assumptions are not verified:
+  1. Whether Kiro applies the `requestTimeout` of a settings entry (set to 300000 in `.kiro/agents/daemonize.md`) to the per-call timeout of an MCP server. The documented default is 120000. A long compile or test could time out if it does not.
+  2. The working directory of a server that Kiro starts. The Studio_MCP is started with `daemonize mcp` and may assume a folder that Kiro does not use.
+
+## Install the Daemonize Power and pick the Daemonize agent
+
+1. Build and put the program on your PATH: run `npm install` and `npm run build`, then make the `daemonize` command available (for example `npm link`). The Power starts it as `daemonize mcp`.
+2. In Kiro, open the Powers panel and choose "Install from folder". Pick the `power` folder of this repository. As an alternative, choose "Install from repository URL" and give the address of this repository.
+3. Or, with the Kiro extension installed, run the command "Install the Daemonize Power" (see [kiro-extension/README.md](kiro-extension/README.md)).
+4. For this repository only, copy `.kiro/settings/mcp.json.example` to `.kiro/settings/mcp.json` (the copy is ignored by git).
+5. Reload the Kiro window if the server `daemonize-studio` is not listed in the MCP settings.
+6. Start the Studio with `daemonize studio` and keep it open, because approvals appear there.
+7. In the Kiro chat, choose the agent `daemonize` in the agent list. The extension command "Build a tool with the Daemonize agent" opens it for you. The agent greets you and asks for the task.
 
 ## Known limitations
 

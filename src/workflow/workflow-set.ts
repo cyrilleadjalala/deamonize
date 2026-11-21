@@ -315,6 +315,17 @@ export const WorkflowSetSchema: Record<string, unknown> = {
       additionalProperties: false,
       properties: {
         selector: { type: 'string', minLength: 1 },
+        selectors: { type: 'array', minItems: 1, maxItems: 5, items: { type: 'string', minLength: 1, maxLength: 300 } },
+        fingerprint: {
+          type: 'object',
+          required: ['tag', 'kind'],
+          additionalProperties: false,
+          properties: {
+            tag: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,30}$' },
+            kind: { enum: ['text', 'table', 'list', 'fields', 'json', 'attribute', 'regex'] },
+            count: { type: 'integer', minimum: 1 },
+          },
+        },
         rect: { $ref: '#/$defs/Rect' },
         extractor: {
           oneOf: [

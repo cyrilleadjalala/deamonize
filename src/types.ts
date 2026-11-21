@@ -175,8 +175,12 @@ export type Extractor =
   | { kind: 'regex'; pattern: string; flags?: string };
 
 /** The part of the final screen a call returns, and how it is turned into `data`. */
+export interface ZoneFingerprint { tag: string; kind: string; count?: number }
+
 export interface ResultZone {
   selector?: string;                                   // web: element holding the result
+  selectors?: string[];                                // web: ranked candidates proven at pick time, selectors[0] === selector
+  fingerprint?: ZoneFingerprint;                       // web: shape of the marked element, checked at replay
   rect?: { row: number; col: number; rows: number; cols: number }; // terminal: crop of the rendered screen
   extractor?: Extractor;                               // default: text
   schema?: Record<string, unknown>;                    // JSON Schema of `data`, inferred when recording

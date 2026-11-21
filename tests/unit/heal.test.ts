@@ -364,9 +364,11 @@ describe('compiled output', () => {
 
   let strictDir: string;
   let healDir: string;
+  const created: string[] = [];
 
   async function compileTo(options: { healSupport?: boolean; workflowFile?: string }): Promise<string> {
     const out = await mkdtemp(join(workspaceRoot, '.heal-unit-'));
+    created.push(out);
     const log = console.log;
     console.log = () => { };
     try {
@@ -396,8 +398,7 @@ describe('compiled output', () => {
     await removeDir(source);
   });
   afterEach(async () => {
-    await removeDir(strictDir);
-    await removeDir(healDir);
+    for (const dir of created.splice(0)) await removeDir(dir);
   });
 
   it('contains no model code, no heal module and no model setting when compiled without --heal-support', async () => {

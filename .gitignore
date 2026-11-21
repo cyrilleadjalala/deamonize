@@ -61,3 +61,7 @@ kiro-extension/node_modules/
 /daemonize.workflows.json
 /daemonize.workflows.json.assets/
 /.agents/
+# The real Kiro MCP settings of this workspace stay local (copy .kiro/settings/mcp.json.example to create it)
+.kiro/settings/mcp.json
+# Output of the extension build: templates bundled from power/
+kiro-extension/templates/

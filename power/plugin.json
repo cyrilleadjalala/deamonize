@@ -1,0 +1,8 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "daemonize-studio",
+  "version": "1.0.0",
+  "description": "Build Kiro tools for software that has no API, by recording a task once with Daemonize",
+  "author": { "name": "Daemonize" },
+  "keywords": ["daemonize", "studio", "mcp", "recording", "automation", "browser", "agent"]
+}

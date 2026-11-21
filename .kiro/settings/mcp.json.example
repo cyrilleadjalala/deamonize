@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "daemonize-studio": {
+      "type": "stdio",
+      "command": "daemonize",
+      "args": ["mcp"],
+      "env": {}
+    }
+  }
+}

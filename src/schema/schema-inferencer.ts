@@ -170,6 +170,15 @@ export class SchemaInferencer {
               : 'Text of the result zone only (at most 20000 characters)',
           },
           ...(zone === undefined ? {} : { data: zoneDataSchema(zone) }),
+          ...(zone?.selectors === undefined
+            ? {}
+            : {
+              zoneFallback: {
+                type: 'object',
+                description: 'Present when a fallback candidate of the result zone was used (1-based position in the list)',
+                properties: { position: { type: 'integer' }, of: { type: 'integer' } },
+              },
+            }),
           drifted: {
             type: 'boolean',
             description: 'True when the resulting screen differs from the recorded one',

@@ -893,6 +893,31 @@ const DOCKER_RUNTIME = [
 ];
 
 
+/** True when a workflow of the set, or one of its steps, has a Result_Zone with candidate selectors. */
+export function usesZoneCandidates(set: WorkflowSet): boolean {
+  return (set.workflows ?? []).some(
+    (workflow) =>
+      workflow.resultZone?.selectors !== undefined ||
+      (workflow.steps ?? []).some((step) => step.resultZone?.selectors !== undefined),
+  );
+}
+
+/** The web lines of replay.ts with the three insertions and the extended type that report a zone fallback. */
+export function withZoneCandidates(lines: string[]): string[] {
+  return patchLines(lines, [
+    {
+      at: `export type ResultZone = Zone & { extractor?: ExtractorLike };`,
+      replace: [`export type ResultZone = Zone & { extractor?: ExtractorLike; selectors?: string[]; fingerprint?: { tag: string; kind: string; count?: number } };`],
+    },
+    { at: `  let data: unknown;`, after: [`  let fallback: { position: number; of: number } | undefined;`] },
+    { at: `    text = read.text;`, after: [`    fallback = read.fallback;`] },
+    {
+      at: `    ...(final.resultZone === undefined ? {} : { data }),`,
+      after: [`    ...(fallback === undefined ? {} : { zoneFallback: fallback }),`],
+    },
+  ]);
+}
+
 /** A copy of a block of generated lines with some lines replaced (`replace`) or followed by more lines (`after`). Throws when a line is not there. */
 function patchLines(lines: string[], ops: Array<{ at: string; replace?: string[]; after?: string[] }>): string[] {
   const out = [...lines];
@@ -1193,7 +1218,7 @@ export class McpGenerator {
     const heal = healEnabled(set, options);
     const withCall = usesWorkflowCall(set);
 
-    const lines: string[] = [
+    const assembled: string[] = [
       ...(set.targetType === 'web'
         ? [
           `import { chromium, type Browser, type BrowserContext, type Page } from "playwright";`,
@@ -1245,6 +1270,8 @@ export class McpGenerator {
           : [...TERMINAL_RUNTIME, ...TERMINAL_REPLAY_ENTRY]),
       ...withContainerTrace(withCall ? CONTAINER_ENTRY_CALL : CONTAINER_ENTRY, set.targetType),
     ];
+    // Only a web set with candidate selectors changes; a terminal zone is a rectangle and never has them
+    const lines = set.targetType === 'web' && usesZoneCandidates(set) ? withZoneCandidates(assembled) : assembled;
     return lines.join('\n') + '\n';
   }
 

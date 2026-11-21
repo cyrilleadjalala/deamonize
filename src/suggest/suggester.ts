@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Compile-time suggestions (requirement 18.1 to 18.3). A Suggester proposes tool names, descriptions, variable
  * descriptions, candidate Variables, correlated network parameters and a Result_Zone. It never changes a recording:
  * the suggestions go to an editable file and only accepted ones are applied (see apply.ts), and only to names and
@@ -22,6 +22,8 @@ export interface CandidateVariable {
 
 export interface SuggestedResultZone {
   selector?: string;
+  /** Candidates in order; selectors[0] is selector. */
+  selectors?: string[];
   rect?: { row: number; col: number; rows: number; cols: number };
   extractor?: { kind: 'text' | 'table' | 'list' | 'fields' | 'json' };
 }
@@ -119,6 +121,7 @@ export const WORKFLOW_SUGGESTION_SCHEMA: Record<string, unknown> = {
       type: 'object',
       properties: {
         selector: { type: 'string', maxLength: 1000 },
+        selectors: { type: 'array', maxItems: 5, items: { type: 'string', maxLength: 300 } },
         rect: RECT,
         extractor: {
           type: 'object',

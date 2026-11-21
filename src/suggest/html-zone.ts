@@ -1,8 +1,10 @@
-/**
+﻿/**
  * A small, forgiving reader of a serialized final screen (the HTML the recorder stored), enough to pick a Result_Zone
  * and to check that a selector resolves on it. It is not a browser: selectors it cannot read do not resolve.
  */
-import { buildZoneSelector, type ElementInfo } from '../recorder/selector-builder.js';
+import type { ElementInfo } from '../recorder/selector-builder.js';
+import { createMinimalSelector, type NodeAdapter } from '../recorder/minimal-selector.js';
+import { limitCandidates, zoneCandidateSelectors } from '../recorder/zone-candidates.js';
 import type { SuggestedResultZone } from './suggester.js';
 
 export interface HtmlNode {
@@ -265,19 +267,21 @@ function matchesChain(node: HtmlNode, chain: Compound[], index: number): boolean
 // ---------------------------------------------------------------------------
 const LANDMARK_ROLES = new Set(['main', 'region', 'dialog', 'form', 'article', 'complementary']);
 
-/** A CSS path from the document: tag names, with :nth-of-type where the parent has several of the same tag. */
-function cssPath(node: HtmlNode): string {
-  const parts: string[] = [];
-  for (let n: HtmlNode | undefined = node; n !== undefined && n.tag !== '#root' && n.tag !== 'html'; n = n.parent) {
-    if (n.tag === 'body') break;
-    const same = (n.parent?.children ?? []).filter((s) => s.tag === n!.tag);
-    parts.unshift(same.length > 1 ? `${n.tag}:nth-of-type(${same.indexOf(n) + 1})` : n.tag);
-  }
-  return parts.join(' > ');
+function htmlAdapter(root: HtmlNode): NodeAdapter<HtmlNode> {
+  return {
+    parent: (n) => (n.parent !== undefined && n.parent.tag !== '#root' ? n.parent : undefined),
+    tag: (n) => n.tag,
+    attr: (n, name) => n.attrs[name],
+    classes: (n) => (n.attrs['class'] ?? '').split(/\s+/).filter((c) => c !== ''),
+    sameTagSiblings: (n) => (n.parent?.children ?? [n]).filter((s) => s.tag === n.tag),
+    resolve: (selector) => resolveSelector(root, selector),
+  };
 }
 
+const minimalSelector = createMinimalSelector<HtmlNode>();
+
 function elementInfo(node: HtmlNode, root: HtmlNode): ElementInfo {
-  const info: ElementInfo = { css: cssPath(node) };
+  const info: ElementInfo = { css: '' };
   const role = roleOf(node);
   const name = nameOf(node, root);
   if (role !== undefined) info.role = role;
@@ -287,14 +291,16 @@ function elementInfo(node: HtmlNode, root: HtmlNode): ElementInfo {
   return info;
 }
 
-/** The selector the recorder would write for this element, or undefined when none resolves on the document. */
-function zoneSelectorFor(node: HtmlNode, root: HtmlNode): string | undefined {
-  const selector = buildZoneSelector(elementInfo(node, root));
-  if (selector !== undefined && resolveSelector(root, selector).includes(node)) return selector;
-  const css = cssPath(node);
-  return css !== '' && resolveSelector(root, css).includes(node) ? css : undefined;
+/** The candidate selectors the recorder would write for this element, each verified to resolve to exactly the element. */
+function zoneSelectorsFor(node: HtmlNode, root: HtmlNode): string[] {
+  const facts = minimalSelector(htmlAdapter(root), node, { includeBody: false });
+  const raw = zoneCandidateSelectors(elementInfo(node, root), { minimal: facts.minimal, positional: facts.positional });
+  const verified = raw.filter((c) => {
+    const found = resolveSelector(root, c);
+    return found.length === 1 && found[0] === node;
+  });
+  return limitCandidates(verified, []);
 }
-
 /**
  * The main table, list, definition list or preformatted region of a final screen: the smallest named landmark that
  * contains the largest table (else list, definition list, pre or output), or that element itself.
@@ -320,8 +326,9 @@ export function suggestResultZone(html: string): SuggestedResultZone | undefined
       break;
     }
   }
-  const selector = zoneSelectorFor(zone, root) ?? (zone === target ? undefined : zoneSelectorFor(target, root));
-  return selector === undefined ? undefined : { selector, extractor: { kind } };
+  let selectors = zoneSelectorsFor(zone, root);
+  if (selectors.length === 0 && zone !== target) selectors = zoneSelectorsFor(target, root);
+  return selectors.length === 0 ? undefined : { selector: selectors[0], selectors, extractor: { kind } };
 }
 
 function isHidden(node: HtmlNode): boolean {

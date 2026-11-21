@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Suggestions from a language model (requirement 18.1). The model sees structure only (labels, step kinds, roles and
  * names, variable names, the shape of recorded requests and responses, a short redacted text of the final screen) and
  * its answer is checked field by field: whatever is unsafe or unverifiable is dropped. Any failure falls back to the
@@ -233,7 +233,9 @@ function verifiedZone(zone: WorkflowSuggestion['resultZone'], workflow: Workflow
   if (zone.selector !== undefined && set.targetType === 'web') {
     // A selector that cannot be checked against the recorded final screen is not kept
     if (snapshot === undefined || resolveSelector(parseHtml(snapshot), zone.selector).length === 0) return undefined;
-    return { selector: zone.selector, ...(zone.extractor === undefined ? {} : { extractor: zone.extractor }) };
+    const root = parseHtml(snapshot);
+    const selectors = [zone.selector, ...(zone.selectors ?? [])].filter((c, i, all) => c.length <= 300 && all.indexOf(c) === i && resolveSelector(root, c).length > 0).slice(0, 5);
+    return { selector: zone.selector, ...(selectors.length > 1 ? { selectors } : {}), ...(zone.extractor === undefined ? {} : { extractor: zone.extractor }) };
   }
   if (zone.rect !== undefined && set.targetType === 'tui') {
     const cols = workflow.cols ?? 80;

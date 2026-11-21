@@ -119,7 +119,8 @@ describe('deterministic suggestions', () => {
 
   it('picks the landmark around the largest table as the Result_Zone, with a selector that resolves', async () => {
     const zone = suggestResultZone(FINAL_HTML);
-    expect(zone).toEqual({ selector: 'role=main[name="Customers"]', extractor: { kind: 'table' } });
+    expect(zone).toMatchObject({ selector: 'role=main[name="Customers"]', extractor: { kind: 'table' } });
+    expect(zone!.selectors?.[0]).toBe(zone!.selector);
     expect(selectorResolves(FINAL_HTML, zone!.selector!)).toBe(true);
     const out = await new DeterministicSuggester().suggest(set, { finalSnapshots: new Map([[create.id, FINAL_HTML]]) });
     expect(out.workflows[0].resultZone?.extractor?.kind).toBe('table');
@@ -127,7 +128,9 @@ describe('deterministic suggestions', () => {
   });
 
   it('falls back from table to list, definition list and pre', () => {
-    expect(suggestResultZone('<body><ul id="r"><li>a</li><li>b</li></ul></body>')).toEqual({ selector: '#r', extractor: { kind: 'list' } });
+    const listZone = suggestResultZone('<body><ul id="r"><li>a</li><li>b</li></ul></body>');
+    expect(listZone).toMatchObject({ selector: '#r', extractor: { kind: 'list' } });
+    expect(listZone!.selectors?.[0]).toBe(listZone!.selector);
     expect(suggestResultZone('<body><dl id="d"><dt>A</dt><dd>1</dd></dl></body>')?.extractor?.kind).toBe('fields');
     expect(suggestResultZone('<body><pre id="o">hello</pre></body>')?.extractor?.kind).toBe('text');
     expect(suggestResultZone('<body><p>nothing</p></body>')).toBeUndefined();

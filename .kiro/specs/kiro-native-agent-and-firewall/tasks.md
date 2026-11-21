@@ -453,7 +453,7 @@ The implementation language is TypeScript for `src/`, `kiro-extension/` and the 
     - File: `tests/unit/readme-built-with-kiro.test.ts`: every spec folder of `.kiro/specs/` appears by name in the table, every file path named in the table exists, and the hooks named equal the files of `.kiro/hooks/`.
     - _Requirements: 29.8_
 
-- [-] 19. Final checkpoint - verification suite, then commits CG-1 to CG-7
+- [x] 19. Final checkpoint - verification suite, then commits CG-1 to CG-7
   - Run `git status --porcelain` and require that it lists only files of the ownership lists above (a file touched by two groups, or by none, is fixed first).
   - Run, in order, each with exit code 0, and report the exact result (exit code and pass or fail counts) of each:
     - repository root: `npm run build`, `npx tsc --noEmit`, `npm run check:secrets`, `npm run studio:build`;

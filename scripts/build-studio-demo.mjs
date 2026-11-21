@@ -48,6 +48,7 @@ const sampleData = await need('sample-data.js');
 const samplePlayground = await need('sample-playground.js');
 const { sanitizeSchema } = await need('playground.js');
 const { redactForStudio } = await need('redact.js');
+const sampleActivity = await need('sample-activity.js');
 
 // ---------------------------------------------------------------------------
 // Pictures: a tiny deterministic PNG encoder (RGB, stored with zlib), no dependency, no browser
@@ -210,6 +211,12 @@ const data = {
   'schemas.json': model.buildSchemas(targets),
   'pbt.json': model.buildPbtView(sample.pbt, targets, false),
   'playground-tools.json': tools,
+  // The Activity view and one pending question, fictitious, in the shape of GET /api/activity and GET /api/approvals
+  'activity.json': (() => {
+    const entries = redactForStudio(sampleActivity.sampleAuditEntries(), { env: {}, secretValues: [] });
+    return { entries, tools: [...new Set(entries.map((e) => e.tool))].sort(), total: entries.length };
+  })(),
+  'approvals.json': { pending: redactForStudio(sampleActivity.sampleApprovals(), { env: {}, secretValues: [] }), serverTime: new Date(0).toISOString() },
 };
 
 // ---------------------------------------------------------------------------

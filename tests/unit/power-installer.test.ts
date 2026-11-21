@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PowerError } from '../../src/studio/contracts.js';
 import { sha256 } from '../../src/studio/power-config.js';
+import { createPowerInstaller } from '../../src/studio/power-installer.js';
 import { FAKE_SECRET_VALUE, SERVER, createHarness, fullInstall, snapshotTree, writeSettings, type Harness } from '../helpers/power-fixture.js';
 import { removeDir } from '../helpers/cleanup.js';
 
@@ -180,7 +181,8 @@ describe('Power_Installer (fake home)', () => {
     await fullInstall(h, 'global');
     const after = await h.installer.info();
     expect(after.kiroHomeExists).toBe(true);
-    expect(after.installs).toEqual([{ scope: 'global', slug: SERVER, kiroPath: h.kiroGlobal }]);
+    // G-S: the install summary now carries askBeforeChanges (false here: the harness gives no tool risks)
+    expect(after.installs).toEqual([{ scope: 'global', slug: SERVER, kiroPath: h.kiroGlobal, askBeforeChanges: false }]);
   });
 
   it('mentions the other scope when it is already installed', async () => {
@@ -205,5 +207,122 @@ describe('Power_Installer (fake home)', () => {
     await fullInstall(h, 'global');
     const [record] = await h.records.list();
     expect(record?.configSha256).toBe(sha256(await readFile(mcpOf(h.kiroGlobal))));
+  });
+});
+
+describe('Ask before changes (G-S)', () => {
+  let h: Harness;
+  beforeEach(async () => {
+    h = await createHarness();
+  });
+  afterEach(async () => {
+    await h.cleanup();
+  });
+  const WRITE = [{ toolName: 'save', risk: 'write' as const }, { toolName: 'look', risk: 'read' as const }];
+  const READ = [{ toolName: 'look', risk: 'read' as const }];
+  /** An installer over the same fake home and records as the harness, with tool risks. */
+  const withRisks = (risks: Array<{ toolName: string; risk: 'read' | 'write' | 'delete' }>) => {
+    const appData = { dir: h.appDir, ensure: async () => ({ ok: true as const, dir: h.appDir }), check: async () => ({ ok: true as const, dir: h.appDir }) };
+    return createPowerInstaller({
+      locate: async () => ({ slug: h.app.slug, outDir: h.app.outDir, legacy: false }),
+      cwd: h.ws, home: h.home, appData, vault: h.vault, records: h.records, autoAdd: h.autoAddStore, now: () => h.clock.t,
+      toolRisks: async () => risks,
+    });
+  };
+  const install = async (installer: ReturnType<typeof withRisks>, extra: Record<string, unknown> = {}) => {
+    const preview = await installer.preview({ scope: 'global' });
+    const result = await installer.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope: 'global', ...extra });
+    return { preview, result };
+  };
+  const envOf = async () => (JSON.parse(await readFile(join(h.kiroGlobal, 'settings', 'mcp.json'), 'utf-8')) as any).mcpServers[SERVER].env as Record<string, string>;
+
+  it('is on by default with a write tool, lists the tools and writes both env keys', async () => {
+    const { preview, result } = await install(withRisks(WRITE));
+    expect(preview.askBeforeChanges).toBe(true);
+    expect(preview.askBeforeChangesTools).toEqual(['save']);
+    expect(result).toMatchObject({ askBeforeChanges: true, askBeforeChangesTools: ['save'] });
+    const env = await envOf();
+    expect(env.DAEMONIZE_ASK_BEFORE_CHANGES).toBe('true');
+    expect(env.DAEMONIZE_APPROVAL_TIMEOUT_MS).toBe('90000');
+    expect(env.DAEMONIZE_CALL_SOURCE).toBeUndefined();
+    expect(env.DAEMONIZE_TRACE).toBeUndefined();
+    expect((await h.records.list())[0]).toMatchObject({ askBeforeChanges: true });
+  });
+
+  it('is off, with no tools listed, when every tool only reads', async () => {
+    const { preview } = await install(withRisks(READ));
+    expect(preview.askBeforeChanges).toBe(false);
+    expect(preview.askBeforeChangesTools).toEqual([]);
+    const env = await envOf();
+    expect(env.DAEMONIZE_ASK_BEFORE_CHANGES).toBe('false');
+    expect(env.DAEMONIZE_APPROVAL_TIMEOUT_MS).toBeUndefined();
+  });
+
+  it('keeps an explicit choice on a re-install and applies the default otherwise', async () => {
+    const installer = withRisks(WRITE);
+    await install(installer, { askBeforeChanges: false });
+    expect((await envOf()).DAEMONIZE_ASK_BEFORE_CHANGES).toBe('false');
+    expect((await h.records.list())[0]).toMatchObject({ askBeforeChanges: false, askBeforeChangesChosen: true });
+    const again = await install(installer);
+    expect(again.preview.askBeforeChanges).toBe(false);
+    expect((await envOf()).DAEMONIZE_ASK_BEFORE_CHANGES).toBe('false');
+  });
+
+  it('answers 400 for a non-boolean install value and writes nothing', async () => {
+    const installer = withRisks(WRITE);
+    const preview = await installer.preview({ scope: 'global' });
+    const error = await installer.install({ confirmationId: preview.confirmationId, kiroPath: preview.kiroPath, scope: 'global', askBeforeChanges: 'yes' }).then(() => undefined, (e: unknown) => e);
+    expect((error as PowerError).status).toBe(400);
+    expect(await snapshotTree(h.kiroGlobal)).toEqual([]);
+    expect(await h.records.list()).toEqual([]);
+  });
+
+  it('setApproval rewrites the entry and the record, keeps the backup, and is strict', async () => {
+    const installer = withRisks(WRITE);
+    await writeSettings(h.kiroGlobal, JSON.stringify({ keep: 1, mcpServers: { other: { command: 'x' } } }));
+    await install(installer);
+    const backupBefore = await readFile(join(h.kiroGlobal, 'settings', 'mcp.json.bak'), 'utf-8').catch(() => undefined);
+    const off = await installer.setApproval!({ scope: 'global', askBeforeChanges: false });
+    expect(off).toEqual({ scope: 'global', askBeforeChanges: false });
+    const env = await envOf();
+    expect(env.DAEMONIZE_ASK_BEFORE_CHANGES).toBe('false');
+    expect(env.DAEMONIZE_APPROVAL_TIMEOUT_MS).toBeUndefined();
+    const root = JSON.parse(await readFile(join(h.kiroGlobal, 'settings', 'mcp.json'), 'utf-8'));
+    expect(root.keep).toBe(1);
+    expect(root.mcpServers.other).toEqual({ command: 'x' });
+    const [record] = await h.records.list();
+    expect(record).toMatchObject({ askBeforeChanges: false, askBeforeChangesChosen: true });
+    expect(record.configSha256).toBe(sha256(await readFile(join(h.kiroGlobal, 'settings', 'mcp.json'))));
+    expect(await readFile(join(h.kiroGlobal, 'settings', 'mcp.json.bak'), 'utf-8').catch(() => undefined)).toBe(backupBefore);
+    await installer.setApproval!({ scope: 'global', askBeforeChanges: true });
+    expect((await envOf()).DAEMONIZE_APPROVAL_TIMEOUT_MS).toBe('90000');
+
+    const bytes = await readFile(join(h.kiroGlobal, 'settings', 'mcp.json'));
+    const bad = await installer.setApproval!({ scope: 'global', askBeforeChanges: 'true' }).then(() => undefined, (e: unknown) => e);
+    expect((bad as PowerError).status).toBe(400);
+    expect((await readFile(join(h.kiroGlobal, 'settings', 'mcp.json')).then((b) => b.equals(bytes)))).toBe(true);
+    const none = await installer.setApproval!({ scope: 'project', askBeforeChanges: true }).then(() => undefined, (e: unknown) => e);
+    expect((none as PowerError).status).toBe(409);
+  });
+
+  it('reads a record written before this setting as off and leaves its entry unchanged until a re-install', async () => {
+    const installer = withRisks(WRITE);
+    await install(installer);
+    // Rewrite the entry and the record as an older version would have written them
+    const file = join(h.kiroGlobal, 'settings', 'mcp.json');
+    const root = JSON.parse(await readFile(file, 'utf-8'));
+    delete root.mcpServers[SERVER].env.DAEMONIZE_ASK_BEFORE_CHANGES;
+    delete root.mcpServers[SERVER].env.DAEMONIZE_APPROVAL_TIMEOUT_MS;
+    await writeFile(file, JSON.stringify(root));
+    const [record] = await h.records.list();
+    delete record.askBeforeChanges;
+    await h.records.put(record);
+    const before = await readFile(file);
+    expect((await installer.info()).installs[0]?.askBeforeChanges).toBe(false);
+    await installer.preview({ scope: 'global' });
+    expect((await readFile(file)).equals(before)).toBe(true);
+    // Adding it again applies the default
+    await install(installer);
+    expect((await envOf()).DAEMONIZE_ASK_BEFORE_CHANGES).toBe('true');
   });
 });

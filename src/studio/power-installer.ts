@@ -23,10 +23,13 @@ import {
 } from './contracts.js';
 import type { AutoAddStore } from './auto-add-store.js';
 import type { InstallRecord, InstallRecords } from './install-records.js';
-import { buildServerEntry, buildSnippetText, secretPlaceholders, type ServerEntry } from './mcp-snippet.js';
+import { APPROVAL_TIMEOUT_MS, buildServerEntry, buildSnippetText, secretPlaceholders, type ServerEntry } from './mcp-snippet.js';
 import { mergeServer, parseConfig, removeServer, serialize, sha256, targetPaths, type TargetPaths } from './power-config.js';
 import { beginTransaction, inside, realDeepest, type FsOps } from './power-fs.js';
 import {
+  POWER_APPROVAL_FAILED,
+  POWER_APPROVAL_INVALID,
+  POWER_APPROVAL_NO_INSTALL,
   POWER_AUTO_ADD_FAILED,
   POWER_CONFIRM_INVALID,
   POWER_FIELD_REQUIRED,
@@ -58,6 +61,8 @@ export interface PowerInstallerDeps {
   vault: Pick<SecretVault, 'namesFor' | 'names'>;
   records: InstallRecords;
   autoAdd: AutoAddStore;
+  /** Compiled name and risk of each tool (from 	oolRiskOf). Never throws. Absent: the default is off. */
+  toolRisks?: () => Promise<Array<{ toolName: string; risk: 'read' | 'write' | 'delete' }>>;
   /** Test seams. */
   now?: () => number;
   fsOps?: FsOps;
@@ -102,6 +107,10 @@ interface Plan {
   /** Sorted names of every secret the tool needs (names only). */
   required: string[];
   otherScopeInstalled?: InstallScope;
+  /** Ask before changes as written to the entry, the tools it holds back, and whether the user chose it. */
+  ask: boolean;
+  askTools: string[];
+  askChosen: boolean;
 }
 interface Confirmation {
   id: string;
@@ -165,7 +174,7 @@ export class StudioPowerInstaller implements PowerInstaller {
     const records = await this.deps.records.list().catch(() => [] as InstallRecord[]);
     const installs = records
       .filter((r) => app === undefined || r.slug === app.slug)
-      .map((r) => ({ scope: r.scope, slug: r.slug, kiroPath: r.kiroPath }));
+      .map((r) => ({ scope: r.scope, slug: r.slug, kiroPath: r.kiroPath, askBeforeChanges: r.askBeforeChanges === true }));
     return {
       kiroHome,
       kiroHomeExists: await exists(kiroHome),
@@ -180,7 +189,8 @@ export class StudioPowerInstaller implements PowerInstaller {
   async snippet(): Promise<string> {
     const app = await this.deps.locate();
     const source = await this.readSource(app);
-    const { entry } = await this.buildEntry(app, source);
+    const { ask } = await this.resolveAsk(undefined, undefined);
+    const { entry } = await this.buildEntry(app, source, ask);
     return buildSnippetText(source.slug, entry);
   }
 
@@ -213,18 +223,23 @@ export class StudioPowerInstaller implements PowerInstaller {
       requiredSecrets: plan.required,
       backup: plan.existing !== undefined,
       ...(plan.otherScopeInstalled === undefined ? {} : { otherScopeInstalled: plan.otherScopeInstalled }),
+      askBeforeChanges: plan.ask,
+      askBeforeChangesTools: plan.askTools,
     };
   }
 
-  async install(request: { confirmationId: unknown; kiroPath: unknown; scope: unknown; autoAdd?: unknown }): Promise<{
+  async install(request: { confirmationId: unknown; kiroPath: unknown; scope: unknown; autoAdd?: unknown; askBeforeChanges?: unknown }): Promise<{
     written: string[];
     placeholders: string[];
     missingSecrets: string[];
     requiredSecrets: string[];
     scope: InstallScope;
     autoAddSaved?: boolean;
+    askBeforeChanges: boolean;
+    askBeforeChangesTools: string[];
   }> {
     const scope = parseScope(request.scope);
+    if (request.askBeforeChanges !== undefined && typeof request.askBeforeChanges !== 'boolean') throw new PowerError(400, POWER_APPROVAL_INVALID);
     const { confirmationId, kiroPath } = request;
     if (typeof confirmationId !== 'string' || typeof kiroPath !== 'string') throw new PowerError(409, POWER_CONFIRM_INVALID);
     this.prune();
@@ -235,7 +250,7 @@ export class StudioPowerInstaller implements PowerInstaller {
       throw new PowerError(409, POWER_CONFIRM_INVALID);
     }
     this.confirmations.splice(index, 1); // single use
-    const plan = await this.plan(app, scope, stored.workspace);
+    const plan = await this.plan(app, scope, stored.workspace, request.askBeforeChanges);
     if (plan.kiroPath !== stored.kiroPath) throw new PowerError(409, POWER_CONFIRM_INVALID);
 
     const result = await this.perform(plan, app);
@@ -255,7 +270,67 @@ export class StudioPowerInstaller implements PowerInstaller {
       requiredSecrets: plan.required,
       scope,
       ...(autoAddSaved === undefined ? {} : { autoAddSaved }),
+      askBeforeChanges: plan.ask,
+      askBeforeChangesTools: plan.askTools,
     };
+  }
+
+  async setApproval(request: { scope: unknown; askBeforeChanges: unknown }): Promise<{ scope: InstallScope; askBeforeChanges: boolean }> {
+    const scope = parseScope(request.scope);
+    const value = request.askBeforeChanges;
+    if (typeof value !== 'boolean') throw new PowerError(400, POWER_APPROVAL_INVALID);
+    const app = await this.deps.locate();
+    let records: InstallRecord[];
+    try {
+      records = await this.deps.records.list();
+    } catch {
+      throw new PowerError(500, POWER_APPROVAL_FAILED);
+    }
+    const record = records.find((r) => r.slug === app.slug && r.scope === scope);
+    if (record === undefined) throw new PowerError(409, POWER_APPROVAL_NO_INSTALL);
+
+    // Same confinement as the remove path
+    const kiroPath = record.kiroPath;
+    if (!isAbsolute(kiroPath) || basename(kiroPath) !== '.kiro') throw new PowerError(409, POWER_KIRO_OUTSIDE);
+    const base = dirname(kiroPath);
+    if (scope === 'global' && !same(await realDeepest(base), await realDeepest(this.home))) throw new PowerError(409, POWER_KIRO_OUTSIDE);
+    const realKiro = await this.confineKiro(await realDeepest(base), kiroPath);
+    const paths = targetPaths(scope, realKiro, record.slug);
+    await this.checkTargets(realKiro, [paths.mcp, paths.backup, paths.skill], paths.skillDir);
+
+    const bytes = await this.readSettings(paths.mcp);
+    if (bytes === undefined) throw new PowerError(409, POWER_APPROVAL_NO_INSTALL);
+    const root = this.parseSettings(bytes);
+    const servers = root.mcpServers;
+    const current = isPlainObject(servers) && has(servers, record.slug) ? servers[record.slug] : undefined;
+    if (!isPlainObject(servers) || !isPlainObject(current)) throw new PowerError(409, POWER_APPROVAL_NO_INSTALL);
+    const env: Record<string, unknown> = isPlainObject(current.env) ? { ...current.env } : {};
+    env.DAEMONIZE_ASK_BEFORE_CHANGES = value ? 'true' : 'false';
+    if (value) env.DAEMONIZE_APPROVAL_TIMEOUT_MS = APPROVAL_TIMEOUT_MS;
+    else delete env.DAEMONIZE_APPROVAL_TIMEOUT_MS;
+    const next = serialize({ ...root, mcpServers: { ...servers, [record.slug]: { ...current, env } } });
+
+    // The backup keeps the file as it was before the first install and is not touched here
+    if (!next.equals(bytes)) {
+      const tx = beginTransaction(this.deps.fsOps);
+      tx.write(paths.mcp, next);
+      try {
+        await tx.commit();
+      } catch {
+        throw new PowerError(500, POWER_APPROVAL_FAILED);
+      }
+    }
+    try {
+      await this.deps.records.put({ ...record, configSha256: sha256(next), askBeforeChanges: value, askBeforeChangesChosen: true });
+    } catch {
+      if (!next.equals(bytes)) {
+        const undo = beginTransaction(this.deps.fsOps);
+        undo.write(paths.mcp, bytes);
+        await undo.commit().catch(() => undefined);
+      }
+      throw new PowerError(500, POWER_APPROVAL_FAILED);
+    }
+    return { scope, askBeforeChanges: value };
   }
 
   async remove(request: { scope: unknown }): Promise<{ removed: string[] }> {
@@ -420,7 +495,7 @@ export class StudioPowerInstaller implements PowerInstaller {
   }
 
   /** The entry for this application, with the vault status of each required name (names only). */
-  private async buildEntry(app: ActiveApplication, source: Source): Promise<{ entry: ServerEntry; missing: string[] }> {
+  private async buildEntry(app: ActiveApplication, source: Source, ask?: boolean): Promise<{ entry: ServerEntry; missing: string[] }> {
     let configured: ReadonlySet<string>;
     try {
       configured = app.applicationKey === undefined ? await this.deps.vault.names() : await this.deps.vault.namesFor(app.applicationKey);
@@ -435,6 +510,7 @@ export class StudioPowerInstaller implements PowerInstaller {
       ...(appData?.ok === true ? { dataDir: appData.dir } : {}),
       ...(app.applicationKey === undefined ? {} : { applicationKey: app.applicationKey }),
       configuredNames: configured,
+      ...(ask === undefined ? {} : { askBeforeChanges: ask }),
     });
     const missing = source.required.filter((n) => !configured.has(n));
     return { entry, missing };
@@ -507,8 +583,28 @@ export class StudioPowerInstaller implements PowerInstaller {
     return { base: realWorkspace, workspace: realWorkspace };
   }
 
+  /**
+   * The value of Ask before changes for an install: an explicit choice of the request, else the choice kept in the
+   * record of the same (slug, scope), else on when some tool changes data. Names of the tools it holds back are listed.
+   */
+  private async resolveAsk(
+    prior: InstallRecord | undefined,
+    explicit: boolean | undefined
+  ): Promise<{ ask: boolean; askTools: string[]; askChosen: boolean }> {
+    let risks: Array<{ toolName: string; risk: string }> = [];
+    try {
+      risks = (await this.deps.toolRisks?.()) ?? [];
+    } catch {
+      risks = [];
+    }
+    const askTools = risks.filter((t) => t.risk !== 'read').map((t) => t.toolName).sort();
+    if (explicit !== undefined) return { ask: explicit, askTools, askChosen: true };
+    if (prior?.askBeforeChangesChosen === true) return { ask: prior.askBeforeChanges === true, askTools, askChosen: true };
+    return { ask: askTools.length > 0, askTools, askChosen: false };
+  }
+
   /** Validates the scope root and the files to write, and builds the bytes. Reads only. */
-  private async plan(app: ActiveApplication, scope: InstallScope, workspacePath: unknown): Promise<Plan> {
+  private async plan(app: ActiveApplication, scope: InstallScope, workspacePath: unknown, explicitAsk?: unknown): Promise<Plan> {
     const { base, workspace } = await this.resolveBase(app, scope, workspacePath);
     const realKiro = await this.confineKiro(base, join(base, '.kiro'));
     const source = await this.readSource(app);
@@ -517,7 +613,14 @@ export class StudioPowerInstaller implements PowerInstaller {
 
     const existing = await this.readSettings(paths.mcp);
     const root = existing === undefined ? {} : this.parseSettings(existing);
-    const { entry, missing } = await this.buildEntry(app, source);
+    let priorRecord: InstallRecord | undefined;
+    try {
+      priorRecord = (await this.deps.records.list()).find((r) => r.slug === source.slug && r.scope === scope);
+    } catch {
+      priorRecord = undefined;
+    }
+    const { ask, askTools, askChosen } = await this.resolveAsk(priorRecord, typeof explicitAsk === 'boolean' ? explicitAsk : undefined);
+    const { entry, missing } = await this.buildEntry(app, source, ask);
     const merged = serialize(mergeServer(root, source.slug, entry));
     const servers = root.mcpServers;
     const skillExists = await exists(paths.skill);
@@ -554,6 +657,9 @@ export class StudioPowerInstaller implements PowerInstaller {
       missing,
       required: [...source.required],
       ...(otherScopeInstalled === undefined ? {} : { otherScopeInstalled }),
+      ask,
+      askTools,
+      askChosen,
     };
   }
 
@@ -578,7 +684,9 @@ export class StudioPowerInstaller implements PowerInstaller {
     } catch {
       prior = undefined;
     }
-    if (changed || prior === undefined) {
+    const recordStale =
+      prior === undefined || prior.askBeforeChanges !== plan.ask || (plan.askChosen && prior.askBeforeChangesChosen !== true);
+    if (changed || recordStale) {
       const backup = plan.configWrite ? plan.existing !== undefined : (prior?.backup ?? false);
       const record: InstallRecord = {
         slug: plan.slug,
@@ -590,6 +698,8 @@ export class StudioPowerInstaller implements PowerInstaller {
         configSha256: sha256(plan.configWrite ? plan.merged : (plan.existing as Buffer)),
         backup,
         installedAt: new Date(this.now()).toISOString(),
+        askBeforeChanges: plan.ask,
+        ...(plan.askChosen ? { askBeforeChangesChosen: true as const } : {}),
       };
       try {
         await this.deps.records.put(record);

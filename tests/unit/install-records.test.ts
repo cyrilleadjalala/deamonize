@@ -71,3 +71,17 @@ describe('auto-add store', () => {
     await expect(createAutoAddStore({ appData: bad }).write({ enabled: true, scope: 'global' })).rejects.toThrow();
   });
 });
+
+describe('install records: Ask before changes (G-S)', () => {
+  it('reads a record without the fields as off, and round trips both fields', async () => {
+    const r = createInstallRecords({ appData });
+    await r.put(rec('old', 'global'));
+    expect((await r.list())[0]?.askBeforeChanges).toBeUndefined();
+    await r.put({ ...rec('new', 'global'), askBeforeChanges: true, askBeforeChangesChosen: true });
+    expect((await r.list()).find((x) => x.slug === 'new')).toMatchObject({ askBeforeChanges: true, askBeforeChangesChosen: true });
+  });
+  it('refuses a file whose new fields have the wrong type', async () => {
+    await writeFile(join(dir, 'kiro-installs.json'), JSON.stringify({ v: 1, installs: [{ ...rec('a', 'global'), askBeforeChanges: 'yes' }] }));
+    await expect(createInstallRecords({ appData }).list()).rejects.toThrow();
+  });
+});

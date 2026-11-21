@@ -1,6 +1,6 @@
 /** `/api/power/*`. Every route is blocked for a remote listener. Answers hold names, paths and counts, never a value. */
 import { PowerError } from '../contracts.js';
-import { POWER_SCOPE_INVALID, POWER_UNEXPECTED_FIELD } from '../messages/power.js';
+import { POWER_APPROVAL_INVALID, POWER_SCOPE_INVALID, POWER_UNEXPECTED_FIELD } from '../messages/power.js';
 import type { RouteContext, RouteDef, RouteRequest, RouteResponse } from './types.js';
 
 async function guarded(run: () => Promise<unknown>): Promise<RouteResponse> {
@@ -49,15 +49,17 @@ export function powerRoutes(ctx: RouteContext): RouteDef[] {
       remote: 'blocked',
       handlers: {
         POST: async (req) => {
-          const refused = checked(req, ['confirmationId', 'kiroPath', 'scope', 'autoAdd'], true);
+          const refused = checked(req, ['confirmationId', 'kiroPath', 'scope', 'autoAdd', 'askBeforeChanges'], true);
           if (refused !== undefined) return refused;
           if (req.body.autoAdd !== undefined && typeof req.body.autoAdd !== 'boolean') return bad(POWER_UNEXPECTED_FIELD);
+          if (req.body.askBeforeChanges !== undefined && typeof req.body.askBeforeChanges !== 'boolean') return bad(POWER_APPROVAL_INVALID);
           return guarded(() =>
             power.install({
               confirmationId: req.body.confirmationId,
               kiroPath: req.body.kiroPath,
               scope: req.body.scope,
               ...(req.body.autoAdd === undefined ? {} : { autoAdd: req.body.autoAdd }),
+              ...(req.body.askBeforeChanges === undefined ? {} : { askBeforeChanges: req.body.askBeforeChanges }),
             })
           );
         },
@@ -67,6 +69,20 @@ export function powerRoutes(ctx: RouteContext): RouteDef[] {
       path: '/api/power/remove',
       remote: 'blocked',
       handlers: { POST: async (req) => checked(req, ['scope'], true) ?? guarded(() => power.remove({ scope: req.body.scope })) },
+    },
+    {
+      path: '/api/power/approval',
+      remote: 'blocked',
+      handlers: {
+        POST: async (req) => {
+          const refused = checked(req, ['scope', 'askBeforeChanges'], true);
+          if (refused !== undefined) return refused;
+          if (typeof req.body.askBeforeChanges !== 'boolean') return bad(POWER_APPROVAL_INVALID);
+          const setApproval = power.setApproval;
+          if (setApproval === undefined) return bad(POWER_APPROVAL_INVALID);
+          return guarded(() => setApproval.call(power, { scope: req.body.scope, askBeforeChanges: req.body.askBeforeChanges }));
+        },
+      },
     },
     {
       path: '/api/power/auto-add',

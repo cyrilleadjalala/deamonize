@@ -110,6 +110,15 @@ export function buildChildEnv(options: ChildEnvOptions): Record<string, string> 
   }
   merged.DAEMONIZE_MODE = options.mode;
   if (options.preview === true) merged.DAEMONIZE_SCREENSHOT = 'final';
+  // The call source and the trace are the Studio's to decide: nothing inherited may turn them on
+  for (const name of Object.keys(merged)) {
+    const upper = name.toUpperCase();
+    if (upper === 'DAEMONIZE_CALL_SOURCE' || upper === 'DAEMONIZE_TRACE') delete merged[name];
+    if (upper === 'DAEMONIZE_DATA_DIR' && options.dataDir !== undefined) delete merged[name];
+  }
+  if (options.callSource === 'studio') merged.DAEMONIZE_CALL_SOURCE = 'studio';
+  if (options.trace === true) merged.DAEMONIZE_TRACE = '1';
+  if (options.dataDir !== undefined) merged.DAEMONIZE_DATA_DIR = options.dataDir;
   return merged;
 }
 
@@ -462,6 +471,26 @@ export function parseToolResponse(response: { content?: unknown }): Record<strin
   return undefined;
 }
 
+const TRACE_LEVELS = new Set(['http', 'accessibility', 'vision', 'terminal', 'skipped', 'not_run']);
+const TRACE_STATUSES = new Set(['ok', 'failed', 'skipped', 'not_run', 'blocked', 'drifted']);
+
+/** A step of a trace read from the server's answer: strict shape, so a odd answer never reaches the screen. */
+function isTraceStep(value: unknown): value is TraceStep {
+  const s = asRecord(value);
+  return (
+    s !== undefined &&
+    Number.isInteger(s.index) &&
+    typeof s.label === 'string' &&
+    typeof s.level === 'string' &&
+    TRACE_LEVELS.has(s.level) &&
+    typeof s.durationMs === 'number' &&
+    Number.isFinite(s.durationMs) &&
+    typeof s.status === 'string' &&
+    TRACE_STATUSES.has(s.status) &&
+    (s.note === undefined || typeof s.note === 'string')
+  );
+}
+
 const decodeDataUri = (uri: unknown): Buffer | undefined => {
   if (typeof uri !== 'string') return undefined;
   const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(uri.slice(0, 200_000));
@@ -489,6 +518,16 @@ export async function summarizeResult(tool: string, raw: Record<string, unknown>
   if (Array.isArray(raw.errors)) out.errors = raw.errors.slice(0, 50);
   if (raw.heal !== undefined) out.heal = raw.heal;
   if (raw.terminalSize !== undefined) out.terminalSize = raw.terminalSize;
+  // An old generated server returns neither: both stay absent
+  if (Array.isArray(raw.skippedSteps)) {
+    const skipped = raw.skippedSteps.filter((n): n is number => Number.isInteger(n) && (n as number) >= 0).slice(0, 200);
+    if (skipped.length > 0) out.skippedSteps = skipped;
+  }
+  if (Array.isArray(raw.trace)) {
+    const steps = raw.trace.filter(isTraceStep).slice(0, 200);
+    if (steps.length > 0) out.trace = steps;
+    if (out.trace !== undefined && (raw.traceTruncated === true || raw.trace.length > 200)) out.traceTruncated = true;
+  }
   if (raw.data !== undefined) {
     const json = JSON.stringify(raw.data) ?? '';
     if (json.length > MAX_DATA_JSON) out.dataTruncated = true;
@@ -719,6 +758,9 @@ export class PlaygroundSession {
       mcpEnv: launch.mcpEnv,
       mode: this.currentMode,
       preview: this.currentPreview,
+      ...(this.options.callSource === undefined ? {} : { callSource: this.options.callSource }),
+      ...(this.options.traceEnabled === true ? { trace: true } : {}),
+      ...(this.options.dataDir?.() === undefined ? {} : { dataDir: this.options.dataDir() }),
     });
     const vault = this.options.vault;
     if (vault !== undefined) {

@@ -18,6 +18,10 @@ export interface InstallRecord {
   configSha256: string;
   backup: boolean;
   installedAt: string;
+  /** Ask before changes of this install. Absent (a record written before this setting) reads as off. */
+  askBeforeChanges?: boolean;
+  /** True when the user chose the value explicitly; a re-install then keeps it. */
+  askBeforeChangesChosen?: true;
 }
 export interface InstallRecords {
   /** `[]` when nothing was stored. Throws when the file exists but cannot be read or is invalid. */
@@ -38,7 +42,9 @@ function toRecord(value: unknown): InstallRecord {
   if (
     typeof r !== 'object' || r === null || !isString(r.slug) || !isScope(r.scope) || !isString(r.kiroPath) ||
     !Array.isArray(r.written) || !r.written.every(isString) || !isString(r.skillDir) || !isString(r.configSha256) ||
-    typeof r.backup !== 'boolean' || !isString(r.installedAt) || (r.applicationKey !== undefined && !isString(r.applicationKey))
+    typeof r.backup !== 'boolean' || !isString(r.installedAt) || (r.applicationKey !== undefined && !isString(r.applicationKey)) ||
+    (r.askBeforeChanges !== undefined && typeof r.askBeforeChanges !== 'boolean') ||
+    (r.askBeforeChangesChosen !== undefined && r.askBeforeChangesChosen !== true)
   ) {
     throw new Error('install records file is invalid');
   }
@@ -52,6 +58,8 @@ function toRecord(value: unknown): InstallRecord {
     configSha256: r.configSha256,
     backup: r.backup,
     installedAt: r.installedAt,
+    ...(r.askBeforeChanges !== undefined ? { askBeforeChanges: r.askBeforeChanges } : {}),
+    ...(r.askBeforeChangesChosen === true ? { askBeforeChangesChosen: true as const } : {}),
   };
 }
 

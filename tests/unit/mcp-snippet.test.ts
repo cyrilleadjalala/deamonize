@@ -50,3 +50,19 @@ describe('mcp snippet', () => {
     expect(JSON.parse(buildSnippetText('app', entry))).toEqual({ mcpServers: { app: entry } });
   });
 });
+
+describe('mcp snippet: Ask before changes (G-S)', () => {
+  it('writes the two keys when on, only the first when off, and neither when not given', () => {
+    const on = buildServerEntry({}, '/abs/s.js', { askBeforeChanges: true });
+    expect(on.env).toMatchObject({ DAEMONIZE_ASK_BEFORE_CHANGES: 'true', DAEMONIZE_APPROVAL_TIMEOUT_MS: '90000' });
+    const off = buildServerEntry({}, '/abs/s.js', { askBeforeChanges: false });
+    expect(off.env.DAEMONIZE_ASK_BEFORE_CHANGES).toBe('false');
+    expect(off.env.DAEMONIZE_APPROVAL_TIMEOUT_MS).toBeUndefined();
+    const none = buildServerEntry({}, '/abs/s.js');
+    expect(Object.keys(none.env)).toEqual(['DAEMONIZE_MODE']);
+    for (const e of [on, off, none]) {
+      expect(e.env.DAEMONIZE_CALL_SOURCE).toBeUndefined();
+      expect(e.env.DAEMONIZE_TRACE).toBeUndefined();
+    }
+  });
+});

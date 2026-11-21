@@ -265,7 +265,9 @@ describe('studio compile and power properties', () => {
           }
           expect(result.placeholders).toEqual(Object.keys(secretEnv).sort());
           const env = JSON.parse(snippet).mcpServers[SERVER].env as Record<string, string>;
-          for (const [k, v] of Object.entries(env)) expect(v === '${' + k + '}' || k === 'DAEMONIZE_MODE').toBe(true);
+          // Fixed settings keys carry plain values by design (the approval flags are written by the installer, never secrets).
+          const FIXED = ['DAEMONIZE_MODE', 'DAEMONIZE_ASK_BEFORE_CHANGES', 'DAEMONIZE_APPROVAL_TIMEOUT_MS'];
+          for (const [k, v] of Object.entries(env)) expect(v === '${' + k + '}' || FIXED.includes(k)).toBe(true);
           expect(buildSnippetText(SERVER, JSON.parse(snippet).mcpServers[SERVER])).toBe(snippet);
         }
       ),

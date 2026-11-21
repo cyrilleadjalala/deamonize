@@ -24,6 +24,8 @@ const STATIC_FILES = {
   '/api/graph': 'data/graph.json',
   '/api/schemas': 'data/schemas.json',
   '/api/pbt': 'data/pbt.json',
+  '/api/activity': 'data/activity.json',
+  '/api/approvals': 'data/approvals.json',
 };
 
 /** @type {Promise<StaticPlayground> | undefined} */
@@ -65,6 +67,8 @@ async function postStatic(path, payload, signal) {
   if (path === '/api/playground/call') return sim.call(payload, signal);
   if (path === '/api/playground/restart') return sim.restart(payload);
   if (path === '/api/playground/stop') return sim.stop();
+  // The demo has no server to answer a question
+  if (path === '/api/approvals/decide') return { status: 409, body: { error: 'This is a static demo: there is no server to answer.' } };
   return { status: 404, body: { error: 'not found' } };
 }
 
@@ -216,6 +220,25 @@ export const api = {
   powerRemove: (scope) => postJson('/api/power/remove', { scope }),
   powerAutoAdd: () => getFresh('/api/power/auto-add'),
   powerAutoAddOff: () => postJson('/api/power/auto-add', { enabled: false }),
+  // ----- approvals and activity ----------------------------------------------------------------------------------
+  /** `{ pending, serverTime }`, never cached. */
+  approvals: () => getFresh('/api/approvals'),
+  /** @param {string} id 32 hex @param {'approved' | 'denied'} decision `{ status, body }`: 200 `{ id, decision }`, 400, 404 or 409. */
+  approvalDecide: (id, decision) => postJson('/api/approvals/decide', { id, decision }),
+  /**
+   * `{ entries, tools, total }`, newest first, never cached. The static demo filters the sample file in the page.
+   * @param {{ limit?: number, tool?: string, decision?: string }} [query]
+   */
+  activity: async (query = {}) => {
+    const q = new URLSearchParams();
+    if (typeof query.limit === 'number') q.set('limit', String(query.limit));
+    if (typeof query.tool === 'string' && query.tool !== '') q.set('tool', query.tool);
+    if (typeof query.decision === 'string' && query.decision !== '') q.set('decision', query.decision);
+    if (!isStatic) return getFresh(q.toString() !== '' ? `/api/activity?${q}` : '/api/activity');
+    const all = await getFresh('/api/activity');
+    const entries = (Array.isArray(all?.entries) ? all.entries : []).filter((e) => (!query.tool || e.tool === query.tool) && (!query.decision || e.decision === query.decision));
+    return { entries: entries.slice(0, query.limit ?? 50), tools: Array.isArray(all?.tools) ? all.tools : [], total: entries.length };
+  },
   workflows: () => get('/api/workflows'),
   graph: () => get('/api/graph'),
   schemas: () => get('/api/schemas'),

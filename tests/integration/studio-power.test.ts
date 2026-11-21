@@ -3,6 +3,9 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCompileRunner } from '../../src/studio/compile-runner.js';
+import { createInstallRecords } from '../../src/studio/install-records.js';
+import { createAutoAddStore } from '../../src/studio/auto-add-store.js';
+import { createPowerInstaller } from '../../src/studio/power-installer.js';
 import { startStudio, type StudioHandle } from '../../src/studio/server.js';
 import { FAKE_SECRET_VALUE, SERVER, writeCompiledOutput } from '../helpers/power-fixture.js';
 import { rawRequest } from '../helpers/http.js';
@@ -117,5 +120,58 @@ describe('Studio power flow', () => {
       status = await call('GET', '/api/compile/status');
     }
     expect(status.json).toEqual({ state: 'done', phase: null });
+  });
+
+  /** G-S: the install route with a power installer that knows the tool risks (the sample set has none). */
+  it('installs with Ask before changes on and off, toggles it, refuses a bad value and keeps the bytes on failure', async () => {
+    const out = join(base, 'out');
+    const ws = join(base, 'ws');
+    const home = join(base, 'home');
+    const appDir = join(base, 'appdata');
+    await mkdir(ws, { recursive: true });
+    await mkdir(join(base, 'ui'), { recursive: true });
+    await writeCompiledOutput(out);
+    const appData = { dir: appDir, ensure: async () => { await mkdir(appDir, { recursive: true }); return { ok: true as const, dir: appDir }; }, check: async () => ({ ok: true as const, dir: appDir }) };
+    const power = createPowerInstaller({
+      locate: async () => ({ slug: SERVER, outDir: out, legacy: false }),
+      cwd: ws, home, appData,
+      vault: { names: async () => new Set<string>(), namesFor: async () => new Set<string>() },
+      records: createInstallRecords({ appData }), autoAdd: createAutoAddStore({ appData }),
+      toolRisks: async () => [{ toolName: 'save', risk: 'write' }, { toolName: 'look', risk: 'read' }],
+    });
+    handle = await startStudio({ workflowFile: join(base, 'w.json'), outDir: out, staticDir: join(base, 'ui'), env: { DAEMONIZE_DATA_DIR: appDir }, home, services: { power } });
+    const h = handle;
+    const call = async (method: string, path: string, body?: unknown) => {
+      const res = await rawRequest(h, method, path, { host: `127.0.0.1:${h.port}`, 'x-studio-token': h.token, ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body === undefined ? undefined : JSON.stringify(body));
+      return { status: res.status, json: res.text === '' ? undefined : (JSON.parse(res.text) as Record<string, any>), text: res.text };
+    };
+    const mcp = join(home, '.kiro', 'settings', 'mcp.json');
+    const envOf = async () => (JSON.parse(await readFile(mcp, 'utf-8')) as any).mcpServers[SERVER].env as Record<string, string>;
+
+    const preview = await call('POST', '/api/power/preview', { scope: 'global' });
+    expect(preview.json).toMatchObject({ askBeforeChanges: true, askBeforeChangesTools: ['save'] });
+    const bad = await call('POST', '/api/power/install', { confirmationId: preview.json?.confirmationId, kiroPath: preview.json?.kiroPath, scope: 'global', askBeforeChanges: 'yes' });
+    expect(bad.status).toBe(400);
+    await expect(readFile(mcp)).rejects.toThrow();
+    const done = await call('POST', '/api/power/install', { confirmationId: preview.json?.confirmationId, kiroPath: preview.json?.kiroPath, scope: 'global' });
+    expect(done.json).toMatchObject({ askBeforeChanges: true, askBeforeChangesTools: ['save'] });
+    expect(await envOf()).toMatchObject({ DAEMONIZE_ASK_BEFORE_CHANGES: 'true', DAEMONIZE_APPROVAL_TIMEOUT_MS: '90000' });
+    expect((await call('GET', '/api/power/info')).json?.installs[0]).toMatchObject({ askBeforeChanges: true });
+
+    const off = await call('POST', '/api/power/approval', { scope: 'global', askBeforeChanges: false });
+    expect(off).toMatchObject({ status: 200, json: { scope: 'global', askBeforeChanges: false } });
+    expect((await envOf()).DAEMONIZE_ASK_BEFORE_CHANGES).toBe('false');
+    expect((await call('GET', '/api/power/info')).json?.installs[0]).toMatchObject({ askBeforeChanges: false });
+    const on = await call('POST', '/api/power/approval', { scope: 'global', askBeforeChanges: true });
+    expect(on.status).toBe(200);
+    expect((await envOf()).DAEMONIZE_APPROVAL_TIMEOUT_MS).toBe('90000');
+
+    const bytes = await readFile(mcp);
+    for (const body of [{ scope: 'global', askBeforeChanges: 'true' }, { scope: 'global' }, { scope: 'global', askBeforeChanges: true, extra: 1 }, { scope: 'nowhere', askBeforeChanges: true }]) {
+      expect((await call('POST', '/api/power/approval', body)).status).toBe(400);
+    }
+    expect((await call('GET', '/api/power/approval')).status).toBe(405);
+    expect((await call('POST', '/api/power/approval', { scope: 'project', askBeforeChanges: true })).status).toBe(409);
+    expect((await readFile(mcp)).equals(bytes)).toBe(true);
   });
 });

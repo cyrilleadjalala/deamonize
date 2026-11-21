@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConnectFn, Launch, McpConnection } from './playground.js';
 import { SAMPLE_PNG, sampleStudioData } from './sample-data.js';
+import { sampleTrace } from './sample-activity.js';
 import { simulate, TIMEOUT_PROPERTY } from './ui/js/sim/simulate.js';
 
 async function picture(folder: 'daemonize-failures' | 'daemonize-shots'): Promise<string> {
@@ -50,6 +51,7 @@ export function sampleTools(): SampleTool[] {
 export const sampleConnect: ConnectFn = async (spec) => {
   const mode = spec.env.DAEMONIZE_MODE === 'heal' ? 'heal' : 'strict';
   const preview = spec.env.DAEMONIZE_SCREENSHOT === 'final';
+  const traceAsked = spec.env.DAEMONIZE_TRACE === '1';
   const tools = sampleTools();
   const pictures = { failure: () => picture('daemonize-failures'), shot: () => picture('daemonize-shots') };
   const listeners: Array<() => void> = [];
@@ -60,7 +62,9 @@ export const sampleConnect: ConnectFn = async (spec) => {
       callTool: async (params) => {
         if (closed) throw Object.assign(new Error('closed'), { code: -32000 });
         const result = await simulate(params.name, params.arguments ?? {}, mode, preview, pictures);
-        return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: result.success !== true };
+        // Like a real server: the fictitious trace only when the Studio asked for it
+        const answer = traceAsked ? { ...result, trace: sampleTrace() } : result;
+        return { content: [{ type: 'text', text: JSON.stringify(answer) }], isError: result.success !== true };
       },
     },
     onClose: (listener) => {

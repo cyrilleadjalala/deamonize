@@ -452,3 +452,62 @@ describe('schema form helpers', () => {
     expect([formatElapsed(412), formatElapsed(1500), formatElapsed(42000)]).toEqual(['412 ms', '1.5 s', '42 s']);
   });
 });
+
+describe('Playground with the approval firewall and the trace', () => {
+  const STEP = { index: 0, label: 'Open the page', level: 'http', durationMs: 12, status: 'ok' };
+
+  it('summarizes the answer of an old generated server (no trace, no skippedSteps) without error', async () => {
+    const { connect } = fakeServer();
+    const out = await makeSession(connect).call({ tool: 'search', arguments: { q: 'x' } });
+    expect(out.status).toBe(200);
+    expect(out.body).toMatchObject({ ok: true, success: true });
+    expect(out.body).not.toHaveProperty('trace');
+    expect(out.body).not.toHaveProperty('skippedSteps');
+    expect(out.body).not.toHaveProperty('traceTruncated');
+  });
+
+  it('carries the trace, the skipped steps and the truncation mark when the server returns them', async () => {
+    const trace = [STEP, { ...STEP, index: 1, status: 'failed', note: 'Not repeated: this step changes data' }, { bad: true }, { ...STEP, level: 'nonsense' }];
+    const { connect } = fakeServer({ answer: () => ({ success: false, text: 'x', trace, skippedSteps: [2, 4, -1, 1.5, 'a'], traceTruncated: true }) });
+    const out = await makeSession(connect).call({ tool: 'search', arguments: { q: 'x' } });
+    expect(out.body.trace).toEqual([STEP, trace[1]]);
+    expect(out.body.skippedSteps).toEqual([2, 4]);
+    expect(out.body.traceTruncated).toBe(true);
+  });
+
+  it('removes a typed secret from the trace the server returns', async () => {
+    const { connect } = fakeServer({ answer: () => ({ success: true, trace: [{ ...STEP, label: 'Type typed-pass-77' }] }) });
+    const out = await makeSession(connect).call({ tool: 'search', arguments: { q: 'x', password: 'typed-pass-77' } });
+    expect(JSON.stringify(out.body)).not.toContain('typed-pass-77');
+  });
+
+  it('sets the call source, the trace and the data folder in the child environment only when asked', async () => {
+    const { state, connect } = fakeServer();
+    const plain = makeSession(connect);
+    await plain.call({ tool: 'search', arguments: { q: 'x' } });
+    for (const name of ['DAEMONIZE_CALL_SOURCE', 'DAEMONIZE_TRACE']) expect(state.specs[0].env).not.toHaveProperty(name);
+    const asked = makeSession(connect, { callSource: 'studio', traceEnabled: true, dataDir: () => join(tmpdir(), 'app-data') });
+    await asked.call({ tool: 'search', arguments: { q: 'x' } });
+    expect(state.specs[1].env).toMatchObject({ DAEMONIZE_CALL_SOURCE: 'studio', DAEMONIZE_TRACE: '1', DAEMONIZE_DATA_DIR: join(tmpdir(), 'app-data') });
+  });
+
+  it('does not let an inherited call source or trace turn the setting on, and never writes the three names to mcp.json', async () => {
+    const env = buildChildEnv({ processEnv: {}, studioEnv: { DAEMONIZE_CALL_SOURCE: 'studio', DAEMONIZE_TRACE: '1', DAEMONIZE_DATA_DIR: '/inherited' }, mode: 'strict' });
+    expect(env).not.toHaveProperty('DAEMONIZE_CALL_SOURCE');
+    expect(env).not.toHaveProperty('DAEMONIZE_TRACE');
+    expect(env.DAEMONIZE_DATA_DIR).toBe('/inherited');
+    const set = buildChildEnv({ processEnv: {}, studioEnv: { DAEMONIZE_DATA_DIR: '/inherited' }, mode: 'strict', callSource: 'studio', trace: true, dataDir: '/app' });
+    expect(set).toMatchObject({ DAEMONIZE_CALL_SOURCE: 'studio', DAEMONIZE_TRACE: '1', DAEMONIZE_DATA_DIR: '/app' });
+  });
+
+  it('keeps secret-typed arguments as *** and the confirmation dialog when the new options are on', async () => {
+    const { state, connect } = fakeServer();
+    const session = makeSession(connect, { callSource: 'studio', traceEnabled: true });
+    const denied = await session.call({ tool: 'delete_all', arguments: {} });
+    expect(denied.status).toBe(409);
+    expect(denied.body).toMatchObject({ error: 'confirmation_required', risk: 'delete' });
+    expect(state.calls).toHaveLength(0);
+    await session.call({ tool: 'search', arguments: { q: 'x', password: 'typed-pass-77' } });
+    expect(session.history().at(-1)?.arguments).toEqual({ q: 'x', password: '***' });
+  });
+});

@@ -30,7 +30,15 @@ export interface EntryContext {
   applicationKey?: string;
   /** Secret_Names with a stored value (names only). Either `PASSWORD` or `DAEMONIZE_SECRET_PASSWORD` is accepted. */
   configuredNames?: ReadonlySet<string>;
+  /**
+   * Ask before changes. When set, the entry carries DAEMONIZE_ASK_BEFORE_CHANGES (`true` or `false`) and, when
+   * `true`, DAEMONIZE_APPROVAL_TIMEOUT_MS=90000 (RC-3: unverified for Kiro settings entries). When undefined,
+   * neither key is written. DAEMONIZE_CALL_SOURCE and DAEMONIZE_TRACE are never written.
+   */
+  askBeforeChanges?: boolean;
 }
+
+export const APPROVAL_TIMEOUT_MS = '90000';
 
 /**
  * Rebuilds the entry: exactly `type`, `command`, `args`, `env`. `env` holds the strict mode, the data folder and the
@@ -43,6 +51,10 @@ export function buildServerEntry(source: unknown, serverJsPath: string, ctx: Ent
   const env: Record<string, string> = { DAEMONIZE_MODE: 'strict' };
   if (ctx.dataDir !== undefined && ctx.dataDir !== '') env.DAEMONIZE_DATA_DIR = ctx.dataDir;
   if (ctx.applicationKey !== undefined && ctx.applicationKey !== '') env.DAEMONIZE_APP_KEY = ctx.applicationKey;
+  if (ctx.askBeforeChanges !== undefined) {
+    env.DAEMONIZE_ASK_BEFORE_CHANGES = ctx.askBeforeChanges ? 'true' : 'false';
+    if (ctx.askBeforeChanges) env.DAEMONIZE_APPROVAL_TIMEOUT_MS = APPROVAL_TIMEOUT_MS;
+  }
   for (const [key, value] of Object.entries(placeholderEnv(sourceEnv))) {
     if (key === 'DAEMONIZE_MODE') continue;
     if (SECRET_NAME.test(key) && (configured.has(key) || configured.has(key.slice('DAEMONIZE_SECRET_'.length)))) continue;

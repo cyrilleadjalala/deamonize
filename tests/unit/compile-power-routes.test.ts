@@ -56,8 +56,12 @@ describe('power routes', () => {
   const routes = powerRoutes({ services: { power } as unknown as StudioServices } as RouteContext);
 
   it('blocks every route for a remote listener', () => {
-    expect(routes.map((r) => r.remote)).toEqual(['blocked', 'blocked', 'blocked', 'blocked', 'blocked', 'blocked']);
-    expect(routes.map((r) => Object.keys(r.handlers))).toEqual([['GET'], ['GET'], ['POST'], ['POST'], ['POST'], ['GET', 'POST']]);
+    expect(routes.map((r) => r.path)).toEqual([
+      '/api/power/info', '/api/power/snippet', '/api/power/preview', '/api/power/install',
+      '/api/power/remove', '/api/power/approval', '/api/power/auto-add',
+    ]);
+    expect(routes.map((r) => r.remote)).toEqual(Array(7).fill('blocked'));
+    expect(routes.map((r) => Object.keys(r.handlers))).toEqual([['GET'], ['GET'], ['POST'], ['POST'], ['POST'], ['POST'], ['GET', 'POST']]);
   });
 
   it('maps results and PowerError to bodies', async () => {

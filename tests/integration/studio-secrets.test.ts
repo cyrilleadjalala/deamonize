@@ -95,7 +95,18 @@ describe('Studio secrets flow', () => {
       expect(text).not.toContain(VALUE_1);
       expect(text).not.toContain(VALUE_2);
     }
-    for (const name of await readdir(data)) expect(await readFile(join(data, name), 'utf-8')).not.toContain(VALUE_2);
+    const scan = async (dir: string): Promise<void> => {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) await scan(full);
+        else {
+          // The approval heartbeat renames its temporary file while the Studio runs: a file that vanished has nothing to scan.
+          const text = await readFile(full, 'utf-8').catch((e: NodeJS.ErrnoException) => { if (e.code === 'ENOENT') return ''; throw e; });
+          expect(text).not.toContain(VALUE_2);
+        }
+      }
+    };
+    await scan(data);
   });
 
   it('leaves the vault unchanged when a guard refuses the request', async () => {

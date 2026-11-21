@@ -22,3 +22,6 @@ export const POWER_NOTHING_TO_REMOVE = 'This tool was not added to Kiro from her
 export const POWER_REMOVE_FAILED = 'The tool could not be removed. Your Kiro files were left as they were.';
 export const POWER_AUTO_ADD_FAILED = 'The tool could not be added to Kiro automatically. Your Kiro files were left as they were.';
 export const POWER_AUTO_ADD_NOT_SAVED = 'Your choice to add the tool automatically could not be remembered, so the option stays off.';
+export const POWER_APPROVAL_INVALID = 'Choose on or off for "Ask before changes". Nothing was changed.';
+export const POWER_APPROVAL_NO_INSTALL = 'This tool was not added to Kiro from here, so there is no "Ask before changes" setting to change.';
+export const POWER_APPROVAL_FAILED = 'The "Ask before changes" setting could not be changed. Your Kiro files were left as they were.';

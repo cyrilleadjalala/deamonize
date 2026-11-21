@@ -5,3 +5,5 @@
 !LICENSE
 !media/**
 !dist/extension.js
+!templates/agents/daemonize.md
+!templates/skills/daemonize-builder/SKILL.md

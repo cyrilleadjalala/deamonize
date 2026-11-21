@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import { startStudio, isLoopbackHost, type StudioHandle } from '../../studio/server.js';
+import { createAppData } from '../../studio/app-data.js';
+import { workspaceKey, writeLease } from '../../studio/lease.js';
 
 export interface StudioCommandOptions {
   workflows: string;
@@ -45,6 +47,31 @@ function openInBrowser(url: string): void {
 }
 
 /**
+ * Write the Studio_Lease of this workspace (the folder the command runs in) so that a Studio_MCP finds this Studio, and
+ * remove it when the Studio closes or the process exits. Only for a loopback, non-sample Studio that has an agent token;
+ * silent on every failure (the lease is a convenience: without it the Studio_MCP starts its own Studio).
+ */
+async function publishLease(handle: StudioHandle, outDir: string, host: string, sample: boolean): Promise<void> {
+  if (sample || !isLoopbackHost(host) || typeof handle.agentToken !== 'string' || handle.agentToken === '') return;
+  try {
+    const data = await createAppData({ outDir }).ensure();
+    if (!data.ok) return;
+    const workspace = workspaceKey(process.cwd());
+    const lease = await writeLease(data.dir, { v: 1, origin: handle.origin, agentToken: handle.agentToken, pid: process.pid, workspace, startedAt: new Date().toISOString() });
+    const onExit = (): void => lease.removeSync();
+    process.once('exit', onExit);
+    const close = handle.close.bind(handle);
+    handle.close = async (): Promise<void> => {
+      process.off('exit', onExit);
+      await lease.remove();
+      await close();
+    };
+  } catch {
+    // No lease: the Studio_MCP starts its own Studio
+  }
+}
+
+/**
  * Start the Studio and print the address with its token. Resolves with the running server; the caller keeps the
  * process alive (the CLI waits for Ctrl+C).
  */
@@ -69,6 +96,7 @@ export async function studio(dir: string, options: StudioCommandOptions): Promis
     sampleData: options.sample,
     graphFile: options.graph,
   });
+  await publishLease(handle, dir, host, options.sample === true);
   if (machine) {
     const write = options.stdout ?? ((text: string) => void process.stdout.write(text));
     machineParents.set(handle, process.ppid);

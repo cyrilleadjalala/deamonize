@@ -10,6 +10,7 @@ import { parseSuggestMode } from '../suggest/model-suggester.js';
 import { merge } from './commands/merge.js';
 import { serve } from './commands/serve.js';
 import { studio, parsePort, untilInterrupted } from './commands/studio.js';
+import { runMcpCommand, packageVersion } from './commands/mcp.js';
 import { buildSandboxImage } from './commands/sandbox.js';
 import { validateSandboxSpec } from '../sandbox/dockerfile.js';
 import type { SandboxSpec } from '../types.js';
@@ -57,7 +58,8 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
   const program = new Command();
   program
     .name('daemonize')
-    .description('Wrap a web application behind a generated MCP server and OpenAPI spec. Run it without a command to open the Studio.');
+    .description('Wrap a web application behind a generated MCP server and OpenAPI spec. Run it without a command to open the Studio.')
+    .version(packageVersion(), '--version', 'print the version of Daemonize');
 
   // No subcommand: the same as `daemonize studio --open`
   program.action(async (_options: unknown, command: Command) => {
@@ -306,6 +308,14 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
       });
       // Stay up until interrupted
       await deps.untilInterrupted(handle, { exit: false });
+    });
+
+  program
+    .command('mcp')
+    .description('Start the Studio MCP server over stdio, so a Kiro agent can record, test and add tools through the Studio (starts a Studio when none runs for the folder)')
+    .option('--workspace <dir>', 'folder of the project (default: DAEMONIZE_WORKSPACE, else the current folder)')
+    .action(async (options: { workspace?: string }) => {
+      await runMcpCommand({ workspace: options.workspace });
     });
 
   program

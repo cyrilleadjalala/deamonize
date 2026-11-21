@@ -1,3 +1,4 @@
+// checkpoint-only: needs G-F1
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -34,6 +35,15 @@ describe('extension packaging', () => {
     expect(listed.status, listed.out).toBe(0);
     const files = listed.out.split(/\r?\n/).map((l) => l.trim().replace(/\\/g, '/')).filter((l) => /^[\w.@/-]+\.[A-Za-z]+$|^LICENSE$/.test(l));
     expect(files).toContain('dist/extension.js');
+    expect(files).toContain('package.json');
+    // The agent and the skill travel in the package as the same bytes as the Power's files (Requirement 9.8).
+    for (const [template, source] of [
+      ['templates/agents/daemonize.md', 'power/agents/daemonize.md'],
+      ['templates/skills/daemonize-builder/SKILL.md', 'power/skills/daemonize-builder/SKILL.md'],
+    ]) {
+      expect(files, template).toContain(template);
+      expect(fs.readFileSync(path.join(EXT, template)).equals(fs.readFileSync(path.resolve(EXT, '..', source))), template).toBe(true);
+    }
     expect(files).toContain('package.json');
     for (const file of files) {
       expect(file, file).not.toMatch(/(^|\/)(src|tests|node_modules|scripts)\//);

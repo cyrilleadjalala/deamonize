@@ -1,4 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { leasePath, parseLease } from '../../src/studio/lease';
 
 const TOKEN = 'synthetic-token-AAAAAAAAAAAAAAAAAAAAAAAA';
 const startStudio = vi.hoisted(() => vi.fn());
@@ -74,6 +78,60 @@ describe('daemonize studio --machine', () => {
     expect(logged[0]).toContain(`?token=${TOKEN}`);
     expect(logged.some((l) => l.includes('Ctrl+C'))).toBe(true);
     expect(out).toEqual([]);
+  });
+
+  describe('Studio_Lease', () => {
+    const AGENT = 'synthetic-agent-token-BBBBBBBBBBBB';
+    let dataDir: string;
+    let before: string | undefined;
+    beforeEach(() => {
+      dataDir = mkdtempSync(join(tmpdir(), 'dz-machine-'));
+      before = process.env.DAEMONIZE_DATA_DIR;
+      process.env.DAEMONIZE_DATA_DIR = dataDir;
+      startStudio.mockResolvedValue({ ...fakeHandle(), agentToken: AGENT });
+    });
+    afterEach(() => {
+      if (before === undefined) delete process.env.DAEMONIZE_DATA_DIR;
+      else process.env.DAEMONIZE_DATA_DIR = before;
+      rmSync(dataDir, { recursive: true, force: true });
+    });
+
+    it('writes the lease before the handshake line, keeps the line unchanged, and removes the lease on close', async () => {
+      const out: string[] = [];
+      let leaseSeenAtHandshake = false;
+      const handle = await studio('out', {
+        workflows: 'w.json',
+        machine: true,
+        stdout: (t) => {
+          leaseSeenAtHandshake = existsSync(leasePath(dataDir, process.cwd()));
+          out.push(t);
+        },
+        stderr: () => undefined,
+      });
+      expect(leaseSeenAtHandshake).toBe(true);
+      expect(JSON.parse(out[0]!)).toEqual({ origin: 'http://127.0.0.1:5555', token: TOKEN, pid: process.pid });
+      expect(out[0]).not.toContain(AGENT);
+      const lease = parseLease(readFileSync(leasePath(dataDir, process.cwd()), 'utf-8'));
+      expect(lease).toMatchObject({ origin: 'http://127.0.0.1:5555', agentToken: AGENT, pid: process.pid });
+      expect(readFileSync(leasePath(dataDir, process.cwd()), 'utf-8')).not.toContain(TOKEN);
+      await handle.close();
+      expect(existsSync(leasePath(dataDir, process.cwd()))).toBe(false);
+    });
+
+    it('writes no lease for a sample Studio or a listener that is not loopback', async () => {
+      await studio('out', { workflows: 'w.json', machine: true, sample: true, stdout: () => undefined, stderr: () => undefined });
+      await studio('out', { workflows: 'w.json', machine: true, host: '0.0.0.0', allowRemote: true, stdout: () => undefined, stderr: () => undefined });
+      expect(existsSync(leasePath(dataDir, process.cwd()))).toBe(false);
+    });
+
+    it('stays silent when the lease cannot be written', async () => {
+      process.env.DAEMONIZE_DATA_DIR = 'relative/not/absolute';
+      const err: string[] = [];
+      const out: string[] = [];
+      await studio('out', { workflows: 'w.json', machine: true, stdout: (t) => out.push(t), stderr: (l) => err.push(l) });
+      expect(out).toHaveLength(1);
+      expect(err).toEqual([]);
+    });
   });
 
   it('formatHandshakeLine keeps only the three fields', () => {

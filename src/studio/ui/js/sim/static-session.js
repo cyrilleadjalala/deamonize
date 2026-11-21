@@ -175,7 +175,7 @@ export class StaticPlayground {
 
     const raw = await simulate(tool.name, args, this.mode, this.preview, { failure: () => this.pictures.failure, shot: () => this.pictures.shot });
     if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
-    const body = summarize(tool.name, raw);
+    const body = { ...summarize(tool.name, raw), trace: sampleTrace() };
     this.record({
       tool: tool.name,
       arguments: shownArgs,
@@ -195,6 +195,22 @@ export class StaticPlayground {
     this.log.push({ id: this.nextId++, at: new Date().toISOString(), ...entry });
     while (this.log.length > HISTORY_SIZE) this.log.shift();
   }
+}
+
+/**
+ * The sample trace of the static demo (the same steps as sampleTrace() of the sample Studio): an http step, an
+ * ccessibility step, a skipped step, a drifted step and a failed write step that is not repeated.
+ * @returns {Array<Record<string, unknown>>}
+ */
+function sampleTrace() {
+  return [
+    { index: 0, label: 'Open the sign-in page', level: 'http', durationMs: 120, status: 'ok' },
+    { index: 1, label: 'Click Sign in', level: 'accessibility', durationMs: 640, status: 'ok' },
+    { index: 2, label: 'Type the optional note', level: 'skipped', durationMs: 0, status: 'skipped' },
+    { index: 3, label: 'Open the invoice list', level: 'accessibility', durationMs: 910, status: 'drifted', note: 'The page looks different from the recording' },
+    { index: 4, label: 'Click Create invoice', level: 'accessibility', durationMs: 1500, status: 'failed', note: 'Not repeated: this step changes data' },
+    { index: 5, label: 'Read the invoice number', level: 'not_run', durationMs: 0, status: 'not_run' },
+  ];
 }
 
 /**

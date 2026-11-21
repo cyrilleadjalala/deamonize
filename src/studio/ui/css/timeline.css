@@ -1,1 +1,117 @@
 /* Styles of the replay timeline. Owned by group G-U2. Colours only through the tokens of :root in ../app.css. */
+.timeline {
+    list-style: none;
+    margin: 12px 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.tl-row {
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-left-width: 4px;
+    border-radius: var(--radius-sm);
+    background: var(--panel);
+    color: var(--text);
+}
+
+.tl-row[data-status="ok"] {
+    border-left-color: var(--green-line);
+}
+
+.tl-row[data-status="failed"],
+.tl-row[data-status="blocked"] {
+    border-left-color: var(--red-line);
+}
+
+.tl-row[data-status="drifted"] {
+    border-left-color: var(--warn-line);
+}
+
+.tl-row[data-status="skipped"],
+.tl-row[data-status="not_run"] {
+    border-left-color: var(--line-strong);
+}
+
+.tl-head {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.tl-num {
+    color: var(--muted);
+}
+
+.tl-meta {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    color: var(--muted);
+}
+
+.tl-chip {
+    padding: 1px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    background: var(--chip-bg);
+    color: var(--text);
+    font-size: 0.85em;
+}
+
+.tl-status[data-status="ok"] {
+    border-color: var(--green-line);
+    background: var(--green-deep);
+}
+
+.tl-status[data-status="failed"],
+.tl-status[data-status="blocked"] {
+    border-color: var(--red-line);
+    background: var(--red-deep);
+}
+
+.tl-status[data-status="drifted"] {
+    border-color: var(--warn-line);
+    background: var(--warn-deep);
+}
+
+.tl-level[data-level="http"] {
+    border-color: var(--blue-line);
+    background: var(--blue-deep);
+}
+
+.tl-flag {
+    margin: 6px 0 0;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.tl-note {
+    margin: 4px 0 0;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
+.tl-figure {
+    margin: 8px 0 0;
+}
+
+.tl-thumb {
+    display: block;
+    max-width: 160px;
+    height: auto;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+}
+
+.tl-nopic {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-style: italic;
+}
+
+.timeline-simple .tl-row {
+    padding: 6px 10px;
+}

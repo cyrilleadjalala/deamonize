@@ -5,6 +5,8 @@ import { COPY } from '../copy.js';
 import { announce, chip, copyButton, emptyState, levelBadge, pill, riskBadge, toolName as toolNameChip } from '../components.js';
 import { autoAddText } from '../copy-secrets.js';
 import { secretsSection } from '../secrets-view.js';
+import { renderReplayTimeline } from '../timeline.js';
+import { COPY_TIMELINE } from '../copy-timeline.js';
 import { buildArguments, describeField, fieldsFromSchema, formatElapsed, initialValues, parseTimeout } from '../schema-form.js';
 
 /**
@@ -52,6 +54,10 @@ function failureBlock(failure) {
   if (extra.length) rows.push(kv('More', h('code', { text: JSON.stringify(Object.fromEntries(extra)) })));
   return h('section', { class: 'pg-failure', 'aria-label': 'Failure diagnostics' }, h('h4', { class: 'mini-title', text: 'Failure diagnostics' }), h('dl', { class: 'facts' }, ...rows));
 }
+
+/** The workflows of the Studio, loaded once per visit: the timeline takes the recorded thumbnails from them. */
+let timelineWorkflows = [];
+const APPROVAL_REFUSALS = ['approval_denied', 'approval_timeout', 'approval_unavailable'];
 
 /**
  * What the result panel shows for an answer of the playground.
@@ -135,6 +141,21 @@ function resultPanel(r) {
     }
   }
 
+  // The replay timeline: only when the answer carries a trace (an older server or a Kiro result has none)
+  if (!isRefusal && Array.isArray(r.trace)) {
+    const workflow = timelineWorkflows.find((w) => w && typeof r.tool === 'string' && w.toolName === r.tool);
+    body.push(h('section', { class: 'pg-timeline', 'aria-label': COPY_TIMELINE.listLabel },
+      h('h4', { class: 'mini-title', text: COPY_TIMELINE.listLabel }),
+      renderReplayTimeline(r.trace, {
+        workflow,
+        ...(typeof r.screenshotUrl === 'string' && r.failure ? { failureShotUrl: r.screenshotUrl } : {}),
+        ...(Number.isInteger(r.failure?.stepIndex) ? { failureStepIndex: r.failure.stepIndex } : {}),
+        stoppedByApproval: APPROVAL_REFUSALS.includes(r.error),
+        drifted: r.drifted === true,
+        ...(typeof r.driftReason === 'string' ? { reason: r.driftReason } : typeof r.failure?.reason === 'string' ? { reason: r.failure.reason } : {}),
+      }),
+      r.traceTruncated === true ? h('p', { class: 'muted', text: COPY_TIMELINE.truncated }) : null));
+  }
   // The raw answer, for people who want every field
   const json = JSON.stringify(r, null, 2);
   const raw = h('details', { class: 'pg-json' },
@@ -541,6 +562,7 @@ function mount(root, info) {
 /** @returns {Promise<HTMLElement>} */
 export async function renderPlayground() {
   const info = await api.playgroundFresh();
+  timelineWorkflows = await api.workflows().then((d) => (Array.isArray(d?.workflows) ? d.workflows : [])).catch(() => []);
   const root = h('div', { class: 'view view-playground' });
   root.appendChild(h('h1', { class: 'view-title', tabindex: '-1', text: 'Playground' }));
   root.appendChild(h('p', { class: 'view-lead', text: 'Call the compiled MCP tools here, and see drift, healing and a preview of the screen.' }));

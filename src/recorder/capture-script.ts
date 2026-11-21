@@ -28,6 +28,9 @@
  * Values of password, one-time-code and token fields are never captured; the
  * event carries a `secretRef` name (PASSWORD, OTP, TOKEN) instead.
  */
+import { MINIMAL_SELECTOR_SOURCE } from './minimal-selector.js';
+import { ZONE_COPY } from './zone-copy.js';
+
 export const CAPTURE_SCRIPT = `
 (() => {
   if (window.__daemonizeInstalled) return;
@@ -498,6 +501,47 @@ export const CAPTURE_SCRIPT = `
     return parts.join(' > ');
   }
 
+  // Minimal_Selector and Positional_Path: one algorithm, shared with the Node side (src/recorder/minimal-selector.ts)
+  ${MINIMAL_SELECTOR_SOURCE}
+
+  const ZONE_ADAPTER = {
+    parent: (n) => (n === document.documentElement ? undefined : n.parentElement || undefined),
+    tag: (n) => n.tagName.toLowerCase(),
+    attr: (n, name) => {
+      const v = n.getAttribute(name);
+      return v === null ? undefined : v;
+    },
+    classes: (n) => Array.from(n.classList),
+    sameTagSiblings: (n) => (n.parentElement ? Array.from(n.parentElement.children).filter((c) => c.tagName === n.tagName) : [n]),
+    resolve: (s) => Array.from(document.querySelectorAll(s)),
+  };
+
+  function minimalOf(el) {
+    try {
+      return daemonizeMinimalSelector(ZONE_ADAPTER, el, { includeBody: true });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // What the recorder needs to rank, prove and fingerprint the selectors of a result zone
+  function zoneFactsOf(el) {
+    const facts = {};
+    const found = minimalOf(el);
+    if (found) {
+      if (found.minimal) facts.minimal = found.minimal;
+      if (found.positional) facts.positional = found.positional;
+    }
+    facts.shape = { tag: el.tagName.toLowerCase() };
+    const table = analyzeZone(el, 'table');
+    if (table.count >= 1) facts.shape.tableRows = table.count;
+    const list = analyzeZone(el, 'list');
+    if (list.count >= 1) facts.shape.listItems = list.count;
+    return facts;
+  }
+
+  let zoneTarget = null;
+
   function infoOf(el, context) {
     const role = roleOf(el);
     const name = accessibleNameOf(el);
@@ -626,6 +670,7 @@ export const CAPTURE_SCRIPT = `
         ok: nonEmpty.length > 0,
         badge: nonEmpty.length + (nonEmpty.length === 1 ? ' row' : ' rows') + (cols ? ' \u00d7 ' + cols + ' cols' : ''),
         lines: lines.length ? lines : ['(empty table)'],
+        count: nonEmpty.length,
         rects: nonEmpty.slice(0, MAX_PREVIEW_ITEMS).map((r) => r.row.getBoundingClientRect()),
       };
     }
@@ -641,6 +686,7 @@ export const CAPTURE_SCRIPT = `
         ok: items.length > 0,
         badge: items.length + (items.length === 1 ? ' item' : ' items'),
         lines: lines.length ? lines : ['(empty list)'],
+        count: items.length,
         rects: items.slice(0, MAX_PREVIEW_ITEMS).map((x) => x.el.getBoundingClientRect()),
       };
     }
@@ -728,12 +774,9 @@ export const CAPTURE_SCRIPT = `
       info.name = undefined;
     }
     info.text = undefined;
-    // A position in the parent (:nth-of-type) breaks when a sibling appears: a class that is unique in the page is steadier
-    if (info.css && info.css.indexOf(':nth-of-type') >= 0) {
-      const cls = Array.from(el.classList).find((c) => /^[a-z][a-z-]{2,30}$/.test(c));
-      const candidate = cls ? el.tagName.toLowerCase() + '.' + cls : '';
-      if (candidate && document.querySelectorAll(candidate).length === 1) info.css = candidate;
-    }
+    // The shortest selector that is unique in the page and uses stable parts first
+    const found = minimalOf(el);
+    if (found && found.minimal) info.css = found.minimal;
     return info;
   }
 
@@ -1650,7 +1693,7 @@ export const CAPTURE_SCRIPT = `
     if (!root || !IS_TOP) return;
     const kind = lastMark ? lastMark.kind : panelState.zone ? panelState.zone.kind : '';
     const connected = lastMark && lastMark.el && lastMark.el.isConnected ? 1 : 0;
-    const key = [markingResult, kind, lastMark !== null, lastMark ? lastMark.cursor : -1, connected].join('|');
+    const key = [markingResult, kind, lastMark !== null, lastMark ? lastMark.cursor : -1, connected, lastMark && lastMark.fragile ? 1 : 0].join('|');
     if (key === resultKey) return;
     resultKey = key;
     const activeAction = ui.result.contains(document.activeElement) && document.activeElement
@@ -1696,7 +1739,9 @@ export const CAPTURE_SCRIPT = `
         const tab = uiButton(k, 'result-kind-' + k, async () => {
           lastMark.kind = k;
           resultKey = null;
-          await window.__daemonizeMarkResult({ info: lastMark.info, kind: lastMark.kind });
+          zoneTarget = lastMark.el;
+          const tabResult = await window.__daemonizeMarkResult({ info: lastMark.info, kind: lastMark.kind, zone: lastMark.el && lastMark.el.isConnected ? zoneFactsOf(lastMark.el) : undefined });
+          if (lastMark && tabResult && tabResult.ok) lastMark.fragile = tabResult.fragile === true;
           if (lastMark && lastMark.el && lastMark.el.isConnected) flashHighlight(lastMark.el, lastMark.kind);
           refreshState();
           renderPanel();
@@ -1718,6 +1763,9 @@ export const CAPTURE_SCRIPT = `
         badgeRow.appendChild(uiPill(analysis.badge, analysis.ok ? 'green' : 'plain'));
         badgeRow.appendChild(uiEl('span', analysis.ok ? 'Live preview' : 'Mismatch', 'font-size:11px;color:' + (analysis.ok ? K.muted : K.text)));
         box.appendChild(badgeRow);
+        if (lastMark.fragile === true) {
+          box.appendChild(uiEl('div', '${ZONE_COPY.fragile}', 'font-size:11px;line-height:1.4;color:' + K.muted + ';white-space:normal', 'result-fragile'));
+        }
         if (analysis.lines.length > 0) {
           const linesEl = uiEl('div', analysis.lines.join('\\n'), 'font-size:11px;line-height:1.4;color:' + K.text + ';white-space:pre-wrap;word-break:break-word;max-height:76px;overflow:auto');
           box.appendChild(linesEl);
@@ -1881,12 +1929,13 @@ export const CAPTURE_SCRIPT = `
     if (!el || !el.isConnected) return;
     const info = resultInfoOf(el);
     const kind = suggestResultKind(el);
-    const result = await window.__daemonizeMarkResult({ info, kind });
+    zoneTarget = el;
+    const result = await window.__daemonizeMarkResult({ info, kind, zone: zoneFactsOf(el) });
     if (!result || !result.ok) {
       setStatus((result && result.error) || 'Could not update the result zone', false);
       return;
     }
-    lastMark = { el, info, kind, trail: lastMark.trail, cursor: next };
+    lastMark = { el, info, kind, trail: lastMark.trail, cursor: next, fragile: result.fragile === true };
     resultKey = null;
     renderPanel();
     flashHighlight(el, kind);
@@ -1953,7 +2002,8 @@ export const CAPTURE_SCRIPT = `
     const el = built.trail[cursor] || resultZoneElement(target);
     const info = resultInfoOf(el);
     const kind = suggestResultKind(el);
-    const result = await window.__daemonizeMarkResult({ info, kind });
+    zoneTarget = el;
+    const result = await window.__daemonizeMarkResult({ info, kind, zone: zoneFactsOf(el) });
     markTrail = [];
     markEl = null;
     markAdjusted = false;
@@ -1963,7 +2013,7 @@ export const CAPTURE_SCRIPT = `
       setStatus((result && result.error) || 'Could not set the result zone', false);
       return;
     }
-    lastMark = { el, info, kind, trail: built.trail, cursor };
+    lastMark = { el, info, kind, trail: built.trail, cursor, fragile: result.fragile === true };
     renderPanel();
     flashHighlight(el, kind);
     setStatus('Result zone set (' + kind + ')', false);
@@ -2493,6 +2543,8 @@ export const CAPTURE_SCRIPT = `
     startMarkResult,
     suggestResultKind,
     analyzeZone,
+    zoneFactsOf,
+    isZoneTarget: (el) => el === zoneTarget,
     buildMarkTrail,
     anchorOf: (el) => {
       const context = parentContext(el);

@@ -1,6 +1,7 @@
 import type { Frame, Page } from 'playwright';
 import { CAPTURE_SCRIPT } from './capture-script.js';
 import { buildSelectors, buildZoneSelector, type ElementInfo } from './selector-builder.js';
+import { isFragile, limitCandidates, zoneCandidateSelectors, zoneFingerprint, type ZoneFacts } from './zone-candidates.js';
 import type { WorkflowRecorder } from './workflow-recorder.js';
 import type {
   EditVariableRequest,
@@ -131,9 +132,13 @@ export type MarkVariableResult = VariableAnswer;
 export interface MarkResultRequest {
   info: ElementInfo;
   kind: string;
+  /** Facts computed in the page; absent from an older injected script. */
+  zone?: ZoneFacts;
 }
 
-export type MarkResultResult = { ok: true; selector: string; kind: ExtractorKind } | { ok: false; error: string };
+export type MarkResultResult =
+  | { ok: true; selector: string; kind: ExtractorKind; selectors?: string[]; fragile?: boolean }
+  | { ok: false; error: string };
 
 const WEB_KINDS: readonly string[] = ['text', 'table', 'list', 'fields', 'json', 'attribute'];
 
@@ -183,6 +188,8 @@ export class LiveRecorder {
   private readonly switchSteps = new Map<number, number>();
   private queue: Promise<unknown> = Promise.resolve();
   private zone: ResultZone | undefined;
+  /** Candidates proven for the last marked element, so a kind tab click does not prove them again. */
+  private readonly zoneCandidateCache = new Map<string, string[]>();
   private readonly network: NetworkCapture | undefined;
   private readonly stepActions = new Map<number, number>();
   private readonly visual: LiveRecorderOptions['visual'];
@@ -503,8 +510,8 @@ export class LiveRecorder {
     await page.exposeBinding('__daemonizeMarkVariable', (_source, request: MarkVariableRequest) =>
       this.handleMarkVariable(request)
     );
-    await page.exposeBinding('__daemonizeMarkResult', (_source, request: MarkResultRequest) =>
-      this.handleMarkResult(request)
+    await page.exposeBinding('__daemonizeMarkResult', (source, request: MarkResultRequest) =>
+      this.markResultInFrame(request, source.frame)
     );
     await page.exposeBinding('__daemonizeEditVariable', (_source, request: EditVariableRequest) =>
       this.handleEditVariable(request)
@@ -753,6 +760,51 @@ export class LiveRecorder {
     const kind = request.kind as ExtractorKind;
     this.zone = { selector, extractor: { kind } as NonNullable<ResultZone['extractor']> };
     return { ok: true, selector, kind };
+  }
+
+  /**
+   * Like handleMarkResult, and with the facts of the page each candidate is proven in the frame by Playwright's own
+   * locator engine: it must match exactly one element and that element must be the marked one. Never throws.
+   */
+  async markResultInFrame(request: MarkResultRequest, frame: Frame): Promise<MarkResultResult> {
+    try {
+      const legacy = this.handleMarkResult(request);
+      if (!legacy.ok || request.zone === undefined) return legacy;
+      const facts = request.zone;
+      const kind = legacy.kind;
+
+      const cacheKey = JSON.stringify([request.info, facts.minimal, facts.positional]);
+      let verified = this.zoneCandidateCache.get(cacheKey);
+      if (verified === undefined) {
+        verified = [];
+        for (const candidate of zoneCandidateSelectors(request.info, facts)) {
+          try {
+            const locator = frame.locator(candidate);
+            if ((await locator.count()) !== 1) continue;
+            const isTarget = await locator.evaluate(
+              (el) => (window as unknown as { __daemonizeHelpers?: { isZoneTarget?: (e: Element) => boolean } }).__daemonizeHelpers?.isZoneTarget?.(el) === true,
+            );
+            if (isTarget) verified.push(candidate);
+          } catch {
+            // A candidate that cannot be checked is left out; the others go on
+          }
+        }
+        this.zoneCandidateCache.clear();
+        this.zoneCandidateCache.set(cacheKey, verified);
+      }
+
+      let list = limitCandidates(verified, [...this.recorder.variableValues().values()]);
+      if (list.length === 0 && facts.positional) list = limitCandidates([facts.positional], []);
+      if (list.length === 0) return legacy; // the legacy selector, alone
+
+      const zone: ResultZone = { selector: list[0], selectors: list, extractor: { kind } as NonNullable<ResultZone['extractor']> };
+      const fingerprint = zoneFingerprint(facts, kind);
+      if (fingerprint !== undefined) zone.fingerprint = fingerprint;
+      this.zone = zone;
+      return { ok: true, selector: list[0], kind, selectors: list, fragile: isFragile(list) };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
   }
 
   /** Handle a variable named by the user in the page; never throws. */

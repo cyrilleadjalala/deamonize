@@ -419,13 +419,21 @@ async function readResultZone(page: Page, zone: ResultZone): Promise<ResultZone>
       });
     extractor = { kind } as ResultZone['extractor'];
   }
-  const checked: ResultZone = { selector: zone.selector, extractor };
-  const read = await extractWebZone(page, checked, 5000);
+  // The check uses the primary selector alone: the schema describes what the primary returns, and a primary that
+  // fails now keeps the error it always had, even when a fallback candidate would succeed
+  const primary: ResultZone = { selector: zone.selector, extractor };
+  const read = await extractWebZone(page, primary, 5000);
   if (!read.ok) {
     throw new Error(`The result zone "${zone.selector}" cannot be read on the final page: ${read.message}`);
   }
-  checked.schema = dataSchemaFor(extractor, read.data);
-  return checked;
+  // What the recorder stored for replay (candidates and fingerprint) is kept as marked
+  return {
+    selector: zone.selector,
+    ...(zone.selectors === undefined ? {} : { selectors: [...zone.selectors] }),
+    extractor,
+    ...(zone.fingerprint === undefined ? {} : { fingerprint: structuredClone(zone.fingerprint) }),
+    schema: dataSchemaFor(extractor, read.data),
+  };
 }
 
 async function captureFinalScreen(page: Page, zone?: string): Promise<ScreenContent> {

@@ -216,7 +216,7 @@ The implementation language is TypeScript for `src/` and `tests/`, as the design
     - File: `tests/integration/result-zone-robustness.test.ts`. Mark a zone on a local page, add a wrapper div, reorder siblings and rename a generated class, then replay through a generated server. Check that the result is returned and that `zoneFallback` is reported when the first candidate broke. Add the case where no candidate matches (`result_zone_not_found`, `candidatesTried`) and the case of an old zone with only `selector` (same result as before).
     - _Requirements: 6.1, 6.6, 6.7, 6.8, 7.3, 7.5_
 
-- [ ] 11. Final checkpoint - full verification and commits
+- [x] 11. Final checkpoint - full verification and commits
   - [x] 11.1 Run the full verification
     - In the repository root: `npm run build`, `npx tsc --noEmit`, `npm run check:secrets`, `npm run studio:build`.
     - In `kiro-extension`: its typecheck, build and package scripts (names as in its `package.json`).
@@ -227,7 +227,7 @@ The implementation language is TypeScript for `src/` and `tests/`, as the design
     - Require that `git diff --exit-code` shows no change in the stored expected snapshot files used by `tests/unit/regression-fixture.test.ts`, that `ALLOWED_DIFFERENCES` has no new entry, and that `generated-compat.test.ts`, `merge-compat.test.ts` and `workflow-set-compat.test.ts` pass with their old fixtures. The only changed assertions are the three named in the Overview.
     - _Requirements: 7.1, 7.2, 7.3, 7.5_
 
-  - [-] 11.3 Create one commit per group (no push)
+  - [x] 11.3 Create one commit per group (no push)
     - In order, with `git add` of the paths of that group only, no `--no-verify`:
       - CG-0 `feat: zone candidate types, schema and seams` (group G0)
       - CG-1 `feat: minimal selector algorithm for result zones` (G-A)
